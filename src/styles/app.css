@@ -4,6 +4,9 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  --scrollbar-thumb: #4a535d;
+  --scrollbar-thumb-hover: #66717d;
+  --scrollbar-track: transparent;
 }
 
 .theme-dark {
@@ -40,6 +43,9 @@
   --status-del-text: #ff9aa3;
   --notice-bg: #211b12;
   --notice-border: #4a3a23;
+  --scrollbar-thumb: #4a535d;
+  --scrollbar-thumb-hover: #66717d;
+  --scrollbar-track: transparent;
 }
 
 .theme-light {
@@ -76,6 +82,9 @@
   --status-del-text: #9b2432;
   --notice-bg: #fff7df;
   --notice-border: #f0d37c;
+  --scrollbar-thumb: #aeb9c6;
+  --scrollbar-thumb-hover: #8f9dad;
+  --scrollbar-track: transparent;
 }
 
 * {
@@ -3311,4 +3320,87 @@ button {
 
 .branch-empty {
   padding: 12px 4px;
+}
+
+* {
+  scrollbar-color: var(--scrollbar-thumb, #4a535d) var(--scrollbar-track, transparent);
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track, transparent);
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 28px;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--scrollbar-thumb, #4a535d);
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover, #66717d);
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.source-control-pane .graph-commit-main {
+  grid-template-columns: minmax(0, 1fr) max-content;
+}
+
+.graph-commit-text {
+  position: relative;
+  display: inline-flex;
+  gap: 8px;
+  align-items: baseline;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.source-control-pane .graph-commit-text .graph-commit-subject {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.graph-commit-author {
+  flex: 0 0 auto;
+  color: color-mix(in srgb, var(--muted) 82%, transparent);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.graph-measure {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: max-content;
+  visibility: hidden;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.commit-hover-card,
+.commit-hover-body,
+.editor-diff-panel,
+.graph-commit-list,
+.project-rail-list,
+.scm-panel-body,
+.branch-list {
+  scrollbar-gutter: stable;
 }

@@ -108,37 +108,19 @@ export function GraphSidebar({ project, commits, selectedHash, onSelectCommit, o
             {syncProject ? <GraphSyncRow project={syncProject} /> : null}
             {filteredCommits.map((commit, index) => {
               const tone = rowTones.get(commit.hash) ?? "plain";
-              const visibleRefs = commit.refs.filter((ref) => ref.type !== "head");
 
               return (
-                <button
-                  type="button"
-                  role="listitem"
-                  className={`graph-commit-row graph-tone-${tone} ${commit.hash === selectedHash ? "active" : ""}`}
+                <GraphCommitRow
                   key={commit.hash}
-                  onClick={() => onSelectCommit(commit.hash)}
-                  onMouseEnter={(event) => scheduleHover(commit, event.currentTarget)}
-                  onMouseLeave={scheduleCloseHover}
-                  onFocus={(event) => {
-                    scheduleHover(commit, event.currentTarget);
-                  }}
-                  onBlur={scheduleCloseHover}
-                >
-                  <CompactGraphCell isFirst={index === 0} isLast={index === filteredCommits.length - 1} tone={tone} />
-                  <span className="graph-commit-main">
-                    <span className="graph-commit-subject">{commit.subject}</span>
-                    {visibleRefs.length > 0 ? (
-                      <span className="graph-ref-row">
-                        {visibleRefs.map((ref) => (
-                          <span className={`ref-chip ${ref.type}`} key={`${commit.hash}-${ref.type}-${ref.name}`}>
-                            {ref.type === "remoteBranch" ? <Cloud size={10} /> : ref.type === "localBranch" ? <GitBranch size={10} /> : null}
-                            {ref.name}
-                          </span>
-                        ))}
-                      </span>
-                    ) : null}
-                  </span>
-                </button>
+                  commit={commit}
+                  tone={tone}
+                  selected={commit.hash === selectedHash}
+                  isFirst={index === 0}
+                  isLast={index === filteredCommits.length - 1}
+                  onSelect={() => onSelectCommit(commit.hash)}
+                  onHoverStart={(row) => scheduleHover(commit, row)}
+                  onHoverEnd={scheduleCloseHover}
+                />
               );
             })}
           </div>
@@ -148,6 +130,90 @@ export function GraphSidebar({ project, commits, selectedHash, onSelectCommit, o
         <CommitHoverCard commit={hoveredCommit} x={hoverPosition.x} y={hoverPosition.y} onMouseEnter={keepHoverOpen} onMouseLeave={scheduleCloseHover} />
       ) : null}
     </section>
+  );
+}
+
+function GraphCommitRow({
+  commit,
+  tone,
+  selected,
+  isFirst,
+  isLast,
+  onSelect,
+  onHoverStart,
+  onHoverEnd
+}: {
+  commit: CommitNode;
+  tone: GraphTone;
+  selected: boolean;
+  isFirst: boolean;
+  isLast: boolean;
+  onSelect: () => void;
+  onHoverStart: (row: HTMLElement) => void;
+  onHoverEnd: () => void;
+}) {
+  const textRef = useRef<HTMLSpanElement>(null);
+  const subjectMeasureRef = useRef<HTMLSpanElement>(null);
+  const authorMeasureRef = useRef<HTMLSpanElement>(null);
+  const [showAuthor, setShowAuthor] = useState(false);
+  const visibleRefs = commit.refs.filter((ref) => ref.type !== "head");
+
+  useEffect(() => {
+    const textElement = textRef.current;
+    if (!textElement || !commit.authorName) {
+      setShowAuthor(false);
+      return;
+    }
+
+    const measure = () => {
+      const subjectWidth = subjectMeasureRef.current?.getBoundingClientRect().width ?? 0;
+      const authorWidth = authorMeasureRef.current?.getBoundingClientRect().width ?? 0;
+      const availableWidth = textElement.getBoundingClientRect().width;
+      const authorGap = 8;
+      setShowAuthor(subjectWidth + authorGap + authorWidth <= availableWidth);
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(textElement);
+    return () => observer.disconnect();
+  }, [commit.authorName, commit.subject]);
+
+  return (
+    <button
+      type="button"
+      role="listitem"
+      className={`graph-commit-row graph-tone-${tone} ${selected ? "active" : ""}`}
+      onClick={onSelect}
+      onMouseEnter={(event) => onHoverStart(event.currentTarget)}
+      onMouseLeave={onHoverEnd}
+      onFocus={(event) => onHoverStart(event.currentTarget)}
+      onBlur={onHoverEnd}
+    >
+      <CompactGraphCell isFirst={isFirst} isLast={isLast} tone={tone} />
+      <span className="graph-commit-main">
+        <span className="graph-commit-text" ref={textRef}>
+          <span className="graph-commit-subject">{commit.subject}</span>
+          {showAuthor ? <span className="graph-commit-author">{commit.authorName}</span> : null}
+          <span className="graph-measure" ref={subjectMeasureRef} aria-hidden="true">
+            {commit.subject}
+          </span>
+          <span className="graph-measure" ref={authorMeasureRef} aria-hidden="true">
+            {commit.authorName}
+          </span>
+        </span>
+        {visibleRefs.length > 0 ? (
+          <span className="graph-ref-row">
+            {visibleRefs.map((ref) => (
+              <span className={`ref-chip ${ref.type}`} key={`${commit.hash}-${ref.type}-${ref.name}`}>
+                {ref.type === "remoteBranch" ? <Cloud size={10} /> : ref.type === "localBranch" ? <GitBranch size={10} /> : null}
+                {ref.name}
+              </span>
+            ))}
+          </span>
+        ) : null}
+      </span>
+    </button>
   );
 }
 
