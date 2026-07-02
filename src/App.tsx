@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
 import { FolderGit2, PanelLeftOpen, Terminal } from "lucide-react";
-import { mockCommits, mockDiffLines } from "./data/mockData";
 import { apiClient } from "./api/client";
 import { ConsolePanel } from "./components/ConsolePanel";
 import { DetailPanel } from "./components/DetailPanel";
@@ -10,6 +9,7 @@ import { TopBar, type ThemeMode } from "./components/TopBar";
 import { WorktreeDetailPanel } from "./components/WorktreeDetailPanel";
 import { WorkspaceView } from "./components/WorkspaceView";
 import type {
+  BranchInfo,
   ChangedFile,
   CommitInput,
   CommitNode,
@@ -30,11 +30,11 @@ type ResizeTarget = "sidebar" | "detail";
 export function App() {
   const [projects, setProjects] = useState<GitProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [commits, setCommits] = useState<CommitNode[]>(mockCommits);
-  const [selectedCommitHash, setSelectedCommitHash] = useState(mockCommits[0].hash);
-  const [commitDetails, setCommitDetails] = useState<CommitNode | undefined>(mockCommits[0]);
-  const [selectedFilePath, setSelectedFilePath] = useState<string | undefined>(mockCommits[0].files[0]?.path);
-  const [diffLines, setDiffLines] = useState<DiffLine[]>(mockDiffLines);
+  const [commits, setCommits] = useState<CommitNode[]>([]);
+  const [selectedCommitHash, setSelectedCommitHash] = useState("");
+  const [commitDetails, setCommitDetails] = useState<CommitNode | undefined>();
+  const [selectedFilePath, setSelectedFilePath] = useState<string | undefined>();
+  const [diffLines, setDiffLines] = useState<DiffLine[]>([]);
   const [worktree, setWorktree] = useState<WorktreeState>(emptyWorktree);
   const [selectedWorktreeFile, setSelectedWorktreeFile] = useState<ChangedFile | undefined>();
   const [worktreeDiffLines, setWorktreeDiffLines] = useState<DiffLine[]>([]);
@@ -49,6 +49,7 @@ export function App() {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
+  const [commitFocusRequest, setCommitFocusRequest] = useState(0);
 
   useEffect(() => {
     void loadInitialData();
@@ -77,6 +78,11 @@ export function App() {
       return;
     }
 
+    setCommits([]);
+    setSelectedCommitHash("");
+    setCommitDetails(undefined);
+    setSelectedFilePath(undefined);
+    setDiffLines([]);
     void loadProjectData(selectedProject);
   }, [selectedProject?.id]);
 
@@ -88,8 +94,15 @@ export function App() {
       return;
     }
 
+    if (!commits.some((commit) => commit.hash === selectedCommitHash)) {
+      setCommitDetails(undefined);
+      setSelectedFilePath(undefined);
+      setDiffLines([]);
+      return;
+    }
+
     void loadCommitDetails(selectedProject, selectedCommitHash);
-  }, [selectedProject?.id, selectedCommitHash]);
+  }, [selectedProject?.id, selectedCommitHash, commits]);
 
   async function loadInitialData() {
     try {
@@ -117,6 +130,9 @@ export function App() {
 
       setCommits(history);
       setWorktree(worktreeState);
+      setCommitDetails(undefined);
+      setSelectedFilePath(undefined);
+      setDiffLines([]);
       setSelectedWorktreeFile(undefined);
       setWorktreeDiffLines([]);
       setSelectedCommitHash(history[0]?.hash ?? "");
@@ -236,7 +252,29 @@ export function App() {
       return;
     }
 
-    setStatusMessage(`${action} 的图形操作将在后续阶段接入。`);
+    if (action === "新建分支") {
+      await createBranchFromToolbar(selectedProject);
+      return;
+    }
+
+    if (action === "切换分支") {
+      await switchBranchFromToolbar(selectedProject);
+      return;
+    }
+
+    if (action === "删除分支") {
+      await deleteBranchFromToolbar(selectedProject);
+      return;
+    }
+
+    if (action === "提交") {
+      setMainView("workspace");
+      setCommitFocusRequest((value) => value + 1);
+      setStatusMessage("已打开工作区，请输入提交信息后提交。");
+      return;
+    }
+
+    setStatusMessage(`暂不支持操作：${action}`);
   }
 
   async function runRemoteOperation(action: "fetch" | "pull" | "push", project: GitProject) {
@@ -250,6 +288,74 @@ export function App() {
     }
 
     setStatusMessage(`${label}完成。`);
+    await loadProjectData(project);
+  }
+
+  async function createBranchFromToolbar(project: GitProject) {
+    const branchName = window.prompt("输入新分支名：");
+    if (!branchName?.trim()) {
+      return;
+    }
+
+    const checkout = window.confirm("创建后立即切换到这个分支吗？");
+    setStatusMessage(`正在创建分支 ${branchName.trim()}...`);
+
+    const result = await apiClient.createBranch(project, branchName.trim(), checkout);
+    if (!result.ok) {
+      setStatusMessage(result.messageZh ?? "创建分支失败，请查看原始 Git 输出。");
+      return;
+    }
+
+    setStatusMessage(checkout ? `已创建并切换到分支：${branchName.trim()}` : `已创建分支：${branchName.trim()}`);
+    await loadProjectData(project);
+  }
+
+  async function switchBranchFromToolbar(project: GitProject) {
+    const branches = await apiClient.getBranches(project);
+    const target = chooseBranch(branches, "输入要切换的分支序号或名称：");
+    if (!target) {
+      return;
+    }
+
+    if (target.current) {
+      setStatusMessage(`当前已经在分支：${target.name}`);
+      return;
+    }
+
+    if (hasWorktreeChanges(project) && !window.confirm("当前工作区存在未提交改动，切换分支可能失败或影响这些改动。是否继续？")) {
+      return;
+    }
+
+    setStatusMessage(`正在切换到分支 ${target.name}...`);
+    const result = await apiClient.switchBranch(project, target);
+    if (!result.ok) {
+      setStatusMessage(result.messageZh ?? "切换分支失败，请查看原始 Git 输出。");
+      return;
+    }
+
+    setStatusMessage(`已切换到分支：${target.name}`);
+    await loadProjectData(project);
+  }
+
+  async function deleteBranchFromToolbar(project: GitProject) {
+    const branches = (await apiClient.getBranches(project)).filter((branch) => branch.type === "local" && !branch.current);
+    const target = chooseBranch(branches, "输入要删除的本地分支序号或名称：");
+    if (!target) {
+      return;
+    }
+
+    if (!window.confirm(`删除本地分支“${target.name}”？不会删除远程分支。`)) {
+      return;
+    }
+
+    setStatusMessage(`正在删除分支 ${target.name}...`);
+    const result = await apiClient.deleteBranch(project, target.name);
+    if (!result.ok) {
+      setStatusMessage(result.messageZh ?? "删除分支失败，请查看原始 Git 输出。");
+      return;
+    }
+
+    setStatusMessage(`已删除本地分支：${target.name}`);
     await loadProjectData(project);
   }
 
@@ -324,7 +430,7 @@ export function App() {
       return;
     }
 
-    if (!input.subject.trim()) {
+    if (!input.subject.trim() && !input.amend) {
       setStatusMessage("提交标题不能为空。");
       return;
     }
@@ -339,7 +445,7 @@ export function App() {
       return;
     }
 
-    setStatusMessage("提交完成。");
+    setStatusMessage(input.pushAfterCommit ? "提交并推送完成。" : input.amend ? "已修改上次提交。" : "提交完成。");
     await loadProjectData(selectedProject);
   }
 
@@ -445,6 +551,7 @@ export function App() {
                 selectedFilePath={selectedWorktreeFile?.path}
                 selectedFileStaged={selectedWorktreeFile?.staged}
                 onCommit={handleCommit}
+                focusRequest={commitFocusRequest}
               />
             )}
           </div>
@@ -485,6 +592,43 @@ function mergeProjects(incoming: GitProject[], current: GitProject[]): GitProjec
   }
 
   return Array.from(map.values());
+}
+
+function chooseBranch(branches: BranchInfo[], promptTitle: string): BranchInfo | undefined {
+  if (branches.length === 0) {
+    window.alert("没有可选择的分支。");
+    return undefined;
+  }
+
+  const options = branches
+    .map((branch, index) => `${index + 1}. ${branch.name} ${branch.current ? "(当前)" : ""} ${branch.type === "remote" ? "[远程]" : "[本地]"}`)
+    .join("\n");
+  const input = window.prompt(`${promptTitle}\n\n${options}`);
+  if (!input?.trim()) {
+    return undefined;
+  }
+
+  const trimmed = input.trim();
+  const index = Number(trimmed);
+  if (Number.isInteger(index) && index >= 1 && index <= branches.length) {
+    return branches[index - 1];
+  }
+
+  const matchedBranch = branches.find((branch) => branch.name === trimmed || branch.fullName === trimmed);
+  if (!matchedBranch) {
+    window.alert("没有找到这个分支，请检查输入的序号或名称。");
+  }
+
+  return matchedBranch;
+}
+
+function hasWorktreeChanges(project: GitProject): boolean {
+  const status = project.status;
+  if (!status) {
+    return false;
+  }
+
+  return status.stagedCount + status.unstagedCount + status.untrackedCount > 0 || status.hasConflicts;
 }
 
 function readThemeMode(): ThemeMode {

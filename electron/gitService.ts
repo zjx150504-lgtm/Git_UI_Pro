@@ -65,10 +65,20 @@ export interface WorktreeState {
   unstagedFiles: ChangedFile[];
 }
 
+export interface BranchInfo {
+  name: string;
+  fullName: string;
+  type: "local" | "remote";
+  current: boolean;
+  upstream?: string;
+  headHash: string;
+}
+
 export interface CommitInput {
   subject: string;
   body?: string;
   amend?: boolean;
+  pushAfterCommit?: boolean;
 }
 
 const fieldSeparator = "\x1f";
@@ -300,19 +310,35 @@ export class GitService {
 
   async commit(repositoryPath: string, input: CommitInput): Promise<GitOperationResult> {
     const subject = input.subject.trim();
-    if (!subject) {
+    if (!subject && !input.amend) {
       throw new Error("提交标题不能为空。");
     }
 
-    const args = ["commit", "-m", subject];
-    if (input.body?.trim()) {
-      args.push("-m", input.body.trim());
-    }
+    const args = ["commit"];
     if (input.amend) {
       args.push("--amend");
     }
+    if (subject) {
+      args.push("-m", subject);
+    } else if (input.amend) {
+      args.push("--no-edit");
+    }
+    if (input.body?.trim() && subject) {
+      args.push("-m", input.body.trim());
+    }
 
-    return this.run(repositoryPath, args);
+    const commitResult = await this.run(repositoryPath, args);
+    if (!commitResult.ok || !input.pushAfterCommit) {
+      return commitResult;
+    }
+
+    const pushResult = await this.push(repositoryPath);
+    return {
+      ...pushResult,
+      command: `${commitResult.command} && ${pushResult.command}`,
+      stdout: [commitResult.stdout, pushResult.stdout].filter(Boolean).join("\n"),
+      stderr: [commitResult.stderr, pushResult.stderr].filter(Boolean).join("\n")
+    };
   }
 
   async fetch(repositoryPath: string): Promise<GitOperationResult> {
@@ -325,6 +351,93 @@ export class GitService {
 
   async push(repositoryPath: string): Promise<GitOperationResult> {
     return this.run(repositoryPath, ["push"]);
+  }
+
+  async getBranches(repositoryPath: string): Promise<BranchInfo[]> {
+    const [status, refsResult] = await Promise.all([
+      this.getStatus(repositoryPath).catch(() => undefined),
+      this.run(repositoryPath, [
+        "for-each-ref",
+        "refs/heads",
+        "refs/remotes",
+        `--format=%(refname)${fieldSeparator}%(refname:short)${fieldSeparator}%(objectname)${fieldSeparator}%(upstream:short)`
+      ])
+    ]);
+
+    if (!refsResult.ok) {
+      throw new Error(refsResult.messageZh ?? "无法读取分支列表。");
+    }
+
+    return refsResult.stdout
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line): BranchInfo | null => {
+        const [fullName, shortName, headHash, upstream] = line.split(fieldSeparator);
+        if (!fullName || !shortName || fullName === "refs/remotes/origin/HEAD" || shortName.endsWith("/HEAD")) {
+          return null;
+        }
+
+        const type: BranchInfo["type"] = fullName.startsWith("refs/remotes/") ? "remote" : "local";
+        return {
+          name: shortName,
+          fullName,
+          type,
+          current: type === "local" && shortName === status?.currentBranch,
+          upstream: upstream || undefined,
+          headHash: headHash ?? ""
+        };
+      })
+      .filter((branch): branch is BranchInfo => Boolean(branch))
+      .sort(compareBranches);
+  }
+
+  async createBranch(repositoryPath: string, branchName: string, checkout: boolean): Promise<GitOperationResult> {
+    const name = branchName.trim();
+    if (!name) {
+      throw new Error("分支名不能为空。");
+    }
+
+    const validationResult = await this.run(repositoryPath, ["check-ref-format", "--branch", name]);
+    if (!validationResult.ok) {
+      return {
+        ...validationResult,
+        messageZh: "分支名不合法，请检查是否包含空格、连续点号或 Git 不允许的字符。"
+      };
+    }
+
+    if (!checkout) {
+      return this.run(repositoryPath, ["branch", name]);
+    }
+
+    return this.runWithFallbacks(repositoryPath, [
+      ["switch", "-c", name],
+      ["checkout", "-b", name]
+    ]);
+  }
+
+  async switchBranch(repositoryPath: string, branch: BranchInfo): Promise<GitOperationResult> {
+    if (branch.type === "remote") {
+      return this.runWithFallbacks(repositoryPath, [
+        ["switch", "--track", branch.name],
+        ["checkout", "-t", branch.name],
+        ["switch", branch.name],
+        ["checkout", branch.name]
+      ]);
+    }
+
+    return this.runWithFallbacks(repositoryPath, [
+      ["switch", branch.name],
+      ["checkout", branch.name]
+    ]);
+  }
+
+  async deleteBranch(repositoryPath: string, branchName: string): Promise<GitOperationResult> {
+    const name = branchName.trim();
+    if (!name) {
+      throw new Error("分支名不能为空。");
+    }
+
+    return this.run(repositoryPath, ["branch", "-d", name]);
   }
 
   async scanRepositories(rootPath: string, maxDepth = 4): Promise<string[]> {
@@ -595,6 +708,18 @@ function sortWorktree(worktree: WorktreeState): WorktreeState {
 
 function compareFiles(left: ChangedFile, right: ChangedFile): number {
   return left.path.localeCompare(right.path, "zh-CN", { sensitivity: "base" });
+}
+
+function compareBranches(left: BranchInfo, right: BranchInfo): number {
+  if (left.current !== right.current) {
+    return left.current ? -1 : 1;
+  }
+
+  if (left.type !== right.type) {
+    return left.type === "local" ? -1 : 1;
+  }
+
+  return left.name.localeCompare(right.name, "zh-CN", { sensitivity: "base" });
 }
 
 async function isUntrackedFile(repositoryPath: string, filePath: string): Promise<boolean> {

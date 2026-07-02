@@ -1,4 +1,4 @@
-import type { ChangedFile, CommitInput, CommitNode, DiffLine, GitOperationResult, GitProject, GitStatusSummary, WorktreeState } from "./domain";
+import type { BranchInfo, ChangedFile, CommitInput, CommitNode, DiffLine, GitOperationResult, GitProject, GitStatusSummary, WorktreeState } from "./domain";
 
 export interface GitUIBridge {
   getGitVersion: () => Promise<GitOperationResult>;
@@ -22,6 +22,10 @@ export interface GitUIBridge {
   fetch: (repositoryPath: string) => Promise<GitOperationResult>;
   pull: (repositoryPath: string) => Promise<GitOperationResult>;
   push: (repositoryPath: string) => Promise<GitOperationResult>;
+  getBranches: (repositoryPath: string) => Promise<BranchInfo[]>;
+  createBranch: (repositoryPath: string, branchName: string, checkout: boolean) => Promise<GitOperationResult>;
+  switchBranch: (repositoryPath: string, branch: BranchInfo) => Promise<GitOperationResult>;
+  deleteBranch: (repositoryPath: string, branchName: string) => Promise<GitOperationResult>;
 }
 
 declare global {

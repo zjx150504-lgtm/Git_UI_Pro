@@ -64,10 +64,20 @@ export interface WorktreeState {
   unstagedFiles: ChangedFile[];
 }
 
+export interface BranchInfo {
+  name: string;
+  fullName: string;
+  type: "local" | "remote";
+  current: boolean;
+  upstream?: string;
+  headHash: string;
+}
+
 export interface CommitInput {
   subject: string;
   body?: string;
   amend?: boolean;
+  pushAfterCommit?: boolean;
 }
 
 export interface GitOperationResult {

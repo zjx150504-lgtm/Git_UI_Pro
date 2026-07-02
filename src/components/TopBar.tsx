@@ -72,6 +72,7 @@ export function TopBar({
         <div className="project-subline">
           <span>{project?.path ?? "请先添加一个本地 Git 仓库"}</span>
           <span>{gitVersion}</span>
+          <span>{statusMessage}</span>
         </div>
       </div>
 

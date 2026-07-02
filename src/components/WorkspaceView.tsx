@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, ChevronRight, Plus, RefreshCw, Trash2, Undo2 } from "lucide-react";
 import type { ChangedFile, CommitInput, GitProject, WorktreeState } from "../types/domain";
 
@@ -15,6 +15,7 @@ interface WorkspaceViewProps {
   selectedFilePath?: string;
   selectedFileStaged?: boolean;
   onCommit: (input: CommitInput) => void;
+  focusRequest: number;
 }
 
 export function WorkspaceView({
@@ -29,14 +30,57 @@ export function WorkspaceView({
   onSelectFile,
   selectedFilePath,
   selectedFileStaged,
-  onCommit
+  onCommit,
+  focusRequest
 }: WorkspaceViewProps) {
   const [subject, setSubject] = useState("");
   const [amend, setAmend] = useState(false);
   const [commitMenuOpen, setCommitMenuOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(true);
   const [stagedOpen, setStagedOpen] = useState(true);
+  const commitActionsRef = useRef<HTMLDivElement>(null);
+  const subjectInputRef = useRef<HTMLInputElement>(null);
   const changeCount = worktree.unstagedFiles.length + worktree.stagedFiles.length;
+  const commitDisabled = worktree.stagedFiles.length === 0 && !amend;
+
+  useEffect(() => {
+    if (focusRequest > 0) {
+      subjectInputRef.current?.focus();
+    }
+  }, [focusRequest]);
+
+  useEffect(() => {
+    if (!commitMenuOpen) {
+      return;
+    }
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (!commitActionsRef.current?.contains(event.target as Node)) {
+        setCommitMenuOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setCommitMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [commitMenuOpen]);
+
+  function submitCommit(options: Partial<CommitInput> = {}) {
+    onCommit({
+      subject,
+      amend,
+      ...options
+    });
+    setCommitMenuOpen(false);
+  }
 
   return (
     <section className="scm-view">
@@ -54,10 +98,11 @@ export function WorkspaceView({
         className="scm-commit-box"
         onSubmit={(event) => {
           event.preventDefault();
-          onCommit({ subject, amend });
+          submitCommit();
         }}
       >
         <input
+          ref={subjectInputRef}
           value={subject}
           onChange={(event) => setSubject(event.target.value)}
           onKeyDown={(event) => {
@@ -67,8 +112,8 @@ export function WorkspaceView({
           }}
           placeholder={`消息(Ctrl+Enter) 在"${project?.status?.currentBranch ?? "当前分支"}"提交`}
         />
-        <div className="scm-commit-actions">
-          <button type="submit" className="scm-commit-button" disabled={worktree.stagedFiles.length === 0}>
+        <div className="scm-commit-actions" ref={commitActionsRef}>
+          <button type="submit" className="scm-commit-button" disabled={commitDisabled}>
             <Check size={17} />
             提交
           </button>
@@ -77,17 +122,19 @@ export function WorkspaceView({
           </button>
           {commitMenuOpen ? (
             <div className="floating-menu commit-menu">
-              <button type="submit">提交</button>
+              <button type="button" disabled={commitDisabled} onClick={() => submitCommit()}>
+                提交
+              </button>
               <button
                 type="button"
                 onClick={() => {
                   setAmend(true);
-                  setCommitMenuOpen(false);
+                  submitCommit({ amend: true });
                 }}
               >
                 修改上次提交
               </button>
-              <button type="button" onClick={() => setCommitMenuOpen(false)}>
+              <button type="button" disabled={commitDisabled} onClick={() => submitCommit({ pushAfterCommit: true })}>
                 提交并推送
               </button>
             </div>

@@ -19,8 +19,14 @@ contextBridge.exposeInMainWorld("gitUI", {
   unstageAll: (repositoryPath: string) => ipcRenderer.invoke("git:unstageAll", repositoryPath),
   discardFile: (repositoryPath: string, file: { path: string; oldPath?: string; status: string; staged: boolean }) =>
     ipcRenderer.invoke("git:discardFile", repositoryPath, file),
-  commit: (repositoryPath: string, input: { subject: string; body?: string; amend?: boolean }) => ipcRenderer.invoke("git:commit", repositoryPath, input),
+  commit: (repositoryPath: string, input: { subject: string; body?: string; amend?: boolean; pushAfterCommit?: boolean }) =>
+    ipcRenderer.invoke("git:commit", repositoryPath, input),
   fetch: (repositoryPath: string) => ipcRenderer.invoke("git:fetch", repositoryPath),
   pull: (repositoryPath: string) => ipcRenderer.invoke("git:pull", repositoryPath),
-  push: (repositoryPath: string) => ipcRenderer.invoke("git:push", repositoryPath)
+  push: (repositoryPath: string) => ipcRenderer.invoke("git:push", repositoryPath),
+  getBranches: (repositoryPath: string) => ipcRenderer.invoke("git:getBranches", repositoryPath),
+  createBranch: (repositoryPath: string, branchName: string, checkout: boolean) => ipcRenderer.invoke("git:createBranch", repositoryPath, branchName, checkout),
+  switchBranch: (repositoryPath: string, branch: { name: string; fullName: string; type: string; current: boolean; upstream?: string; headHash: string }) =>
+    ipcRenderer.invoke("git:switchBranch", repositoryPath, branch),
+  deleteBranch: (repositoryPath: string, branchName: string) => ipcRenderer.invoke("git:deleteBranch", repositoryPath, branchName)
 });

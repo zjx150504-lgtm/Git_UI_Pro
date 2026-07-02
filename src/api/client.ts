@@ -1,5 +1,15 @@
 import { mockCommits, mockDiffLines, mockProjects } from "../data/mockData";
-import type { ChangedFile, CommitInput, CommitNode, DiffLine, GitOperationResult, GitProject, GitStatusSummary, WorktreeState } from "../types/domain";
+import type {
+  BranchInfo,
+  ChangedFile,
+  CommitInput,
+  CommitNode,
+  DiffLine,
+  GitOperationResult,
+  GitProject,
+  GitStatusSummary,
+  WorktreeState
+} from "../types/domain";
 
 const mockDelay = 180;
 
@@ -190,7 +200,7 @@ export const apiClient = {
     }
 
     await wait(mockDelay);
-    return okResult(`git commit -m ${input.subject}`);
+    return okResult(input.pushAfterCommit ? `git commit -m ${input.subject} && git push` : `git commit -m ${input.subject}`);
   },
 
   async fetch(project: GitProject): Promise<GitOperationResult> {
@@ -218,6 +228,65 @@ export const apiClient = {
 
     await wait(mockDelay);
     return okResult("git push");
+  },
+
+  async getBranches(project: GitProject): Promise<BranchInfo[]> {
+    if (window.gitUI) {
+      return window.gitUI.getBranches(project.path);
+    }
+
+    await wait(mockDelay);
+    return [
+      {
+        name: project.status?.currentBranch ?? "main",
+        fullName: `refs/heads/${project.status?.currentBranch ?? "main"}`,
+        type: "local",
+        current: true,
+        upstream: project.status?.upstream,
+        headHash: mockCommits[0]?.hash ?? ""
+      },
+      {
+        name: "feature/project-scan",
+        fullName: "refs/heads/feature/project-scan",
+        type: "local",
+        current: false,
+        headHash: mockCommits[2]?.hash ?? ""
+      },
+      {
+        name: "origin/master",
+        fullName: "refs/remotes/origin/master",
+        type: "remote",
+        current: false,
+        headHash: mockCommits[0]?.hash ?? ""
+      }
+    ];
+  },
+
+  async createBranch(project: GitProject, branchName: string, checkout: boolean): Promise<GitOperationResult> {
+    if (window.gitUI) {
+      return window.gitUI.createBranch(project.path, branchName, checkout);
+    }
+
+    await wait(mockDelay);
+    return okResult(checkout ? `git switch -c ${branchName}` : `git branch ${branchName}`);
+  },
+
+  async switchBranch(project: GitProject, branch: BranchInfo): Promise<GitOperationResult> {
+    if (window.gitUI) {
+      return window.gitUI.switchBranch(project.path, branch);
+    }
+
+    await wait(mockDelay);
+    return okResult(branch.type === "remote" ? `git switch --track ${branch.name}` : `git switch ${branch.name}`);
+  },
+
+  async deleteBranch(project: GitProject, branchName: string): Promise<GitOperationResult> {
+    if (window.gitUI) {
+      return window.gitUI.deleteBranch(project.path, branchName);
+    }
+
+    await wait(mockDelay);
+    return okResult(`git branch -d ${branchName}`);
   }
 };
 

@@ -79,10 +79,18 @@ function registerIpc(): void {
   ipcMain.handle("git:unstageFile", (_event, repositoryPath: string, filePath: string) => gitService.unstageFile(repositoryPath, filePath));
   ipcMain.handle("git:unstageAll", (_event, repositoryPath: string) => gitService.unstageAll(repositoryPath));
   ipcMain.handle("git:discardFile", (_event, repositoryPath: string, file) => gitService.discardFile(repositoryPath, file));
-  ipcMain.handle("git:commit", (_event, repositoryPath: string, input: { subject: string; body?: string; amend?: boolean }) => gitService.commit(repositoryPath, input));
+  ipcMain.handle("git:commit", (_event, repositoryPath: string, input: { subject: string; body?: string; amend?: boolean; pushAfterCommit?: boolean }) =>
+    gitService.commit(repositoryPath, input)
+  );
   ipcMain.handle("git:fetch", (_event, repositoryPath: string) => gitService.fetch(repositoryPath));
   ipcMain.handle("git:pull", (_event, repositoryPath: string) => gitService.pull(repositoryPath));
   ipcMain.handle("git:push", (_event, repositoryPath: string) => gitService.push(repositoryPath));
+  ipcMain.handle("git:getBranches", (_event, repositoryPath: string) => gitService.getBranches(repositoryPath));
+  ipcMain.handle("git:createBranch", (_event, repositoryPath: string, branchName: string, checkout: boolean) =>
+    gitService.createBranch(repositoryPath, branchName, checkout)
+  );
+  ipcMain.handle("git:switchBranch", (_event, repositoryPath: string, branch) => gitService.switchBranch(repositoryPath, branch));
+  ipcMain.handle("git:deleteBranch", (_event, repositoryPath: string, branchName: string) => gitService.deleteBranch(repositoryPath, branchName));
 }
 
 app.whenReady().then(async () => {
