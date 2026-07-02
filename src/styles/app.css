@@ -871,6 +871,31 @@ button {
   line-height: 1.35;
 }
 
+.commit-summary-card {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.summary-added {
+  color: var(--success);
+}
+
+.summary-modified {
+  color: var(--warning);
+}
+
+.summary-deleted {
+  color: var(--danger);
+}
+
 .commit-meta {
   display: grid;
   gap: 8px;
@@ -901,6 +926,27 @@ button {
   margin: 16px 0 0;
   color: var(--muted-strong);
   line-height: 1.6;
+}
+
+.commit-body-list,
+.commit-body-block {
+  margin: 16px 0 0;
+  color: var(--muted-strong);
+  line-height: 1.55;
+}
+
+.commit-body-list {
+  display: grid;
+  gap: 6px;
+  padding-left: 24px;
+}
+
+.commit-body-list li {
+  padding-left: 2px;
+}
+
+.commit-body-block p {
+  margin: 0 0 8px;
 }
 
 .changed-files,

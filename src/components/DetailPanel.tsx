@@ -17,6 +17,8 @@ export function DetailPanel({ commit, diffLines, selectedFilePath, onSelectFile 
     );
   }
 
+  const fileStats = getFileStats(commit.files);
+
   return (
     <aside className="detail-panel">
       <div className="panel-header">
@@ -29,6 +31,13 @@ export function DetailPanel({ commit, diffLines, selectedFilePath, onSelectFile 
         </button>
       </div>
 
+      <div className="commit-summary-card">
+        <span>{commit.files.length} files changed</span>
+        <span className="summary-added">{fileStats.added} 新增</span>
+        <span className="summary-modified">{fileStats.modified} 修改</span>
+        <span className="summary-deleted">{fileStats.deleted} 删除</span>
+      </div>
+
       <div className="commit-meta">
         <MetaItem label="作者" value={`${commit.authorName} <${commit.authorEmail}>`} />
         <MetaItem label="提交时间" value={commit.authorDate} icon={<Clock size={14} />} />
@@ -36,7 +45,7 @@ export function DetailPanel({ commit, diffLines, selectedFilePath, onSelectFile 
         <MetaItem label="父提交" value={commit.parents.length > 0 ? commit.parents.join(", ") : "无"} />
       </div>
 
-      {commit.body ? <p className="commit-body">{commit.body}</p> : null}
+      {commit.body ? <FormattedCommitBody body={commit.body} /> : null}
 
       <section className="changed-files">
         <div className="section-title">
@@ -75,6 +84,39 @@ export function DetailPanel({ commit, diffLines, selectedFilePath, onSelectFile 
   );
 }
 
+function FormattedCommitBody({ body }: { body: string }) {
+  const lines = body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return null;
+  }
+
+  const numberedItems = lines
+    .map((line) => line.match(/^(\d+)[.)、]\s*(.+)$/))
+    .filter((match): match is RegExpMatchArray => Boolean(match));
+
+  if (numberedItems.length === lines.length) {
+    return (
+      <ol className="commit-body-list">
+        {numberedItems.map((match) => (
+          <li key={`${match[1]}-${match[2]}`}>{match[2]}</li>
+        ))}
+      </ol>
+    );
+  }
+
+  return (
+    <div className="commit-body-block">
+      {lines.map((line, index) => (
+        <p key={`${index}-${line}`}>{line}</p>
+      ))}
+    </div>
+  );
+}
+
 function MetaItem({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
   return (
     <div className="meta-item">
@@ -109,4 +151,20 @@ function statusLabel(status: ChangedFile["status"]): string {
   };
 
   return labels[status];
+}
+
+function getFileStats(files: ChangedFile[]) {
+  return files.reduce(
+    (stats, file) => {
+      if (file.status === "added" || file.status === "untracked") {
+        stats.added += 1;
+      } else if (file.status === "deleted") {
+        stats.deleted += 1;
+      } else {
+        stats.modified += 1;
+      }
+      return stats;
+    },
+    { added: 0, modified: 0, deleted: 0 }
+  );
 }
