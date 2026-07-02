@@ -1,0 +1,10 @@
+node_modules/
+dist/
+dist-electron/
+.vite/
+*.log
+.logs/
+.idea/
+.cursor/
+.DS_Store
+Thumbs.db

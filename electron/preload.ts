@@ -1,0 +1,26 @@
+import { contextBridge, ipcRenderer } from "electron";
+
+contextBridge.exposeInMainWorld("gitUI", {
+  getGitVersion: () => ipcRenderer.invoke("git:getVersion"),
+  chooseDirectory: () => ipcRenderer.invoke("dialog:chooseDirectory"),
+  getProjects: () => ipcRenderer.invoke("projects:list"),
+  addProject: (directoryPath: string) => ipcRenderer.invoke("projects:add", directoryPath),
+  scanProjects: (rootPath: string) => ipcRenderer.invoke("projects:scan", rootPath),
+  removeProject: (projectId: string) => ipcRenderer.invoke("projects:remove", projectId),
+  getProjectStatus: (repositoryPath: string) => ipcRenderer.invoke("git:getStatus", repositoryPath),
+  getHistory: (repositoryPath: string) => ipcRenderer.invoke("git:getHistory", repositoryPath),
+  getCommitDetails: (repositoryPath: string, hash: string) => ipcRenderer.invoke("git:getCommitDetails", repositoryPath, hash),
+  getCommitDiff: (repositoryPath: string, hash: string, filePath?: string) => ipcRenderer.invoke("git:getCommitDiff", repositoryPath, hash, filePath),
+  getWorktree: (repositoryPath: string) => ipcRenderer.invoke("git:getWorktree", repositoryPath),
+  getWorktreeDiff: (repositoryPath: string, filePath: string, staged: boolean) => ipcRenderer.invoke("git:getWorktreeDiff", repositoryPath, filePath, staged),
+  stageFile: (repositoryPath: string, filePath: string) => ipcRenderer.invoke("git:stageFile", repositoryPath, filePath),
+  stageAll: (repositoryPath: string) => ipcRenderer.invoke("git:stageAll", repositoryPath),
+  unstageFile: (repositoryPath: string, filePath: string) => ipcRenderer.invoke("git:unstageFile", repositoryPath, filePath),
+  unstageAll: (repositoryPath: string) => ipcRenderer.invoke("git:unstageAll", repositoryPath),
+  discardFile: (repositoryPath: string, file: { path: string; oldPath?: string; status: string; staged: boolean }) =>
+    ipcRenderer.invoke("git:discardFile", repositoryPath, file),
+  commit: (repositoryPath: string, input: { subject: string; body?: string; amend?: boolean }) => ipcRenderer.invoke("git:commit", repositoryPath, input),
+  fetch: (repositoryPath: string) => ipcRenderer.invoke("git:fetch", repositoryPath),
+  pull: (repositoryPath: string) => ipcRenderer.invoke("git:pull", repositoryPath),
+  push: (repositoryPath: string) => ipcRenderer.invoke("git:push", repositoryPath)
+});
