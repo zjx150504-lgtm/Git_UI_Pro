@@ -2,9 +2,8 @@ import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent } fro
 import { FolderGit2, PanelLeftOpen, Terminal } from "lucide-react";
 import { apiClient } from "./api/client";
 import { ConsolePanel } from "./components/ConsolePanel";
-import { DetailPanel } from "./components/DetailPanel";
-import { GraphView } from "./components/GraphView";
-import { ProjectSidebar } from "./components/ProjectSidebar";
+import { GraphSidebar } from "./components/GraphSidebar";
+import { ProjectRail } from "./components/ProjectRail";
 import { TopBar, type ThemeMode } from "./components/TopBar";
 import { WorktreeDetailPanel } from "./components/WorktreeDetailPanel";
 import { WorkspaceView } from "./components/WorkspaceView";
@@ -16,7 +15,6 @@ import type {
   DiffLine,
   GitOperationResult,
   GitProject,
-  MainView,
   WorktreeState
 } from "./types/domain";
 
@@ -25,31 +23,29 @@ const emptyWorktree: WorktreeState = {
   unstagedFiles: []
 };
 
-type ResizeTarget = "sidebar" | "detail";
+type ResizeTarget = "sidebar" | "detail" | "sourceSplit";
 
 export function App() {
   const [projects, setProjects] = useState<GitProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [commits, setCommits] = useState<CommitNode[]>([]);
   const [selectedCommitHash, setSelectedCommitHash] = useState("");
-  const [commitDetails, setCommitDetails] = useState<CommitNode | undefined>();
-  const [selectedFilePath, setSelectedFilePath] = useState<string | undefined>();
-  const [diffLines, setDiffLines] = useState<DiffLine[]>([]);
   const [worktree, setWorktree] = useState<WorktreeState>(emptyWorktree);
   const [selectedWorktreeFile, setSelectedWorktreeFile] = useState<ChangedFile | undefined>();
   const [worktreeDiffLines, setWorktreeDiffLines] = useState<DiffLine[]>([]);
-  const [mainView, setMainView] = useState<MainView>("history");
-  const [query, setQuery] = useState("");
   const [gitVersion, setGitVersion] = useState("检测中");
   const [statusMessage, setStatusMessage] = useState("准备就绪");
   const [themeMode, setThemeModeState] = useState<ThemeMode>(() => readThemeMode());
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">(() => resolveTheme(readThemeMode()));
-  const [sidebarWidth, setSidebarWidth] = useState(300);
-  const [detailWidth, setDetailWidth] = useState(420);
+  const [sidebarWidth, setSidebarWidth] = useState(240);
+  const [detailWidth, setDetailWidth] = useState(360);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [commitFocusRequest, setCommitFocusRequest] = useState(0);
+  const [sourcePaneHeight, setSourcePaneHeight] = useState(430);
+  const [changesPanelOpen, setChangesPanelOpen] = useState(true);
+  const [graphPanelOpen, setGraphPanelOpen] = useState(true);
 
   useEffect(() => {
     void loadInitialData();
@@ -68,11 +64,6 @@ export function App() {
     [projects, selectedProjectId]
   );
 
-  const selectedCommit = useMemo(
-    () => commitDetails ?? commits.find((commit) => commit.hash === selectedCommitHash),
-    [commitDetails, commits, selectedCommitHash]
-  );
-
   useEffect(() => {
     if (!selectedProject) {
       return;
@@ -80,29 +71,8 @@ export function App() {
 
     setCommits([]);
     setSelectedCommitHash("");
-    setCommitDetails(undefined);
-    setSelectedFilePath(undefined);
-    setDiffLines([]);
     void loadProjectData(selectedProject);
   }, [selectedProject?.id]);
-
-  useEffect(() => {
-    if (!selectedProject || !selectedCommitHash) {
-      setCommitDetails(undefined);
-      setSelectedFilePath(undefined);
-      setDiffLines([]);
-      return;
-    }
-
-    if (!commits.some((commit) => commit.hash === selectedCommitHash)) {
-      setCommitDetails(undefined);
-      setSelectedFilePath(undefined);
-      setDiffLines([]);
-      return;
-    }
-
-    void loadCommitDetails(selectedProject, selectedCommitHash);
-  }, [selectedProject?.id, selectedCommitHash, commits]);
 
   async function loadInitialData() {
     try {
@@ -130,9 +100,6 @@ export function App() {
 
       setCommits(history);
       setWorktree(worktreeState);
-      setCommitDetails(undefined);
-      setSelectedFilePath(undefined);
-      setDiffLines([]);
       setSelectedWorktreeFile(undefined);
       setWorktreeDiffLines([]);
       setSelectedCommitHash(history[0]?.hash ?? "");
@@ -144,39 +111,10 @@ export function App() {
     }
   }
 
-  async function loadCommitDetails(project: GitProject, hash: string) {
-    try {
-      const details = await apiClient.getCommitDetails(project, hash);
-      const firstFilePath = details.files[0]?.path;
-      const diff = firstFilePath ? await apiClient.getCommitDiff(project, hash, firstFilePath) : [];
-      setCommitDetails(details);
-      setSelectedFilePath(firstFilePath);
-      setDiffLines(diff);
-    } catch (error) {
-      setCommitDetails(commits.find((commit) => commit.hash === hash));
-      setSelectedFilePath(undefined);
-      setDiffLines([]);
-      setStatusMessage(error instanceof Error ? error.message : "加载提交详情失败");
-    }
-  }
-
   async function handleSelectCommit(hash: string) {
-    setCommitDetails(undefined);
     setSelectedCommitHash(hash);
-  }
-
-  async function handleSelectFile(file: ChangedFile) {
-    if (!selectedProject || !selectedCommitHash) {
-      return;
-    }
-
-    try {
-      setSelectedFilePath(file.path);
-      setDiffLines(await apiClient.getCommitDiff(selectedProject, selectedCommitHash, file.path));
-    } catch (error) {
-      setDiffLines([]);
-      setStatusMessage(error instanceof Error ? error.message : "加载文件 diff 失败");
-    }
+    const commit = commits.find((item) => item.hash === hash);
+    setStatusMessage(commit ? `已选中提交 ${commit.shortHash}` : "已选中提交。");
   }
 
   async function handleSelectWorktreeFile(file: ChangedFile) {
@@ -268,9 +206,8 @@ export function App() {
     }
 
     if (action === "提交") {
-      setMainView("workspace");
       setCommitFocusRequest((value) => value + 1);
-      setStatusMessage("已打开工作区，请输入提交信息后提交。");
+      setStatusMessage("请在工作区输入提交信息后提交。");
       return;
     }
 
@@ -459,16 +396,22 @@ export function App() {
     event.preventDefault();
 
     const startX = event.clientX;
+    const startY = event.clientY;
     const startSidebarWidth = sidebarWidth;
     const startDetailWidth = detailWidth;
+    const startSourcePaneHeight = sourcePaneHeight;
 
     const onMove = (moveEvent: globalThis.MouseEvent) => {
       if (target === "sidebar") {
-        setSidebarWidth(clamp(startSidebarWidth + moveEvent.clientX - startX, 220, 440));
+        setSidebarWidth(clamp(startSidebarWidth + moveEvent.clientX - startX, 180, 340));
       }
 
       if (target === "detail") {
-        setDetailWidth(clamp(startDetailWidth + startX - moveEvent.clientX, 300, 680));
+        setDetailWidth(clamp(startDetailWidth + moveEvent.clientX - startX, 300, 520));
+      }
+
+      if (target === "sourceSplit") {
+        setSourcePaneHeight(clamp(startSourcePaneHeight + moveEvent.clientY - startY, 220, 620));
       }
     };
 
@@ -483,7 +426,8 @@ export function App() {
 
   const layoutStyle = {
     "--sidebar-width": leftCollapsed ? "52px" : `${sidebarWidth}px`,
-    "--detail-width": rightCollapsed ? "0px" : `${detailWidth}px`
+    "--detail-width": rightCollapsed ? "0px" : `${detailWidth}px`,
+    "--scm-pane-height": `${sourcePaneHeight}px`
   } as CSSProperties;
 
   return (
@@ -501,11 +445,9 @@ export function App() {
           <FolderGit2 size={18} />
         </aside>
       ) : (
-        <ProjectSidebar
+        <ProjectRail
           projects={projects}
           selectedProjectId={selectedProject?.id ?? null}
-          query={query}
-          onQueryChange={setQuery}
           onSelectProject={setSelectedProjectId}
           onAddProject={handleAddProject}
           onScanProjects={handleScanProjects}
@@ -518,49 +460,57 @@ export function App() {
       <main className="workspace-shell">
         <TopBar
           project={selectedProject}
-          view={mainView}
           gitVersion={gitVersion}
           statusMessage={statusMessage}
           themeMode={themeMode}
           leftCollapsed={leftCollapsed}
           rightCollapsed={rightCollapsed}
           consoleOpen={consoleOpen}
-          onChangeView={setMainView}
           onThemeModeChange={handleThemeModeChange}
           onToggleLeft={() => setLeftCollapsed((value) => !value)}
           onToggleRight={() => setRightCollapsed((value) => !value)}
           onToggleConsole={() => setConsoleOpen((value) => !value)}
-          onOperation={handleOperation}
         />
 
         <section className="main-grid">
-          <div className="center-pane">
-            {mainView === "history" ? (
-              <GraphView commits={commits} selectedHash={selectedCommitHash} onSelectCommit={handleSelectCommit} />
-            ) : (
-              <WorkspaceView
-                project={selectedProject}
-                worktree={worktree}
-                onRefresh={() => selectedProject && void loadProjectData(selectedProject)}
-                onStageFile={handleStageFile}
-                onStageAll={handleStageAll}
-                onUnstageFile={handleUnstageFile}
-                onUnstageAll={handleUnstageAll}
-                onDiscardFile={handleDiscardFile}
-                onSelectFile={handleSelectWorktreeFile}
-                selectedFilePath={selectedWorktreeFile?.path}
-                selectedFileStaged={selectedWorktreeFile?.staged}
-                onCommit={handleCommit}
-                focusRequest={commitFocusRequest}
-              />
-            )}
+          <div className={`source-control-pane ${changesPanelOpen ? "" : "changes-collapsed"} ${graphPanelOpen ? "" : "graph-collapsed"}`}>
+            <WorkspaceView
+              project={selectedProject}
+              worktree={worktree}
+              onRefresh={() => selectedProject && void loadProjectData(selectedProject)}
+              onStageFile={handleStageFile}
+              onStageAll={handleStageAll}
+              onUnstageFile={handleUnstageFile}
+              onUnstageAll={handleUnstageAll}
+              onDiscardFile={handleDiscardFile}
+              onSelectFile={handleSelectWorktreeFile}
+              selectedFilePath={selectedWorktreeFile?.path}
+              selectedFileStaged={selectedWorktreeFile?.staged}
+              onCommit={handleCommit}
+              focusRequest={commitFocusRequest}
+              panelOpen={changesPanelOpen}
+              onTogglePanel={() => setChangesPanelOpen((value) => !value)}
+            />
+            <div className="source-graph-divider" onMouseDown={(event) => beginResize("sourceSplit", event)} />
+            <GraphSidebar
+              commits={commits}
+              selectedHash={selectedCommitHash}
+              onSelectCommit={handleSelectCommit}
+              onOperation={handleOperation}
+              panelOpen={graphPanelOpen}
+              onTogglePanel={() => setGraphPanelOpen((value) => !value)}
+            />
           </div>
           {!rightCollapsed ? <div className="resize-handle detail-resize" onMouseDown={(event) => beginResize("detail", event)} /> : null}
-          {!rightCollapsed && mainView === "workspace" ? (
-            <WorktreeDetailPanel file={selectedWorktreeFile} diffLines={worktreeDiffLines} />
-          ) : null}
-          {!rightCollapsed && mainView === "history" ? (
-            <DetailPanel commit={selectedCommit} diffLines={diffLines} selectedFilePath={selectedFilePath} onSelectFile={handleSelectFile} />
+          {!rightCollapsed ? (
+            <WorktreeDetailPanel
+              file={selectedWorktreeFile}
+              diffLines={worktreeDiffLines}
+              onCloseFile={() => {
+                setSelectedWorktreeFile(undefined);
+                setWorktreeDiffLines([]);
+              }}
+            />
           ) : null}
         </section>
 

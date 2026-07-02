@@ -1,47 +1,46 @@
-import { CheckCircle2, Copy, FileText } from "lucide-react";
+import { Copy, FileText, X } from "lucide-react";
 import type { ChangedFile, DiffLine } from "../types/domain";
 
 interface WorktreeDetailPanelProps {
   file?: ChangedFile;
   diffLines: DiffLine[];
+  onCloseFile: () => void;
 }
 
-export function WorktreeDetailPanel({ file, diffLines }: WorktreeDetailPanelProps) {
+export function WorktreeDetailPanel({ file, diffLines, onCloseFile }: WorktreeDetailPanelProps) {
   if (!file) {
     return (
-      <aside className="detail-panel worktree-detail-panel">
-        <div className="empty-state detail-empty">选择一个更改文件后查看文件路径、状态和 inline diff。</div>
+      <aside className="detail-panel worktree-detail-panel editor-detail-panel">
+        <div className="editor-empty-state">
+          <FileText size={22} />
+          <span>选择一个工作树文件查看对比。</span>
+        </div>
       </aside>
     );
   }
 
   return (
-    <aside className="detail-panel worktree-detail-panel">
-      <div className="panel-header">
-        <div>
-          <span className="eyebrow">工作区文件</span>
-          <h2>{file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? file.path}</h2>
+    <aside className="detail-panel worktree-detail-panel editor-detail-panel">
+      <div className="editor-tab-row">
+        <div className="editor-tab active">
+          <FileText size={14} />
+          <span>{file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? file.path}</span>
+          <small>{statusLabel(file.status)}</small>
+          <button type="button" className="editor-tab-close" title="关闭当前文件" onClick={onCloseFile}>
+            <X size={13} />
+          </button>
         </div>
-        <button type="button" className="icon-button" title="复制文件路径" onClick={() => void navigator.clipboard.writeText(file.path)}>
-          <Copy size={16} />
+        <button type="button" className="icon-button compact-icon" title="复制文件路径" onClick={() => void navigator.clipboard.writeText(file.path)}>
+          <Copy size={15} />
         </button>
       </div>
 
-      <div className="commit-meta">
-        <MetaItem label="路径" value={file.path} />
-        <MetaItem label="状态" value={statusLabel(file.status)} />
-        <MetaItem label="区域" value={file.staged ? "已暂存的更改" : "更改"} />
+      <div className="editor-breadcrumb">
+        <span>{file.staged ? "已暂存的更改" : "更改"}</span>
+        <span>{file.path}</span>
       </div>
 
-      <section className="diff-panel">
-        <div className="section-title">
-          <CheckCircle2 size={16} />
-          Inline Diff
-        </div>
-        <div className="diff-file-name">
-          <FileText size={14} />
-          {file.path}
-        </div>
+      <section className="diff-panel editor-diff-panel">
         <div className="diff-lines">
           {diffLines.length === 0 ? <div className="empty-inline">没有可显示的文本 diff。</div> : null}
           {diffLines.map((line, index) => (
@@ -54,15 +53,6 @@ export function WorktreeDetailPanel({ file, diffLines }: WorktreeDetailPanelProp
         </div>
       </section>
     </aside>
-  );
-}
-
-function MetaItem({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="meta-item">
-      <span className="meta-label">{label}</span>
-      <span className="meta-value">{value}</span>
-    </div>
   );
 }
 

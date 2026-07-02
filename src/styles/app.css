@@ -151,6 +151,257 @@ button {
   background: var(--panel);
 }
 
+.graph-sidebar {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  min-width: 0;
+  height: 100vh;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.graph-project-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px 54px;
+  gap: 6px;
+  position: relative;
+  padding: 12px 10px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.graph-project-trigger {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  min-height: 42px;
+  border-radius: 7px;
+  padding: 6px 8px;
+  color: var(--text);
+  text-align: left;
+  background: var(--surface-2);
+  cursor: pointer;
+}
+
+.graph-project-trigger:hover {
+  background: var(--surface-hover);
+}
+
+.graph-project-name,
+.graph-commit-subject,
+.graph-sidebar-footer span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-project-name {
+  font-weight: 700;
+}
+
+.graph-branch-pill {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+  color: var(--blue);
+  font-size: 12px;
+}
+
+.graph-scan-button {
+  min-height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.graph-project-menu {
+  top: 62px;
+  right: 10px;
+  left: 10px;
+}
+
+.graph-menu-search {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 30px;
+  margin-bottom: 5px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 6px 5px;
+  color: var(--muted);
+}
+
+.graph-menu-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  background: transparent;
+}
+
+.graph-project-options {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.graph-project-options button {
+  display: grid;
+  gap: 3px;
+}
+
+.graph-project-options button span {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-project-options small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-search-row {
+  padding: 8px 10px;
+}
+
+.graph-search {
+  min-width: 0;
+  min-height: 32px;
+  margin: 0;
+}
+
+.graph-section-title {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 12px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.graph-section-title span {
+  display: inline-grid;
+  min-width: 22px;
+  height: 20px;
+  margin-left: auto;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.graph-commit-list {
+  min-height: 0;
+  overflow: auto;
+  padding: 6px 8px 12px;
+}
+
+.graph-commit-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 7px;
+  align-items: stretch;
+  width: 100%;
+  min-height: 58px;
+  border-radius: 7px;
+  padding: 0 6px 0 0;
+  color: var(--text);
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.graph-commit-row:hover,
+.graph-commit-row.active {
+  background: var(--surface);
+}
+
+.graph-commit-row.active {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.compact-graph-cell {
+  width: 28px;
+  height: 54px;
+}
+
+.graph-commit-main {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  align-content: center;
+}
+
+.graph-commit-subject {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.graph-commit-meta,
+.graph-ref-strip {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.graph-commit-meta {
+  color: var(--muted);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+}
+
+.graph-commit-meta span,
+.graph-ref-strip .ref-chip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-ref-strip {
+  min-height: 20px;
+}
+
+.graph-ref-strip .ref-chip {
+  max-width: 100px;
+  min-height: 18px;
+  padding: 0 5px;
+  font-size: 11px;
+}
+
+.graph-sidebar-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: 8px;
+  align-items: center;
+  min-height: 38px;
+  border-top: 1px solid var(--border);
+  padding: 5px 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.graph-empty {
+  padding: 18px 8px;
+}
+
+.graph-empty-inline {
+  padding: 8px 6px;
+}
+
 .brand-block {
   display: flex;
   gap: 12px;
@@ -428,7 +679,7 @@ button {
 
 .top-bar {
   display: grid;
-  grid-template-columns: minmax(220px, 320px) 180px minmax(360px, 1fr) max-content;
+  grid-template-columns: minmax(260px, 1fr) minmax(300px, max-content) max-content;
   gap: 12px;
   align-items: center;
   min-width: 0;
@@ -1507,5 +1758,679 @@ button {
 }
 
 .console-launcher:hover {
+  background: var(--surface-hover);
+}
+
+/* VS Code-style source control layout */
+.project-rail {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
+  min-width: 0;
+  height: 100vh;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.project-rail-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: 8px;
+  align-items: center;
+  min-height: 48px;
+  padding: 10px 10px 6px;
+}
+
+.project-rail-header > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.project-rail-header strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-rail-header span,
+.project-rail-side span:not(.dirty-dot) {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.project-scan-row {
+  justify-content: flex-start;
+  min-height: 30px;
+  margin: 0 10px 8px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.project-rail-search {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  min-height: 32px;
+  margin: 0 10px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  padding: 0 9px;
+  color: var(--muted);
+  background: var(--bg);
+}
+
+.project-rail-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  background: transparent;
+}
+
+.project-rail-list {
+  min-height: 0;
+  overflow: auto;
+  padding: 0 8px 10px;
+}
+
+.project-rail-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px;
+  gap: 8px;
+  width: 100%;
+  min-height: 58px;
+  margin-bottom: 4px;
+  border-radius: 7px;
+  padding: 8px;
+  color: var(--text);
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.project-rail-item:hover,
+.project-rail-item.active {
+  background: var(--surface);
+}
+
+.project-rail-item.active {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.project-rail-main {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.project-rail-name,
+.project-rail-branch {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-rail-name {
+  font-weight: 700;
+}
+
+.project-rail-branch {
+  color: var(--blue);
+  font-size: 12px;
+}
+
+.project-rail-side {
+  display: grid;
+  justify-items: center;
+  align-content: start;
+  gap: 5px;
+}
+
+.project-rail-empty {
+  padding: 12px 4px;
+}
+
+.top-bar {
+  grid-template-columns: minmax(260px, 1fr) max-content;
+  min-height: 68px;
+}
+
+.workspace-shell {
+  grid-template-rows: 68px minmax(0, 1fr);
+}
+
+.main-grid {
+  grid-template-columns: var(--detail-width) 6px minmax(0, 1fr);
+  min-height: 0;
+}
+
+.right-collapsed .main-grid {
+  grid-template-columns: var(--detail-width);
+}
+
+.source-control-pane {
+  display: grid;
+  grid-template-rows: minmax(230px, 46vh) 1px minmax(180px, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.source-graph-divider {
+  background: var(--border);
+}
+
+.source-control-pane .scm-view {
+  min-height: 0;
+  padding: 14px 14px 10px;
+  overflow: auto;
+}
+
+.source-control-pane .scm-header {
+  margin-bottom: 10px;
+}
+
+.source-control-pane .scm-header h2 {
+  font-size: 16px;
+}
+
+.source-control-pane .scm-commit-box {
+  grid-template-columns: minmax(0, 1fr) 110px;
+}
+
+.source-control-pane .scm-commit-button {
+  gap: 5px;
+}
+
+.source-control-pane .scm-file-row {
+  min-height: 30px;
+}
+
+.source-control-pane .scm-file-actions {
+  opacity: 1;
+}
+
+.source-control-pane .graph-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-height: 0;
+  height: auto;
+  border-right: 0;
+  background: var(--panel);
+}
+
+.source-control-pane .graph-section-title {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 8px;
+  min-height: 34px;
+  border-top: 0;
+  padding: 0 10px;
+}
+
+.source-control-pane .graph-section-title > div:first-child {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  min-width: 0;
+  font-weight: 700;
+}
+
+.source-control-pane .graph-section-title > div:first-child > span {
+  display: inline-grid;
+  min-width: 20px;
+  height: 18px;
+  margin-left: 4px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.graph-toolbar {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+}
+
+.graph-toolbar .compact-icon {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+}
+
+.source-control-pane .graph-search-row {
+  padding: 7px 10px;
+}
+
+.source-control-pane .graph-search {
+  min-height: 28px;
+}
+
+.source-control-pane .graph-commit-list {
+  padding: 2px 8px 10px;
+}
+
+.source-control-pane .graph-commit-row {
+  grid-template-columns: 24px minmax(0, 1fr);
+  min-height: 42px;
+  border-radius: 5px;
+}
+
+.compact-graph-cell {
+  width: 24px;
+  height: 42px;
+}
+
+.graph-commit-title-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.graph-commit-title-row .ref-chip {
+  flex: 0 0 auto;
+  max-width: 84px;
+  min-height: 17px;
+  padding: 0 5px;
+  font-size: 10px;
+}
+
+.source-control-pane .graph-commit-subject {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.source-control-pane .graph-commit-meta {
+  font-size: 10px;
+}
+
+.editor-detail-panel {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+  padding: 0;
+  background: var(--panel);
+}
+
+.editor-tab-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  gap: 8px;
+  align-items: center;
+  min-height: 42px;
+  border-bottom: 1px solid var(--border);
+  padding: 6px 10px;
+}
+
+.editor-tab {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  min-width: 0;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 30px;
+  border-radius: 6px;
+  padding: 0 9px;
+  background: var(--surface);
+}
+
+.editor-tab span {
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-tab small {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.editor-breadcrumb {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+  min-height: 32px;
+  border-bottom: 1px solid var(--border);
+  padding: 0 14px;
+  color: var(--muted);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+}
+
+.editor-breadcrumb span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-diff-panel {
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  padding: 12px 14px 28px;
+}
+
+.editor-diff-panel .diff-lines {
+  min-width: 720px;
+  border-radius: 0;
+}
+
+.editor-diff-panel .diff-line {
+  grid-template-columns: 48px 48px minmax(0, 1fr);
+  min-height: 24px;
+}
+
+.editor-diff-panel .diff-line code {
+  text-overflow: clip;
+}
+
+.editor-empty-state {
+  display: grid;
+  gap: 10px;
+  place-content: center;
+  min-height: 100%;
+  color: var(--muted);
+  text-align: center;
+}
+
+.source-control-pane {
+  grid-template-rows: minmax(96px, var(--scm-pane-height)) 6px minmax(96px, 1fr);
+}
+
+.source-control-pane.changes-collapsed {
+  grid-template-rows: 58px 6px minmax(140px, 1fr);
+}
+
+.source-control-pane.graph-collapsed {
+  grid-template-rows: minmax(220px, 1fr) 6px 36px;
+}
+
+.source-control-pane.changes-collapsed.graph-collapsed {
+  grid-template-rows: 58px 6px 36px;
+}
+
+.source-graph-divider {
+  cursor: row-resize;
+}
+
+.source-graph-divider:hover {
+  background: var(--accent);
+}
+
+.scm-titlebar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 28px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.scm-titlebar .icon-button {
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+}
+
+.scm-panel-toggle,
+.graph-title-toggle {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 28px;
+  color: var(--text);
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.scm-panel-toggle:hover,
+.graph-title-toggle:hover {
+  background: var(--surface);
+}
+
+.scm-panel-toggle .scm-count {
+  margin-left: 2px;
+}
+
+.source-control-pane .scm-view.panel-collapsed {
+  padding-bottom: 8px;
+  overflow: hidden;
+}
+
+.source-control-pane .scm-header {
+  display: none;
+}
+
+.source-control-pane .scm-commit-box {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 6px;
+}
+
+.source-control-pane .scm-commit-box input {
+  grid-column: 1;
+}
+
+.source-control-pane .scm-commit-actions {
+  grid-template-columns: minmax(0, 1fr) 30px;
+  grid-column: 1;
+  grid-row: auto;
+}
+
+.source-control-pane .scm-commit-button {
+  min-height: 32px;
+}
+
+.source-control-pane .scm-commit-menu {
+  width: 30px;
+}
+
+.source-control-pane .scm-amend-row {
+  grid-column: 1;
+}
+
+.source-control-pane .scm-summary {
+  margin-top: 8px;
+}
+
+.source-control-pane .scm-section-header {
+  min-height: 28px;
+}
+
+.source-control-pane .scm-file-row {
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  min-height: 26px;
+}
+
+.scm-file-icon {
+  display: inline-grid;
+  min-width: 18px;
+  height: 18px;
+  place-items: center;
+  color: var(--blue);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.scm-file-icon.react {
+  color: #4aa5d8;
+}
+
+.scm-file-icon.css {
+  color: #5c9ded;
+}
+
+.scm-file-icon.markdown {
+  color: var(--muted-strong);
+}
+
+.source-control-pane .scm-file-status {
+  display: inline-grid;
+  width: 16px;
+  place-items: center;
+  font-size: 11px;
+}
+
+.source-control-pane .scm-file-name {
+  font-size: 13px;
+}
+
+.source-control-pane .scm-file-dir {
+  font-size: 11px;
+}
+
+.source-control-pane .scm-file-actions .compact-icon {
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+}
+
+.source-control-pane .graph-panel.panel-collapsed {
+  overflow: hidden;
+}
+
+.source-control-pane .graph-panel.panel-collapsed .graph-section-title {
+  border-bottom: 0;
+}
+
+.source-control-pane .graph-section-title {
+  grid-template-columns: minmax(0, 1fr) max-content;
+}
+
+.source-control-pane .graph-section-title > .graph-title-toggle {
+  padding: 0;
+  font-weight: 700;
+}
+
+.source-control-pane .graph-section-title > .graph-title-toggle > span {
+  display: inline-grid;
+  min-width: 20px;
+  height: 18px;
+  margin-left: 2px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.source-control-pane .graph-commit-row {
+  min-height: 48px;
+  overflow: visible;
+}
+
+.graph-ref-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.graph-ref-row .ref-chip,
+.commit-hover-footer .ref-chip {
+  gap: 3px;
+  max-width: none;
+  min-height: 17px;
+  padding: 0 5px;
+  overflow: visible;
+  font-size: 10px;
+  text-overflow: clip;
+}
+
+.commit-hover-card {
+  position: fixed;
+  z-index: 200;
+  width: 380px;
+  max-width: min(380px, calc(100vw - 24px));
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: var(--text);
+  background: var(--panel);
+  box-shadow: 0 18px 44px rgb(0 0 0 / 24%);
+  pointer-events: none;
+}
+
+.commit-hover-author {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.commit-hover-author strong {
+  color: var(--text);
+}
+
+.commit-hover-subject {
+  margin-top: 8px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.commit-hover-body {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.commit-hover-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.commit-hover-footer code {
+  color: var(--blue);
+  font-family: "Cascadia Code", Consolas, monospace;
+  font-size: 12px;
+}
+
+.editor-tab {
+  padding-right: 4px;
+}
+
+.editor-tab-close {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border-radius: 4px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.editor-tab-close:hover {
+  color: var(--text);
   background: var(--surface-hover);
 }

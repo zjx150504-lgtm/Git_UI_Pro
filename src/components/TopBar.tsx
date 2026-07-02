@@ -1,66 +1,34 @@
-import {
-  CloudDownload,
-  CloudUpload,
-  GitBranch,
-  GitCommitHorizontal,
-  Moon,
-  PanelBottomClose,
-  PanelBottomOpen,
-  PanelLeftClose,
-  PanelLeftOpen,
-  PanelRightClose,
-  PanelRightOpen,
-  Plus,
-  RefreshCw,
-  Sun,
-  Trash2,
-} from "lucide-react";
-import type { GitProject, MainView } from "../types/domain";
+import { Moon, PanelBottomClose, PanelBottomOpen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Sun } from "lucide-react";
+import type { GitProject } from "../types/domain";
 
 export type ThemeMode = "system" | "light" | "dark";
 
 interface TopBarProps {
   project?: GitProject;
-  view: MainView;
   gitVersion: string;
   statusMessage: string;
   themeMode: ThemeMode;
   leftCollapsed: boolean;
   rightCollapsed: boolean;
   consoleOpen: boolean;
-  onChangeView: (view: MainView) => void;
   onThemeModeChange: (mode: ThemeMode) => void;
   onToggleLeft: () => void;
   onToggleRight: () => void;
   onToggleConsole: () => void;
-  onOperation: (operation: string) => void;
 }
-
-const operations = [
-  { label: "fetch", text: "抓取", title: "fetch 抓取远程更新", icon: RefreshCw },
-  { label: "pull", text: "拉取", title: "pull 拉取当前分支", icon: CloudDownload },
-  { label: "push", text: "推送", title: "push 推送当前分支", icon: CloudUpload },
-  { label: "新建分支", title: "从当前 HEAD 新建分支", icon: Plus },
-  { label: "切换分支", title: "切换到其他本地或远程分支", icon: GitBranch },
-  { label: "删除分支", title: "删除本地分支", icon: Trash2 },
-  { label: "提交", title: "提交已暂存改动", icon: GitCommitHorizontal }
-];
 
 export function TopBar({
   project,
-  view,
   gitVersion,
   statusMessage,
   themeMode,
   leftCollapsed,
   rightCollapsed,
   consoleOpen,
-  onChangeView,
   onThemeModeChange,
   onToggleLeft,
   onToggleRight,
-  onToggleConsole,
-  onOperation
+  onToggleConsole
 }: TopBarProps) {
   return (
     <header className="top-bar">
@@ -74,26 +42,6 @@ export function TopBar({
           <span>{gitVersion}</span>
           <span>{statusMessage}</span>
         </div>
-      </div>
-
-      <div className="view-switch" role="tablist" aria-label="主视图">
-        <button type="button" className={view === "history" ? "active" : ""} onClick={() => onChangeView("history")}>
-          历史图
-        </button>
-        <button type="button" className={view === "workspace" ? "active" : ""} onClick={() => onChangeView("workspace")}>
-          工作区
-        </button>
-      </div>
-
-      <div className="operation-strip">
-        {operations.map((operation) => {
-          const Icon = operation.icon;
-          return (
-            <button type="button" className="toolbar-button icon-only" title={operation.title} key={operation.label} onClick={() => onOperation(operation.label)}>
-              <Icon size={16} />
-            </button>
-          );
-        })}
       </div>
 
       <div className="layout-controls" aria-label="布局控制">

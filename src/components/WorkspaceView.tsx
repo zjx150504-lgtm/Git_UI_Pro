@@ -16,6 +16,8 @@ interface WorkspaceViewProps {
   selectedFileStaged?: boolean;
   onCommit: (input: CommitInput) => void;
   focusRequest: number;
+  panelOpen: boolean;
+  onTogglePanel: () => void;
 }
 
 export function WorkspaceView({
@@ -31,7 +33,9 @@ export function WorkspaceView({
   selectedFilePath,
   selectedFileStaged,
   onCommit,
-  focusRequest
+  focusRequest,
+  panelOpen,
+  onTogglePanel
 }: WorkspaceViewProps) {
   const [subject, setSubject] = useState("");
   const [amend, setAmend] = useState(false);
@@ -83,15 +87,26 @@ export function WorkspaceView({
   }
 
   return (
-    <section className="scm-view">
-      <div className="scm-header">
-        <div>
-          <span className="eyebrow">源代码管理: 更改</span>
-          <h2>{project?.name ?? "未选择项目"}</h2>
-        </div>
+    <section className={`scm-view ${panelOpen ? "" : "panel-collapsed"}`}>
+      <div className="scm-titlebar">
+        <span>源代码管理</span>
         <button type="button" className="icon-button" title="刷新工作区" onClick={onRefresh}>
           <RefreshCw size={16} />
         </button>
+      </div>
+
+      <button type="button" className="scm-panel-toggle" onClick={onTogglePanel}>
+        {panelOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+        <span>更改</span>
+        <span className="scm-count">{changeCount}</span>
+      </button>
+
+      {panelOpen ? (
+        <>
+      <div className="scm-header">
+        <div>
+          <h2>{project?.name ?? "未选择项目"}</h2>
+        </div>
       </div>
 
       <form
@@ -198,6 +213,8 @@ export function WorkspaceView({
           />
         ))}
       </ScmSection>
+        </>
+      ) : null}
     </section>
   );
 }
@@ -279,7 +296,7 @@ function ScmFileRow({
         }
       }}
     >
-      <span className={`scm-file-status ${file.status}`}>{statusCode(file.status)}</span>
+      <span className={`scm-file-icon ${fileIconClass(file.path)}`}>{fileIcon(file.path)}</span>
       <span className="scm-file-main">
         <span className="scm-file-name" title={file.path}>
           {file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? file.path}
@@ -287,6 +304,7 @@ function ScmFileRow({
         <span className="scm-file-dir">{directoryName(file.path)}</span>
       </span>
       <span className="scm-file-actions">
+        <span className={`scm-file-status ${file.status}`}>{statusCode(file.status)}</span>
         <button
           type="button"
           className="icon-button compact-icon"
@@ -333,4 +351,36 @@ function directoryName(filePath: string): string {
   const parts = filePath.split(/[\\/]/).filter(Boolean);
   parts.pop();
   return parts.length > 0 ? parts.join("/") : "";
+}
+
+function fileIcon(filePath: string): string {
+  if (/\.(tsx|jsx)$/i.test(filePath)) {
+    return "⚛";
+  }
+  if (/\.tsx?$/i.test(filePath)) {
+    return "TS";
+  }
+  if (/\.css$/i.test(filePath)) {
+    return "#";
+  }
+  if (/\.md$/i.test(filePath)) {
+    return "M";
+  }
+  return "•";
+}
+
+function fileIconClass(filePath: string): string {
+  if (/\.(tsx|jsx)$/i.test(filePath)) {
+    return "react";
+  }
+  if (/\.tsx?$/i.test(filePath)) {
+    return "typescript";
+  }
+  if (/\.css$/i.test(filePath)) {
+    return "css";
+  }
+  if (/\.md$/i.test(filePath)) {
+    return "markdown";
+  }
+  return "default";
 }
