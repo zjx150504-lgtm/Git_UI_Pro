@@ -1,18 +1,17 @@
 import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
-import { FolderGit2, PanelLeftOpen, Terminal } from "lucide-react";
+import { Check, FolderGit2, GitBranch, PanelLeftOpen, Plus, Terminal, X } from "lucide-react";
 import { apiClient } from "./api/client";
 import { ConsolePanel } from "./components/ConsolePanel";
 import { GraphSidebar } from "./components/GraphSidebar";
 import { ProjectRail } from "./components/ProjectRail";
 import { TopBar, type ThemeMode } from "./components/TopBar";
-import { WorktreeDetailPanel } from "./components/WorktreeDetailPanel";
+import { WorktreeDetailPanel, type WorktreeEditorTab } from "./components/WorktreeDetailPanel";
 import { WorkspaceView } from "./components/WorkspaceView";
 import type {
   BranchInfo,
   ChangedFile,
   CommitInput,
   CommitNode,
-  DiffLine,
   GitOperationResult,
   GitProject,
   WorktreeState
@@ -24,6 +23,9 @@ const emptyWorktree: WorktreeState = {
 };
 
 type ResizeTarget = "sidebar" | "detail" | "sourceSplit";
+type BranchDialogState =
+  | { mode: "create"; project: GitProject; branchName: string; checkout: boolean }
+  | { mode: "switch"; project: GitProject; branches: BranchInfo[]; query: string };
 
 export function App() {
   const [projects, setProjects] = useState<GitProject[]>([]);
@@ -31,8 +33,8 @@ export function App() {
   const [commits, setCommits] = useState<CommitNode[]>([]);
   const [selectedCommitHash, setSelectedCommitHash] = useState("");
   const [worktree, setWorktree] = useState<WorktreeState>(emptyWorktree);
-  const [selectedWorktreeFile, setSelectedWorktreeFile] = useState<ChangedFile | undefined>();
-  const [worktreeDiffLines, setWorktreeDiffLines] = useState<DiffLine[]>([]);
+  const [worktreeTabs, setWorktreeTabs] = useState<WorktreeEditorTab[]>([]);
+  const [activeWorktreeTabId, setActiveWorktreeTabId] = useState<string | null>(null);
   const [gitVersion, setGitVersion] = useState("检测中");
   const [statusMessage, setStatusMessage] = useState("准备就绪");
   const [themeMode, setThemeModeState] = useState<ThemeMode>(() => readThemeMode());
@@ -46,6 +48,8 @@ export function App() {
   const [sourcePaneHeight, setSourcePaneHeight] = useState(430);
   const [changesPanelOpen, setChangesPanelOpen] = useState(true);
   const [graphPanelOpen, setGraphPanelOpen] = useState(true);
+  const [branchDialog, setBranchDialog] = useState<BranchDialogState | null>(null);
+  const [branchDialogBusy, setBranchDialogBusy] = useState(false);
 
   useEffect(() => {
     void loadInitialData();
@@ -62,6 +66,10 @@ export function App() {
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? projects[0],
     [projects, selectedProjectId]
+  );
+  const activeWorktreeTab = useMemo(
+    () => worktreeTabs.find((tab) => tab.id === activeWorktreeTabId) ?? worktreeTabs[0],
+    [activeWorktreeTabId, worktreeTabs]
   );
 
   useEffect(() => {
@@ -100,13 +108,13 @@ export function App() {
 
       setCommits(history);
       setWorktree(worktreeState);
-      setSelectedWorktreeFile(undefined);
-      setWorktreeDiffLines([]);
+      clearWorktreeEditorTabs();
       setSelectedCommitHash(history[0]?.hash ?? "");
       setStatusMessage(history.length > 0 ? `已加载 ${history.length} 条提交。` : "当前仓库还没有提交历史。");
     } catch (error) {
       setCommits([]);
       setWorktree(emptyWorktree);
+      clearWorktreeEditorTabs();
       setStatusMessage(error instanceof Error ? error.message : "加载项目失败");
     }
   }
@@ -118,17 +126,59 @@ export function App() {
   }
 
   async function handleSelectWorktreeFile(file: ChangedFile) {
+    await openWorktreeFile(file, false);
+  }
+
+  async function handlePinWorktreeFile(file: ChangedFile) {
+    await openWorktreeFile(file, true);
+  }
+
+  async function openWorktreeFile(file: ChangedFile, pinned: boolean) {
     if (!selectedProject) {
       return;
     }
 
+    const tabId = worktreeTabId(file);
+    const pendingTab: WorktreeEditorTab = { id: tabId, file, diffLines: [], pinned };
+    setWorktreeTabs((current) => upsertWorktreeTab(current, pendingTab, pinned));
+    setActiveWorktreeTabId(tabId);
+
     try {
-      setSelectedWorktreeFile(file);
-      setWorktreeDiffLines(await apiClient.getWorktreeDiff(selectedProject, file.path, file.staged));
+      const diffLines = await apiClient.getWorktreeDiff(selectedProject, file.path, file.staged);
+      setWorktreeTabs((current) =>
+        current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines, pinned: tab.pinned || pinned } : tab))
+      );
     } catch (error) {
-      setWorktreeDiffLines([]);
       setStatusMessage(error instanceof Error ? error.message : "加载工作区文件失败");
     }
+  }
+
+  function handleSelectWorktreeTab(tabId: string) {
+    setActiveWorktreeTabId(tabId);
+  }
+
+  function handlePinWorktreeTab(tabId: string) {
+    setWorktreeTabs((current) => current.map((tab) => (tab.id === tabId ? { ...tab, pinned: true } : tab)));
+  }
+
+  function handleCloseWorktreeTab(tabId: string) {
+    setWorktreeTabs((current) => {
+      const closingIndex = current.findIndex((tab) => tab.id === tabId);
+      const nextTabs = current.filter((tab) => tab.id !== tabId);
+      setActiveWorktreeTabId((currentActiveId) => {
+        if (currentActiveId !== tabId) {
+          return currentActiveId;
+        }
+
+        return nextTabs[Math.min(Math.max(closingIndex, 0), nextTabs.length - 1)]?.id ?? null;
+      });
+      return nextTabs;
+    });
+  }
+
+  function clearWorktreeEditorTabs() {
+    setWorktreeTabs([]);
+    setActiveWorktreeTabId(null);
   }
 
   async function handleAddProject() {
@@ -229,49 +279,80 @@ export function App() {
   }
 
   async function createBranchFromToolbar(project: GitProject) {
-    const branchName = window.prompt("输入新分支名：");
-    if (!branchName?.trim()) {
+    setBranchDialog({ mode: "create", project, branchName: "", checkout: true });
+  }
+
+  async function submitCreateBranch() {
+    if (!branchDialog || branchDialog.mode !== "create") {
       return;
     }
 
-    const checkout = window.confirm("创建后立即切换到这个分支吗？");
-    setStatusMessage(`正在创建分支 ${branchName.trim()}...`);
-
-    const result = await apiClient.createBranch(project, branchName.trim(), checkout);
-    if (!result.ok) {
-      setStatusMessage(result.messageZh ?? "创建分支失败，请查看原始 Git 输出。");
+    const branchName = branchDialog.branchName.trim();
+    if (!branchName) {
+      setStatusMessage("分支名不能为空。");
       return;
     }
 
-    setStatusMessage(checkout ? `已创建并切换到分支：${branchName.trim()}` : `已创建分支：${branchName.trim()}`);
-    await loadProjectData(project);
+    setBranchDialogBusy(true);
+    setStatusMessage(`正在创建分支 ${branchName}...`);
+    try {
+      const result = await apiClient.createBranch(branchDialog.project, branchName, branchDialog.checkout);
+      if (!result.ok) {
+        setStatusMessage(result.messageZh ?? "创建分支失败，请查看原始 Git 输出。");
+        return;
+      }
+
+      setBranchDialog(null);
+      setStatusMessage(branchDialog.checkout ? `已创建并切换到分支：${branchName}` : `已创建分支：${branchName}`);
+      await loadProjectData(branchDialog.project);
+    } finally {
+      setBranchDialogBusy(false);
+    }
   }
 
   async function switchBranchFromToolbar(project: GitProject) {
+    setStatusMessage("正在读取分支列表...");
     const branches = await apiClient.getBranches(project);
-    const target = chooseBranch(branches, "输入要切换的分支序号或名称：");
-    if (!target) {
+    if (branches.length === 0) {
+      setStatusMessage("没有可切换的分支。");
+      return;
+    }
+
+    setBranchDialog({ mode: "switch", project, branches, query: "" });
+    setStatusMessage(`已加载 ${branches.length} 个分支。`);
+  }
+
+  async function submitSwitchBranch(target: BranchInfo) {
+    if (!branchDialog || branchDialog.mode !== "switch") {
       return;
     }
 
     if (target.current) {
       setStatusMessage(`当前已经在分支：${target.name}`);
+      setBranchDialog(null);
       return;
     }
 
+    const project = branchDialog.project;
     if (hasWorktreeChanges(project) && !window.confirm("当前工作区存在未提交改动，切换分支可能失败或影响这些改动。是否继续？")) {
       return;
     }
 
+    setBranchDialogBusy(true);
     setStatusMessage(`正在切换到分支 ${target.name}...`);
-    const result = await apiClient.switchBranch(project, target);
-    if (!result.ok) {
-      setStatusMessage(result.messageZh ?? "切换分支失败，请查看原始 Git 输出。");
-      return;
-    }
+    try {
+      const result = await apiClient.switchBranch(project, target);
+      if (!result.ok) {
+        setStatusMessage(result.messageZh ?? "切换分支失败，请查看原始 Git 输出。");
+        return;
+      }
 
-    setStatusMessage(`已切换到分支：${target.name}`);
-    await loadProjectData(project);
+      setBranchDialog(null);
+      setStatusMessage(`已切换到分支：${target.name}`);
+      await loadProjectData(project);
+    } finally {
+      setBranchDialogBusy(false);
+    }
   }
 
   async function deleteBranchFromToolbar(project: GitProject) {
@@ -303,8 +384,7 @@ export function App() {
 
     const result = await apiClient.stageFile(selectedProject, file.path);
     setStatusMessage(result.ok ? `已暂存：${file.path}` : result.messageZh ?? "暂存失败");
-    setSelectedWorktreeFile(undefined);
-    setWorktreeDiffLines([]);
+    clearWorktreeEditorTabs();
     await loadProjectData(selectedProject);
   }
 
@@ -315,8 +395,7 @@ export function App() {
 
     const result = await apiClient.stageAll(selectedProject);
     setStatusMessage(result.ok ? "已暂存所有更改。" : result.messageZh ?? "暂存所有更改失败");
-    setSelectedWorktreeFile(undefined);
-    setWorktreeDiffLines([]);
+    clearWorktreeEditorTabs();
     await loadProjectData(selectedProject);
   }
 
@@ -327,8 +406,7 @@ export function App() {
 
     const result = await apiClient.unstageFile(selectedProject, file.path);
     setStatusMessage(result.ok ? `已取消暂存：${file.path}` : result.messageZh ?? "取消暂存失败");
-    setSelectedWorktreeFile(undefined);
-    setWorktreeDiffLines([]);
+    clearWorktreeEditorTabs();
     await loadProjectData(selectedProject);
   }
 
@@ -339,8 +417,7 @@ export function App() {
 
     const result = await apiClient.unstageAll(selectedProject);
     setStatusMessage(result.ok ? "已取消暂存所有更改。" : result.messageZh ?? "取消暂存所有更改失败");
-    setSelectedWorktreeFile(undefined);
-    setWorktreeDiffLines([]);
+    clearWorktreeEditorTabs();
     await loadProjectData(selectedProject);
   }
 
@@ -356,8 +433,7 @@ export function App() {
 
     const result = await apiClient.discardFile(selectedProject, file);
     setStatusMessage(result.ok ? `已放弃更改：${file.path}` : result.messageZh ?? "放弃更改失败");
-    setSelectedWorktreeFile(undefined);
-    setWorktreeDiffLines([]);
+    clearWorktreeEditorTabs();
     await loadProjectData(selectedProject);
   }
 
@@ -484,8 +560,9 @@ export function App() {
               onUnstageAll={handleUnstageAll}
               onDiscardFile={handleDiscardFile}
               onSelectFile={handleSelectWorktreeFile}
-              selectedFilePath={selectedWorktreeFile?.path}
-              selectedFileStaged={selectedWorktreeFile?.staged}
+              onPinFile={handlePinWorktreeFile}
+              selectedFilePath={activeWorktreeTab?.file.path}
+              selectedFileStaged={activeWorktreeTab?.file.staged}
               onCommit={handleCommit}
               focusRequest={commitFocusRequest}
               panelOpen={changesPanelOpen}
@@ -493,6 +570,7 @@ export function App() {
             />
             <div className="source-graph-divider" onMouseDown={(event) => beginResize("sourceSplit", event)} />
             <GraphSidebar
+              project={selectedProject}
               commits={commits}
               selectedHash={selectedCommitHash}
               onSelectCommit={handleSelectCommit}
@@ -504,12 +582,11 @@ export function App() {
           {!rightCollapsed ? <div className="resize-handle detail-resize" onMouseDown={(event) => beginResize("detail", event)} /> : null}
           {!rightCollapsed ? (
             <WorktreeDetailPanel
-              file={selectedWorktreeFile}
-              diffLines={worktreeDiffLines}
-              onCloseFile={() => {
-                setSelectedWorktreeFile(undefined);
-                setWorktreeDiffLines([]);
-              }}
+              tabs={worktreeTabs}
+              activeTabId={activeWorktreeTabId}
+              onSelectTab={handleSelectWorktreeTab}
+              onCloseTab={handleCloseWorktreeTab}
+              onPinTab={handlePinWorktreeTab}
             />
           ) : null}
         </section>
@@ -521,7 +598,120 @@ export function App() {
           </button>
         ) : null}
         {consoleOpen ? <ConsolePanel project={selectedProject} onClose={() => setConsoleOpen(false)} /> : null}
+        {branchDialog ? (
+          <BranchDialog
+            state={branchDialog}
+            busy={branchDialogBusy}
+            onClose={() => setBranchDialog(null)}
+            onCreateNameChange={(branchName) =>
+              setBranchDialog((current) => (current?.mode === "create" ? { ...current, branchName } : current))
+            }
+            onCheckoutChange={(checkout) => setBranchDialog((current) => (current?.mode === "create" ? { ...current, checkout } : current))}
+            onSwitchQueryChange={(query) => setBranchDialog((current) => (current?.mode === "switch" ? { ...current, query } : current))}
+            onCreate={submitCreateBranch}
+            onSwitch={submitSwitchBranch}
+          />
+        ) : null}
       </main>
+    </div>
+  );
+}
+
+function BranchDialog({
+  state,
+  busy,
+  onClose,
+  onCreateNameChange,
+  onCheckoutChange,
+  onSwitchQueryChange,
+  onCreate,
+  onSwitch
+}: {
+  state: BranchDialogState;
+  busy: boolean;
+  onClose: () => void;
+  onCreateNameChange: (value: string) => void;
+  onCheckoutChange: (value: boolean) => void;
+  onSwitchQueryChange: (value: string) => void;
+  onCreate: () => void;
+  onSwitch: (branch: BranchInfo) => void;
+}) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  const filteredBranches =
+    state.mode === "switch"
+      ? state.branches.filter((branch) => `${branch.name} ${branch.fullName}`.toLowerCase().includes(state.query.trim().toLowerCase()))
+      : [];
+
+  return (
+    <div className="branch-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="branch-dialog" role="dialog" aria-modal="true" aria-label={state.mode === "create" ? "新建分支" : "切换分支"} onMouseDown={(event) => event.stopPropagation()}>
+        <header className="branch-dialog-header">
+          <span className="branch-dialog-title">
+            {state.mode === "create" ? <Plus size={15} /> : <GitBranch size={15} />}
+            {state.mode === "create" ? "新建分支" : "切换分支"}
+          </span>
+          <button type="button" className="icon-button compact-icon" title="关闭" onClick={onClose}>
+            <X size={14} />
+          </button>
+        </header>
+
+        {state.mode === "create" ? (
+          <form
+            className="branch-create-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              onCreate();
+            }}
+          >
+            <label>
+              <span>分支名</span>
+              <input value={state.branchName} autoFocus onChange={(event) => onCreateNameChange(event.target.value)} placeholder="feature/new-branch" disabled={busy} />
+            </label>
+            <label className="branch-checkbox-row">
+              <input type="checkbox" checked={state.checkout} onChange={(event) => onCheckoutChange(event.target.checked)} disabled={busy} />
+              创建后切换到该分支
+            </label>
+            <div className="branch-dialog-actions">
+              <button type="button" className="text-button" onClick={onClose} disabled={busy}>
+                取消
+              </button>
+              <button type="submit" className="primary-action branch-primary-action" disabled={busy || !state.branchName.trim()}>
+                <Check size={14} />
+                创建
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="branch-switch-panel">
+            <label className="branch-search">
+              <GitBranch size={14} />
+              <input value={state.query} autoFocus onChange={(event) => onSwitchQueryChange(event.target.value)} placeholder="搜索分支" disabled={busy} />
+            </label>
+            <div className="branch-list" role="list">
+              {filteredBranches.map((branch) => (
+                <button type="button" className={`branch-list-item ${branch.current ? "current" : ""}`} key={`${branch.type}-${branch.fullName}`} onClick={() => onSwitch(branch)} disabled={busy}>
+                  <span>
+                    <GitBranch size={13} />
+                    {branch.name}
+                  </span>
+                  <small>{branch.current ? "当前" : branch.type === "remote" ? "远程" : branch.upstream ? `跟踪 ${branch.upstream}` : "本地"}</small>
+                </button>
+              ))}
+              {filteredBranches.length === 0 ? <div className="empty-inline branch-empty">没有匹配分支。</div> : null}
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -579,6 +769,28 @@ function hasWorktreeChanges(project: GitProject): boolean {
   }
 
   return status.stagedCount + status.unstagedCount + status.untrackedCount > 0 || status.hasConflicts;
+}
+
+function worktreeTabId(file: ChangedFile): string {
+  return `${file.staged ? "staged" : "unstaged"}:${file.path}`;
+}
+
+function upsertWorktreeTab(tabs: WorktreeEditorTab[], incomingTab: WorktreeEditorTab, forcePinned: boolean): WorktreeEditorTab[] {
+  const existingIndex = tabs.findIndex((tab) => tab.id === incomingTab.id);
+  const nextTab = existingIndex >= 0 ? { ...incomingTab, pinned: tabs[existingIndex].pinned || forcePinned } : incomingTab;
+
+  if (existingIndex >= 0) {
+    return tabs.map((tab, index) => (index === existingIndex ? nextTab : tab));
+  }
+
+  if (!forcePinned) {
+    const previewIndex = tabs.findIndex((tab) => !tab.pinned);
+    if (previewIndex >= 0) {
+      return tabs.map((tab, index) => (index === previewIndex ? nextTab : tab));
+    }
+  }
+
+  return [...tabs, nextTab];
 }
 
 function readThemeMode(): ThemeMode {

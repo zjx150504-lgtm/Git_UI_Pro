@@ -1,34 +1,79 @@
 import { Copy, FileText, X } from "lucide-react";
 import type { ChangedFile, DiffLine } from "../types/domain";
 
-interface WorktreeDetailPanelProps {
-  file?: ChangedFile;
+export interface WorktreeEditorTab {
+  id: string;
+  file: ChangedFile;
   diffLines: DiffLine[];
-  onCloseFile: () => void;
+  pinned: boolean;
 }
 
-export function WorktreeDetailPanel({ file, diffLines, onCloseFile }: WorktreeDetailPanelProps) {
-  if (!file) {
+interface WorktreeDetailPanelProps {
+  tabs: WorktreeEditorTab[];
+  activeTabId: string | null;
+  onSelectTab: (tabId: string) => void;
+  onCloseTab: (tabId: string) => void;
+  onPinTab: (tabId: string) => void;
+}
+
+export function WorktreeDetailPanel({ tabs, activeTabId, onSelectTab, onCloseTab, onPinTab }: WorktreeDetailPanelProps) {
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+
+  if (!activeTab) {
     return (
-      <aside className="detail-panel worktree-detail-panel editor-detail-panel">
+      <aside className="detail-panel worktree-detail-panel editor-detail-panel empty">
         <div className="editor-empty-state">
-          <FileText size={22} />
-          <span>选择一个工作树文件查看对比。</span>
+          <FileText size={20} />
+          <span>选择文件查看变更。</span>
         </div>
       </aside>
     );
   }
 
+  const { file, diffLines } = activeTab;
+
   return (
     <aside className="detail-panel worktree-detail-panel editor-detail-panel">
       <div className="editor-tab-row">
-        <div className="editor-tab active">
-          <FileText size={14} />
-          <span>{file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? file.path}</span>
-          <small>{statusLabel(file.status)}</small>
-          <button type="button" className="editor-tab-close" title="关闭当前文件" onClick={onCloseFile}>
-            <X size={13} />
-          </button>
+        <div className="editor-tabs" role="tablist" aria-label="工作树文件">
+          {tabs.map((tab) => (
+            <div
+              role="tab"
+              tabIndex={0}
+              aria-selected={tab.id === activeTab.id}
+              className={`editor-tab ${tab.id === activeTab.id ? "active" : ""} ${tab.pinned ? "pinned" : "preview"}`}
+              key={tab.id}
+              title={tab.pinned ? tab.file.path : `${tab.file.path} - 双击固定`}
+              onClick={() => onSelectTab(tab.id)}
+              onDoubleClick={() => onPinTab(tab.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  onSelectTab(tab.id);
+                }
+              }}
+            >
+              <FileText size={14} />
+              <span className="editor-tab-name">{tab.file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? tab.file.path}</span>
+              <small>{statusLabel(tab.file.status)}</small>
+              <button
+                type="button"
+                className="editor-tab-close"
+                title="关闭文件"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onCloseTab(tab.id);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.stopPropagation();
+                    onCloseTab(tab.id);
+                  }
+                }}
+              >
+                <X size={13} />
+              </button>
+            </div>
+          ))}
         </div>
         <button type="button" className="icon-button compact-icon" title="复制文件路径" onClick={() => void navigator.clipboard.writeText(file.path)}>
           <Copy size={15} />

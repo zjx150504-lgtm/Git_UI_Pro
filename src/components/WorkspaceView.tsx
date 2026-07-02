@@ -12,6 +12,7 @@ interface WorkspaceViewProps {
   onUnstageAll: () => void;
   onDiscardFile: (file: ChangedFile) => void;
   onSelectFile: (file: ChangedFile) => void;
+  onPinFile: (file: ChangedFile) => void;
   selectedFilePath?: string;
   selectedFileStaged?: boolean;
   onCommit: (input: CommitInput) => void;
@@ -30,6 +31,7 @@ export function WorkspaceView({
   onUnstageAll,
   onDiscardFile,
   onSelectFile,
+  onPinFile,
   selectedFilePath,
   selectedFileStaged,
   onCommit,
@@ -37,19 +39,18 @@ export function WorkspaceView({
   panelOpen,
   onTogglePanel
 }: WorkspaceViewProps) {
-  const [subject, setSubject] = useState("");
-  const [amend, setAmend] = useState(false);
+  const [message, setMessage] = useState("");
   const [commitMenuOpen, setCommitMenuOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(true);
   const [stagedOpen, setStagedOpen] = useState(true);
   const commitActionsRef = useRef<HTMLDivElement>(null);
-  const subjectInputRef = useRef<HTMLInputElement>(null);
+  const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const changeCount = worktree.unstagedFiles.length + worktree.stagedFiles.length;
-  const commitDisabled = worktree.stagedFiles.length === 0 && !amend;
+  const commitDisabled = worktree.stagedFiles.length === 0;
 
   useEffect(() => {
     if (focusRequest > 0) {
-      subjectInputRef.current?.focus();
+      messageInputRef.current?.focus();
     }
   }, [focusRequest]);
 
@@ -78,9 +79,9 @@ export function WorkspaceView({
   }, [commitMenuOpen]);
 
   function submitCommit(options: Partial<CommitInput> = {}) {
+    const commitMessage = splitCommitMessage(message);
     onCommit({
-      subject,
-      amend,
+      ...commitMessage,
       ...options
     });
     setCommitMenuOpen(false);
@@ -102,121 +103,115 @@ export function WorkspaceView({
       </button>
 
       {panelOpen ? (
-        <>
-      <div className="scm-header">
-        <div>
-          <h2>{project?.name ?? "未选择项目"}</h2>
-        </div>
-      </div>
-
-      <form
-        className="scm-commit-box"
-        onSubmit={(event) => {
-          event.preventDefault();
-          submitCommit();
-        }}
-      >
-        <input
-          ref={subjectInputRef}
-          value={subject}
-          onChange={(event) => setSubject(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.ctrlKey && event.key === "Enter") {
-              event.currentTarget.form?.requestSubmit();
-            }
-          }}
-          placeholder={`消息(Ctrl+Enter) 在"${project?.status?.currentBranch ?? "当前分支"}"提交`}
-        />
-        <div className="scm-commit-actions" ref={commitActionsRef}>
-          <button type="submit" className="scm-commit-button" disabled={commitDisabled}>
-            <Check size={17} />
-            提交
-          </button>
-          <button type="button" className="scm-commit-menu" title="提交选项" onClick={() => setCommitMenuOpen((value) => !value)}>
-            <ChevronDown size={17} />
-          </button>
-          {commitMenuOpen ? (
-            <div className="floating-menu commit-menu">
-              <button type="button" disabled={commitDisabled} onClick={() => submitCommit()}>
+        <div className="scm-panel-body">
+          <form
+            className="scm-commit-box"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitCommit();
+            }}
+          >
+            <textarea
+              ref={messageInputRef}
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.ctrlKey && event.key === "Enter") {
+                  event.currentTarget.form?.requestSubmit();
+                }
+              }}
+              placeholder={`消息(Ctrl+Enter) 在"${project?.status?.currentBranch ?? "当前分支"}"提交`}
+              rows={2}
+            />
+            <div className="scm-commit-actions" ref={commitActionsRef}>
+              <button type="submit" className="scm-commit-button" disabled={commitDisabled}>
+                <Check size={17} />
                 提交
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAmend(true);
-                  submitCommit({ amend: true });
-                }}
-              >
-                修改上次提交
+              <button type="button" className="scm-commit-menu" title="提交选项" onClick={() => setCommitMenuOpen((value) => !value)}>
+                <ChevronDown size={17} />
               </button>
-              <button type="button" disabled={commitDisabled} onClick={() => submitCommit({ pushAfterCommit: true })}>
-                提交并推送
-              </button>
+              {commitMenuOpen ? (
+                <div className="floating-menu commit-menu">
+                  <button type="button" disabled={commitDisabled} onClick={() => submitCommit()}>
+                    提交
+                  </button>
+                  <button type="button" onClick={() => submitCommit({ amend: true })}>
+                    修改上次提交
+                  </button>
+                  <button type="button" disabled={commitDisabled} onClick={() => submitCommit({ pushAfterCommit: true })}>
+                    提交并推送
+                  </button>
+                </div>
+              ) : null}
             </div>
-          ) : null}
+          </form>
+
+          <ScmSection
+            title="更改"
+            count={worktree.unstagedFiles.length}
+            emptyText="没有未暂存改动。"
+            actionTitle="暂存所有更改"
+            actionIcon={<Plus size={16} />}
+            onAction={onStageAll}
+            open={changesOpen}
+            onToggle={() => setChangesOpen((value) => !value)}
+          >
+            {worktree.unstagedFiles.map((file) => (
+              <ScmFileRow
+                file={file}
+                selected={file.path === selectedFilePath && selectedFileStaged === false}
+                key={`unstaged-${file.path}-${file.status}`}
+                primaryActionTitle="暂存更改"
+                primaryActionIcon={<Plus size={15} />}
+                onPrimaryAction={() => onStageFile(file)}
+                onDiscard={() => onDiscardFile(file)}
+                onSelect={() => onSelectFile(file)}
+                onPin={() => onPinFile(file)}
+              />
+            ))}
+          </ScmSection>
+
+          <ScmSection
+            title="已暂存的更改"
+            count={worktree.stagedFiles.length}
+            emptyText="没有已暂存改动。"
+            actionTitle="取消暂存所有更改"
+            actionIcon={<Undo2 size={16} />}
+            onAction={onUnstageAll}
+            open={stagedOpen}
+            onToggle={() => setStagedOpen((value) => !value)}
+          >
+            {worktree.stagedFiles.map((file) => (
+              <ScmFileRow
+                file={file}
+                selected={file.path === selectedFilePath && selectedFileStaged === true}
+                key={`staged-${file.path}-${file.status}`}
+                primaryActionTitle="取消暂存"
+                primaryActionIcon={<Undo2 size={15} />}
+                onPrimaryAction={() => onUnstageFile(file)}
+                onDiscard={() => onDiscardFile(file)}
+                onSelect={() => onSelectFile(file)}
+                onPin={() => onPinFile(file)}
+              />
+            ))}
+          </ScmSection>
         </div>
-        <label className="checkbox-row compact scm-amend-row">
-          <input type="checkbox" checked={amend} onChange={(event) => setAmend(event.target.checked)} />
-          修改上次提交
-        </label>
-      </form>
-
-      <div className="scm-summary">
-        <span>已编辑 {changeCount} 个文件</span>
-        <span className="scm-stats">+{worktree.unstagedFiles.length + worktree.stagedFiles.length}</span>
-      </div>
-
-      <ScmSection
-        title="更改"
-        count={worktree.unstagedFiles.length}
-        emptyText="没有未暂存改动。"
-        actionTitle="暂存所有更改"
-        actionIcon={<Plus size={16} />}
-        onAction={onStageAll}
-        open={changesOpen}
-        onToggle={() => setChangesOpen((value) => !value)}
-      >
-        {worktree.unstagedFiles.map((file) => (
-          <ScmFileRow
-            file={file}
-            selected={file.path === selectedFilePath && selectedFileStaged === false}
-            key={`unstaged-${file.path}-${file.status}`}
-            primaryActionTitle="暂存更改"
-            primaryActionIcon={<Plus size={15} />}
-            onPrimaryAction={() => onStageFile(file)}
-            onDiscard={() => onDiscardFile(file)}
-            onSelect={() => onSelectFile(file)}
-          />
-        ))}
-      </ScmSection>
-
-      <ScmSection
-        title="已暂存的更改"
-        count={worktree.stagedFiles.length}
-        emptyText="没有已暂存改动。"
-        actionTitle="取消暂存所有更改"
-        actionIcon={<Undo2 size={16} />}
-        onAction={onUnstageAll}
-        open={stagedOpen}
-        onToggle={() => setStagedOpen((value) => !value)}
-      >
-        {worktree.stagedFiles.map((file) => (
-          <ScmFileRow
-            file={file}
-            selected={file.path === selectedFilePath && selectedFileStaged === true}
-            key={`staged-${file.path}-${file.status}`}
-            primaryActionTitle="取消暂存"
-            primaryActionIcon={<Undo2 size={15} />}
-            onPrimaryAction={() => onUnstageFile(file)}
-            onDiscard={() => onDiscardFile(file)}
-            onSelect={() => onSelectFile(file)}
-          />
-        ))}
-      </ScmSection>
-        </>
       ) : null}
     </section>
   );
+}
+
+function splitCommitMessage(message: string): Pick<CommitInput, "subject" | "body"> {
+  const lines = message.replace(/\r\n/g, "\n").split("\n");
+  const subjectIndex = lines.findIndex((line) => line.trim().length > 0);
+  if (subjectIndex < 0) {
+    return { subject: "" };
+  }
+
+  const subject = lines[subjectIndex].trim();
+  const body = lines.slice(subjectIndex + 1).join("\n").trim();
+  return body ? { subject, body } : { subject };
 }
 
 function ScmSection({
@@ -273,7 +268,8 @@ function ScmFileRow({
   primaryActionIcon,
   onPrimaryAction,
   onDiscard,
-  onSelect
+  onSelect,
+  onPin
 }: {
   file: ChangedFile;
   selected: boolean;
@@ -282,6 +278,7 @@ function ScmFileRow({
   onPrimaryAction: () => void;
   onDiscard: () => void;
   onSelect: () => void;
+  onPin: () => void;
 }) {
   return (
     <div
@@ -290,6 +287,7 @@ function ScmFileRow({
       tabIndex={0}
       title={file.path}
       onClick={onSelect}
+      onDoubleClick={onPin}
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           onSelect();
@@ -303,30 +301,32 @@ function ScmFileRow({
         </span>
         <span className="scm-file-dir">{directoryName(file.path)}</span>
       </span>
-      <span className="scm-file-actions">
+      <span className="scm-file-trailing">
+        <span className="scm-row-actions">
+          <button
+            type="button"
+            className="icon-button compact-icon"
+            title={primaryActionTitle}
+            onClick={(event) => {
+              event.stopPropagation();
+              onPrimaryAction();
+            }}
+          >
+            {primaryActionIcon}
+          </button>
+          <button
+            type="button"
+            className="icon-button compact-icon danger-icon"
+            title="放弃更改"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDiscard();
+            }}
+          >
+            <Trash2 size={15} />
+          </button>
+        </span>
         <span className={`scm-file-status ${file.status}`}>{statusCode(file.status)}</span>
-        <button
-          type="button"
-          className="icon-button compact-icon"
-          title={primaryActionTitle}
-          onClick={(event) => {
-            event.stopPropagation();
-            onPrimaryAction();
-          }}
-        >
-          {primaryActionIcon}
-        </button>
-        <button
-          type="button"
-          className="icon-button compact-icon danger-icon"
-          title="放弃更改"
-          onClick={(event) => {
-            event.stopPropagation();
-            onDiscard();
-          }}
-        >
-          <Trash2 size={15} />
-        </button>
       </span>
     </div>
   );
@@ -355,7 +355,7 @@ function directoryName(filePath: string): string {
 
 function fileIcon(filePath: string): string {
   if (/\.(tsx|jsx)$/i.test(filePath)) {
-    return "⚛";
+    return "TSX";
   }
   if (/\.tsx?$/i.test(filePath)) {
     return "TS";
@@ -364,9 +364,9 @@ function fileIcon(filePath: string): string {
     return "#";
   }
   if (/\.md$/i.test(filePath)) {
-    return "M";
+    return "MD";
   }
-  return "•";
+  return "";
 }
 
 function fileIconClass(filePath: string): string {

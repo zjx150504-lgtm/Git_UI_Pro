@@ -1,4 +1,4 @@
-import { FolderPlus, GitBranch, Search, Star, Trash2 } from "lucide-react";
+import { FolderGit2, FolderPlus, GitBranch, Search, Star, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { GitProject } from "../types/domain";
 
@@ -25,18 +25,16 @@ export function ProjectRail({ projects, selectedProjectId, onSelectProject, onAd
   return (
     <aside className="project-rail">
       <div className="project-rail-header">
-        <div>
-          <strong>项目</strong>
-          <span>{projects.length}</span>
+        <strong>项目</strong>
+        <div className="project-rail-actions">
+          <button type="button" className="icon-button compact-icon" title="扫描目录" onClick={onScanProjects}>
+            <Search size={15} />
+          </button>
+          <button type="button" className="icon-button compact-icon" title="添加本地 Git 项目" onClick={onAddProject}>
+            <FolderPlus size={15} />
+          </button>
         </div>
-        <button type="button" className="icon-button compact-icon" title="添加本地 Git 项目" onClick={onAddProject}>
-          <FolderPlus size={15} />
-        </button>
       </div>
-
-      <button type="button" className="text-button project-scan-row" onClick={onScanProjects}>
-        扫描目录
-      </button>
 
       <label className="project-rail-search">
         <Search size={14} />
@@ -45,49 +43,92 @@ export function ProjectRail({ projects, selectedProjectId, onSelectProject, onAd
 
       <div className="project-rail-list">
         {filteredProjects.map((project) => (
-          <button
-            type="button"
+          <div
+            role="button"
+            tabIndex={0}
             className={`project-rail-item ${project.id === selectedProjectId ? "active" : ""}`}
             key={project.id}
             onClick={() => onSelectProject(project.id)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                onSelectProject(project.id);
+              }
+            }}
             title={project.path}
           >
+            <span className="project-rail-icon">
+              <FolderGit2 size={16} />
+            </span>
             <span className="project-rail-main">
               <span className="project-rail-name">
                 {project.favorite ? <Star size={12} fill="currentColor" /> : null}
                 {project.name}
               </span>
+              <span className="project-rail-path">{project.path}</span>
               <span className="project-rail-branch">
                 <GitBranch size={12} />
                 {project.status?.currentBranch ?? "未知分支"}
+                <span className={`project-status ${projectStatusTone(project)}`}>{projectStatusText(project)}</span>
               </span>
             </span>
-            <span className="project-rail-side">
-              <span className={project.status?.hasConflicts ? "dirty-dot conflict" : "dirty-dot"} />
-              <span>{(project.status?.stagedCount ?? 0) + (project.status?.unstagedCount ?? 0) + (project.status?.untrackedCount ?? 0)}</span>
-              <span
-                role="button"
-                tabIndex={0}
-                className="remove-project"
-                title="移除项目记录"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onRemoveProject(project.id);
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.stopPropagation();
-                    onRemoveProject(project.id);
-                  }
-                }}
-              >
-                <Trash2 size={13} />
-              </span>
-            </span>
-          </button>
+            <button
+              type="button"
+              className="remove-project"
+              title="移除项目记录"
+              onClick={(event) => {
+                event.stopPropagation();
+                onRemoveProject(project.id);
+              }}
+            >
+              <Trash2 size={13} />
+            </button>
+          </div>
         ))}
         {filteredProjects.length === 0 ? <div className="empty-inline project-rail-empty">没有匹配项目。</div> : null}
       </div>
     </aside>
   );
+}
+
+function projectStatusText(project: GitProject): string {
+  const status = project.status;
+  if (!status) {
+    return "未加载";
+  }
+
+  if (status.hasConflicts) {
+    return "有冲突";
+  }
+
+  const changedCount = status.stagedCount + status.unstagedCount + status.untrackedCount;
+  if (changedCount > 0) {
+    return `未提交 ${changedCount} 项`;
+  }
+
+  if (status.ahead > 0 || status.behind > 0) {
+    return [status.ahead > 0 ? `领先 ${status.ahead}` : "", status.behind > 0 ? `落后 ${status.behind}` : ""].filter(Boolean).join(" / ");
+  }
+
+  return "干净";
+}
+
+function projectStatusTone(project: GitProject): string {
+  const status = project.status;
+  if (!status) {
+    return "unknown";
+  }
+
+  if (status.hasConflicts) {
+    return "conflict";
+  }
+
+  if (status.stagedCount + status.unstagedCount + status.untrackedCount > 0) {
+    return "dirty";
+  }
+
+  if (status.ahead > 0 || status.behind > 0) {
+    return "sync";
+  }
+
+  return "clean";
 }
