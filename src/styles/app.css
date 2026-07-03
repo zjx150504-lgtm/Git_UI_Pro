@@ -4018,21 +4018,67 @@ code,
 }
 
 .source-control-pane .graph-section-title .graph-title-label,
-.source-control-pane .graph-section-title > div.graph-title-label {
+.source-control-pane .graph-section-title > div.graph-title-label,
+.source-control-pane .graph-section-title > button.graph-title-label {
   gap: 6px;
   align-items: center;
 }
 
+.source-control-pane .graph-section-title > .graph-title-label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: stretch;
+  width: 100%;
+  min-width: 0;
+  border-radius: 0;
+  padding: 0;
+  color: var(--text);
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.source-control-pane .graph-section-title > .graph-title-label:hover,
+.source-control-pane .graph-section-title > .graph-title-label:active {
+  background: transparent;
+  transform: none;
+}
+
 .source-control-pane .graph-section-title .graph-title-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 16px;
   width: 16px;
+  min-width: 16px;
   min-height: 24px;
+  height: 24px;
+  margin: 0;
+  border-radius: 0;
   padding: 0;
+  color: var(--text);
+  background: transparent;
+  transform: none;
 }
 
 .source-control-pane .graph-section-title .graph-title-toggle svg {
   width: 16px;
   height: 16px;
+  transform: none;
+}
+
+.source-control-pane .graph-section-title .graph-title-toggle:hover,
+.source-control-pane .graph-section-title .graph-title-toggle:active,
+.source-control-pane .graph-section-title > .graph-title-label:hover .graph-title-toggle {
+  background: transparent;
+  transform: none;
+}
+
+.source-control-pane .graph-section-title .graph-title-toggle:hover svg,
+.source-control-pane .graph-section-title > .graph-title-label:hover .graph-title-toggle svg {
+  transform: none;
 }
 
 .editor-tab.preview,
@@ -4042,10 +4088,35 @@ code,
   font-weight: 500;
 }
 
+.editor-tab.preview .editor-tab-name {
+  display: inline-block;
+  transform: skewX(-9deg);
+  transform-origin: left center;
+}
+
 .editor-tab.pinned,
 .editor-tab.pinned .editor-tab-name {
   font-style: normal;
   font-weight: 500;
+}
+
+.editor-tab.pinned .editor-tab-name {
+  transform: none;
+}
+
+.editor-tab-close {
+  display: inline-grid;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  place-items: center;
+  padding: 0;
+  border-radius: 5px;
+}
+
+.editor-tab-close svg {
+  display: block;
 }
 
 .scm-file-row {
@@ -4055,6 +4126,56 @@ code,
 .source-control-pane .scm-commit-box textarea::placeholder {
   font-size: 12px;
   line-height: 1.35;
+}
+
+.source-control-pane {
+  grid-template-rows: minmax(180px, var(--scm-pane-height)) 10px minmax(130px, 1fr);
+}
+
+.source-control-pane.source-pane-customized {
+  transition:
+    grid-template-columns var(--motion-slow) var(--motion-ease),
+    width var(--motion-slow) var(--motion-ease),
+    background-color var(--motion-base) var(--motion-ease),
+    border-color var(--motion-base) var(--motion-ease);
+}
+
+.source-control-pane.changes-collapsed {
+  grid-template-rows: max-content 10px minmax(130px, 1fr);
+}
+
+.source-control-pane.graph-collapsed {
+  grid-template-rows: minmax(180px, var(--scm-pane-height)) 10px max-content;
+}
+
+.source-control-pane.changes-collapsed.graph-collapsed {
+  grid-template-rows: max-content 10px max-content;
+}
+
+.source-graph-divider {
+  position: relative;
+  height: 10px;
+  background: transparent;
+  cursor: row-resize;
+}
+
+.source-graph-divider:hover,
+.source-graph-divider:active {
+  background: transparent;
+}
+
+.source-graph-divider::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  left: 0;
+  top: 4px;
+  height: 1px;
+  background: color-mix(in srgb, var(--border) 68%, transparent);
+}
+
+.source-graph-divider:hover::before {
+  background: color-mix(in srgb, var(--accent) 72%, transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

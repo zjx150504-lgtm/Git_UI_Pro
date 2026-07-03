@@ -22,6 +22,8 @@ const emptyWorktree: WorktreeState = {
   unstagedFiles: []
 };
 
+const DEFAULT_SOURCE_PANE_HEIGHT = 320;
+
 type ResizeTarget = "sidebar" | "detail" | "sourceSplit";
 type BranchDialogState =
   | { mode: "create"; project: GitProject; branchName: string; checkout: boolean }
@@ -45,7 +47,7 @@ export function App() {
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [commitFocusRequest, setCommitFocusRequest] = useState(0);
-  const [sourcePaneHeight, setSourcePaneHeight] = useState(430);
+  const [sourcePaneHeight, setSourcePaneHeight] = useState(DEFAULT_SOURCE_PANE_HEIGHT);
   const [changesPanelOpen, setChangesPanelOpen] = useState(true);
   const [graphPanelOpen, setGraphPanelOpen] = useState(true);
   const [branchDialog, setBranchDialog] = useState<BranchDialogState | null>(null);
@@ -664,7 +666,11 @@ export function App() {
         />
 
         <section className="main-grid">
-          <div className={`source-control-pane ${changesPanelOpen ? "" : "changes-collapsed"} ${graphPanelOpen ? "" : "graph-collapsed"}`}>
+          <div
+            className={`source-control-pane ${changesPanelOpen ? "" : "changes-collapsed"} ${graphPanelOpen ? "" : "graph-collapsed"} ${
+              sourcePaneHeight !== DEFAULT_SOURCE_PANE_HEIGHT ? "source-pane-customized" : ""
+            }`}
+          >
             <WorkspaceView
               project={selectedProject}
               worktree={worktree}

@@ -189,13 +189,13 @@ export function GraphSidebar({
   return (
     <section className={`graph-sidebar graph-panel ${panelOpen ? "" : "panel-collapsed"}`}>
       <div className="graph-section-title">
-        <div className="graph-title-label">
-          <button type="button" className="graph-title-toggle" title={panelOpen ? "收起图表" : "展开图表"} onClick={onTogglePanel}>
+        <button type="button" className="graph-title-label" title={panelOpen ? "收起图表" : "展开图表"} onClick={onTogglePanel}>
+          <span className="graph-title-toggle" aria-hidden="true">
             {panelOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-          </button>
+          </span>
           <span className="graph-title-text">图表</span>
           <span className="graph-count">{commits.length}</span>
-        </div>
+        </button>
         {panelOpen ? (
           <div className="graph-toolbar" aria-label="图表操作">
             <button
