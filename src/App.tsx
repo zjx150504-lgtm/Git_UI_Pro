@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
-import { Check, FolderGit2, GitBranch, PanelLeftOpen, Plus, Terminal, X } from "lucide-react";
+import { Check, FolderGit2, GitBranch, Moon, PanelLeftClose, PanelLeftOpen, Plus, Sun, Terminal, X } from "lucide-react";
 import { Toaster, toast } from "sonner";
 import { apiClient } from "./api/client";
 import { ConsolePanel } from "./components/ConsolePanel";
@@ -708,6 +708,23 @@ export function App() {
     setResolvedTheme(resolveTheme(mode));
   }
 
+  function toggleThemeMode() {
+    handleThemeModeChange(resolvedTheme === "dark" ? "light" : "dark");
+  }
+
+  function renderSidebarControls(collapsed: boolean) {
+    return (
+      <div className={`sidebar-bottom-controls ${collapsed ? "collapsed" : ""}`} aria-label="左侧栏控制">
+        <button type="button" className="icon-button compact-icon" title={collapsed ? "展开项目栏" : "收起项目栏"} onClick={() => setLeftCollapsed(!collapsed)}>
+          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+        </button>
+        <button type="button" className="icon-button compact-icon" title={resolvedTheme === "dark" ? "切换浅色主题" : "切换深色主题"} onClick={toggleThemeMode}>
+          {resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+        </button>
+      </div>
+    );
+  }
+
   function beginResize(target: ResizeTarget, event: MouseEvent<HTMLDivElement>) {
     event.preventDefault();
 
@@ -755,10 +772,25 @@ export function App() {
     >
       {leftCollapsed ? (
         <aside className="collapsed-sidebar">
-          <button type="button" className="icon-button" title="展开项目栏" onClick={() => setLeftCollapsed(false)}>
-            <PanelLeftOpen size={17} />
-          </button>
-          <FolderGit2 size={18} />
+          <div className="collapsed-project-list" aria-label="项目列表">
+            {projects.map((project) => (
+              <button
+                type="button"
+                className={`collapsed-project-item ${project.id === selectedProject?.id ? "active" : ""}`}
+                title={project.name}
+                onClick={() => setSelectedProjectId(project.id)}
+                key={project.id}
+              >
+                {projectInitial(project)}
+              </button>
+            ))}
+            {projects.length === 0 ? (
+              <span className="collapsed-project-empty" title="暂无项目">
+                <FolderGit2 size={18} />
+              </span>
+            ) : null}
+          </div>
+          {renderSidebarControls(true)}
         </aside>
       ) : (
         <ProjectRail
@@ -768,23 +800,23 @@ export function App() {
           onAddProject={handleAddProject}
           onScanProjects={handleScanProjects}
           onRemoveProject={handleRemoveProject}
+          footer={renderSidebarControls(false)}
         />
       )}
 
-      {!leftCollapsed ? <div className="resize-handle sidebar-resize" onMouseDown={(event) => beginResize("sidebar", event)} /> : null}
+      <div
+        className={`resize-handle sidebar-resize ${leftCollapsed ? "collapsed" : ""}`}
+        onMouseDown={(event) => {
+          if (!leftCollapsed) {
+            beginResize("sidebar", event);
+          }
+        }}
+      />
 
       <main className="workspace-shell">
         <TopBar
           project={selectedProject}
           gitVersion={gitVersion}
-          themeMode={themeMode}
-          leftCollapsed={leftCollapsed}
-          rightCollapsed={rightCollapsed}
-          consoleOpen={consoleOpen}
-          onThemeModeChange={handleThemeModeChange}
-          onToggleLeft={() => setLeftCollapsed((value) => !value)}
-          onToggleRight={() => setRightCollapsed((value) => !value)}
-          onToggleConsole={() => setConsoleOpen((value) => !value)}
         />
 
         <section className="main-grid">
@@ -1078,6 +1110,13 @@ function statusSignature(status: GitProject["status"]): string {
     status.hasConflicts ? "1" : "0",
     status.operationState ?? ""
   ].join(":");
+}
+
+function projectInitial(project: GitProject): string {
+  const fallbackName = project.path.split(/[\\/]/).filter(Boolean).at(-1) ?? "";
+  const source = (project.name.trim() || fallbackName.trim() || "?").trim();
+  const alphaNumeric = source.match(/[a-z0-9]/i)?.[0];
+  return (alphaNumeric ?? source[0] ?? "?").toUpperCase();
 }
 
 function upsertWorktreeTab(tabs: WorktreeEditorTab[], incomingTab: WorktreeEditorTab, forcePinned: boolean): WorktreeEditorTab[] {

@@ -123,18 +123,71 @@ button {
 }
 
 .app-shell.left-collapsed {
-  grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-width) 2px minmax(0, 1fr);
 }
 
 .collapsed-sidebar {
   display: grid;
-  grid-template-rows: 44px 1fr;
+  grid-template-rows: minmax(0, 1fr) auto;
   justify-items: center;
   gap: 12px;
-  padding: 12px 8px;
+  min-width: 0;
+  padding: 14px 7px 10px;
   border-right: 1px solid var(--border);
   background: var(--panel);
   color: var(--muted);
+}
+
+.collapsed-project-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-height: 0;
+  overflow: auto;
+  scrollbar-width: none;
+}
+
+.collapsed-project-list::-webkit-scrollbar {
+  display: none;
+}
+
+.collapsed-project-item {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--text);
+  background: transparent;
+  font-family: var(--mono-font);
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.collapsed-project-item:hover {
+  background: var(--surface);
+}
+
+.collapsed-project-item.active {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--surface) 76%, transparent);
+}
+
+.collapsed-project-empty {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  color: var(--muted);
+}
+
+.collapsed-sidebar {
+  animation: rail-collapse-in var(--motion-slow) var(--motion-ease-out);
 }
 
 .resize-handle {
@@ -145,6 +198,12 @@ button {
 
 .resize-handle:hover {
   background: var(--accent);
+}
+
+.sidebar-resize.collapsed {
+  cursor: default;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--border) 40%, transparent);
 }
 
 .sidebar-resize,
@@ -1799,7 +1858,7 @@ button {
 /* VS Code-style source control layout */
 .project-rail {
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   min-width: 0;
   height: 100vh;
   border-right: 1px solid var(--border);
@@ -1869,6 +1928,40 @@ button {
   min-height: 0;
   overflow: auto;
   padding: 0 8px 10px;
+}
+
+.project-rail {
+  animation: rail-expand-in var(--motion-slow) var(--motion-ease-out);
+}
+
+.project-rail-footer {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  border-top: 1px solid var(--border);
+  padding: 7px 10px;
+}
+
+.sidebar-bottom-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+}
+
+.sidebar-bottom-controls.collapsed {
+  flex-direction: column;
+  align-self: end;
+  justify-content: center;
+}
+
+.sidebar-bottom-controls .icon-button {
+  background: transparent;
+}
+
+.sidebar-bottom-controls .icon-button:hover {
+  background: var(--surface);
 }
 
 .project-rail-item {
@@ -2473,7 +2566,7 @@ button {
 
 /* Final SCM pass: closer to VS Code's source control density */
 .project-rail {
-  grid-template-rows: 42px auto minmax(0, 1fr);
+  grid-template-rows: 42px auto minmax(0, 1fr) auto;
   background: var(--panel);
 }
 
@@ -4066,6 +4159,30 @@ button {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes rail-collapse-in {
+  from {
+    opacity: 0.62;
+    clip-path: inset(0 0 0 18px);
+  }
+
+  to {
+    opacity: 1;
+    clip-path: inset(0);
+  }
+}
+
+@keyframes rail-expand-in {
+  from {
+    opacity: 0.72;
+    clip-path: inset(0 42px 0 0);
+  }
+
+  to {
+    opacity: 1;
+    clip-path: inset(0);
   }
 }
 

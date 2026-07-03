@@ -1,5 +1,5 @@
 import { FolderGit2, FolderPlus, GitBranch, Search, Star, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { GitProject } from "../types/domain";
 
 interface ProjectRailProps {
@@ -9,9 +9,10 @@ interface ProjectRailProps {
   onAddProject: () => void;
   onScanProjects: () => void;
   onRemoveProject: (projectId: string) => void;
+  footer?: ReactNode;
 }
 
-export function ProjectRail({ projects, selectedProjectId, onSelectProject, onAddProject, onScanProjects, onRemoveProject }: ProjectRailProps) {
+export function ProjectRail({ projects, selectedProjectId, onSelectProject, onAddProject, onScanProjects, onRemoveProject, footer }: ProjectRailProps) {
   const [query, setQuery] = useState("");
   const filteredProjects = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -86,6 +87,7 @@ export function ProjectRail({ projects, selectedProjectId, onSelectProject, onAd
         ))}
         {filteredProjects.length === 0 ? <div className="empty-inline project-rail-empty">没有匹配项目。</div> : null}
       </div>
+      {footer ? <div className="project-rail-footer">{footer}</div> : null}
     </aside>
   );
 }
