@@ -1,12 +1,16 @@
 import { ChevronDown, ChevronRight, Cloud, CloudDownload, CloudUpload, GitBranch, MoreHorizontal, Plus, RefreshCw, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CommitNode, GitProject } from "../types/domain";
+import { apiClient } from "../api/client";
+import type { ChangedFile, CommitNode, GitProject } from "../types/domain";
 
 interface GraphSidebarProps {
   project?: GitProject;
   commits: CommitNode[];
   selectedHash: string;
   onSelectCommit: (hash: string) => void;
+  onSelectCommitFile: (commit: CommitNode, file: ChangedFile) => void;
+  selectedCommitFileHash?: string;
+  selectedCommitFilePath?: string;
   onOperation: (operation: string) => void;
   panelOpen: boolean;
   onTogglePanel: () => void;
@@ -22,10 +26,27 @@ const graphOperations = [
 
 type GraphTone = "local" | "remote" | "synced" | "plain";
 
-export function GraphSidebar({ project, commits, selectedHash, onSelectCommit, onOperation, panelOpen, onTogglePanel }: GraphSidebarProps) {
+export function GraphSidebar({
+  project,
+  commits,
+  selectedHash,
+  onSelectCommit,
+  onSelectCommitFile,
+  selectedCommitFileHash,
+  selectedCommitFilePath,
+  onOperation,
+  panelOpen,
+  onTogglePanel
+}: GraphSidebarProps) {
   const [commitQuery, setCommitQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [expandedHash, setExpandedHash] = useState<string | null>(null);
+  const [commitDetailsByHash, setCommitDetailsByHash] = useState<Record<string, CommitNode>>({});
+  const [loadingDetailsHash, setLoadingDetailsHash] = useState<string | null>(null);
+  const [detailsErrorByHash, setDetailsErrorByHash] = useState<Record<string, string>>({});
   const [hoveredCommit, setHoveredCommit] = useState<CommitNode | undefined>();
   const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const hoverTimerRef = useRef<number | undefined>();
   const closeTimerRef = useRef<number | undefined>();
   const filteredCommits = useMemo(() => {
@@ -46,6 +67,19 @@ export function GraphSidebar({ project, commits, selectedHash, onSelectCommit, o
     },
     []
   );
+
+  useEffect(() => {
+    if (searchOpen) {
+      searchInputRef.current?.focus();
+    }
+  }, [searchOpen]);
+
+  useEffect(() => {
+    setExpandedHash(null);
+    setCommitDetailsByHash({});
+    setDetailsErrorByHash({});
+    setLoadingDetailsHash(null);
+  }, [project?.id]);
 
   function scheduleHover(commit: CommitNode, row: HTMLElement) {
     window.clearTimeout(closeTimerRef.current);
@@ -69,16 +103,66 @@ export function GraphSidebar({ project, commits, selectedHash, onSelectCommit, o
     window.clearTimeout(closeTimerRef.current);
   }
 
+  function handleCommitClick(commit: CommitNode) {
+    const nextExpandedHash = expandedHash === commit.hash ? null : commit.hash;
+    onSelectCommit(commit.hash);
+    setExpandedHash(nextExpandedHash);
+
+    if (nextExpandedHash) {
+      void ensureCommitDetails(commit);
+    }
+  }
+
+  async function ensureCommitDetails(commit: CommitNode) {
+    if (commitDetailsByHash[commit.hash] || loadingDetailsHash === commit.hash) {
+      return;
+    }
+
+    if (!project) {
+      setCommitDetailsByHash((current) => ({ ...current, [commit.hash]: commit }));
+      return;
+    }
+
+    setLoadingDetailsHash(commit.hash);
+    setDetailsErrorByHash((current) => {
+      const next = { ...current };
+      delete next[commit.hash];
+      return next;
+    });
+
+    try {
+      const details = await apiClient.getCommitDetails(project, commit.hash);
+      setCommitDetailsByHash((current) => ({ ...current, [commit.hash]: details }));
+    } catch (error) {
+      setDetailsErrorByHash((current) => ({
+        ...current,
+        [commit.hash]: error instanceof Error ? error.message : "无法读取提交变更。"
+      }));
+    } finally {
+      setLoadingDetailsHash((current) => (current === commit.hash ? null : current));
+    }
+  }
+
   return (
     <section className={`graph-sidebar graph-panel ${panelOpen ? "" : "panel-collapsed"}`}>
       <div className="graph-section-title">
-        <button type="button" className="graph-title-toggle" onClick={onTogglePanel}>
-          {panelOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-          图表
-          <span>{commits.length}</span>
-        </button>
+        <div className="graph-title-label">
+          <button type="button" className="graph-title-toggle" title={panelOpen ? "收起图表" : "展开图表"} onClick={onTogglePanel}>
+            {panelOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+          </button>
+          <span className="graph-title-text">图表</span>
+          <span className="graph-count">{commits.length}</span>
+        </div>
         {panelOpen ? (
           <div className="graph-toolbar" aria-label="图表操作">
+            <button
+              type="button"
+              className={`icon-button compact-icon ${searchOpen || commitQuery ? "active" : ""}`}
+              title="搜索提交"
+              onClick={() => setSearchOpen((value) => !value)}
+            >
+              <Search size={14} />
+            </button>
             {graphOperations.map((operation) => {
               const Icon = operation.icon;
               return (
@@ -96,12 +180,24 @@ export function GraphSidebar({ project, commits, selectedHash, onSelectCommit, o
 
       {panelOpen ? (
         <>
-          <div className="graph-search-row">
-            <label className="history-search graph-search">
-              <Search size={14} />
-              <input value={commitQuery} onChange={(event) => setCommitQuery(event.target.value)} placeholder="搜索提交" />
-            </label>
-          </div>
+          {searchOpen ? (
+            <div className="graph-search-row">
+              <label className="history-search graph-search">
+                <Search size={14} />
+                <input
+                  ref={searchInputRef}
+                  value={commitQuery}
+                  onChange={(event) => setCommitQuery(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") {
+                      setSearchOpen(false);
+                    }
+                  }}
+                  placeholder="搜索提交"
+                />
+              </label>
+            </div>
+          ) : null}
 
           <div className="graph-commit-list" role="list" aria-label="提交图">
             {filteredCommits.length === 0 ? <div className="empty-state graph-empty">当前仓库没有可显示的提交。</div> : null}
@@ -115,9 +211,15 @@ export function GraphSidebar({ project, commits, selectedHash, onSelectCommit, o
                   commit={commit}
                   tone={tone}
                   selected={commit.hash === selectedHash}
+                  expanded={commit.hash === expandedHash}
+                  details={commitDetailsByHash[commit.hash]}
+                  loadingDetails={loadingDetailsHash === commit.hash}
+                  detailsError={detailsErrorByHash[commit.hash]}
+                  selectedFilePath={selectedCommitFileHash === commit.hash ? selectedCommitFilePath : undefined}
                   isFirst={index === 0}
                   isLast={index === filteredCommits.length - 1}
-                  onSelect={() => onSelectCommit(commit.hash)}
+                  onSelect={() => handleCommitClick(commit)}
+                  onSelectFile={(file) => onSelectCommitFile(commit, file)}
                   onHoverStart={(row) => scheduleHover(commit, row)}
                   onHoverEnd={scheduleCloseHover}
                 />
@@ -137,18 +239,30 @@ function GraphCommitRow({
   commit,
   tone,
   selected,
+  expanded,
+  details,
+  loadingDetails,
+  detailsError,
+  selectedFilePath,
   isFirst,
   isLast,
   onSelect,
+  onSelectFile,
   onHoverStart,
   onHoverEnd
 }: {
   commit: CommitNode;
   tone: GraphTone;
   selected: boolean;
+  expanded: boolean;
+  details?: CommitNode;
+  loadingDetails: boolean;
+  detailsError?: string;
+  selectedFilePath?: string;
   isFirst: boolean;
   isLast: boolean;
   onSelect: () => void;
+  onSelectFile: (file: ChangedFile) => void;
   onHoverStart: (row: HTMLElement) => void;
   onHoverEnd: () => void;
 }) {
@@ -156,7 +270,7 @@ function GraphCommitRow({
   const subjectMeasureRef = useRef<HTMLSpanElement>(null);
   const authorMeasureRef = useRef<HTMLSpanElement>(null);
   const [showAuthor, setShowAuthor] = useState(false);
-  const visibleRefs = commit.refs.filter((ref) => ref.type !== "head");
+  const visibleRefs = commit.refs.filter((ref) => ref.type !== "head" && !ref.name.endsWith("/HEAD"));
 
   useEffect(() => {
     const textElement = textRef.current;
@@ -180,41 +294,152 @@ function GraphCommitRow({
   }, [commit.authorName, commit.subject]);
 
   return (
-    <button
-      type="button"
-      role="listitem"
-      className={`graph-commit-row graph-tone-${tone} ${selected ? "active" : ""}`}
-      onClick={onSelect}
-      onMouseEnter={(event) => onHoverStart(event.currentTarget)}
-      onMouseLeave={onHoverEnd}
-      onFocus={(event) => onHoverStart(event.currentTarget)}
-      onBlur={onHoverEnd}
-    >
-      <CompactGraphCell isFirst={isFirst} isLast={isLast} tone={tone} />
-      <span className="graph-commit-main">
-        <span className="graph-commit-text" ref={textRef}>
-          <span className="graph-commit-subject">{commit.subject}</span>
-          {showAuthor ? <span className="graph-commit-author">{commit.authorName}</span> : null}
-          <span className="graph-measure" ref={subjectMeasureRef} aria-hidden="true">
-            {commit.subject}
+    <div role="listitem" className={`graph-commit-entry ${expanded ? "expanded" : ""}`}>
+      <button
+        type="button"
+        className={`graph-commit-row graph-tone-${tone} ${selected ? "active" : ""}`}
+        aria-expanded={expanded}
+        onClick={onSelect}
+        onMouseEnter={(event) => onHoverStart(event.currentTarget)}
+        onMouseLeave={onHoverEnd}
+        onFocus={(event) => onHoverStart(event.currentTarget)}
+        onBlur={onHoverEnd}
+      >
+        <CompactGraphCell isFirst={isFirst} isLast={isLast} tone={tone} />
+        <span className="graph-commit-main">
+          <span className="graph-commit-text" ref={textRef}>
+            <span className="graph-commit-subject">{commit.subject}</span>
+            {showAuthor ? <span className="graph-commit-author">{commit.authorName}</span> : null}
+            <span className="graph-measure" ref={subjectMeasureRef} aria-hidden="true">
+              {commit.subject}
+            </span>
+            <span className="graph-measure" ref={authorMeasureRef} aria-hidden="true">
+              {commit.authorName}
+            </span>
           </span>
-          <span className="graph-measure" ref={authorMeasureRef} aria-hidden="true">
-            {commit.authorName}
-          </span>
+          {visibleRefs.length > 0 ? (
+            <span className="graph-ref-row">
+              {visibleRefs.map((ref) => (
+                <span className={`ref-chip ${ref.type}`} key={`${commit.hash}-${ref.type}-${ref.name}`}>
+                  {ref.type === "remoteBranch" ? <Cloud size={10} /> : ref.type === "localBranch" ? <GitBranch size={10} /> : null}
+                  <span className="ref-chip-label">{ref.name}</span>
+                </span>
+              ))}
+            </span>
+          ) : null}
         </span>
-        {visibleRefs.length > 0 ? (
-          <span className="graph-ref-row">
-            {visibleRefs.map((ref) => (
-              <span className={`ref-chip ${ref.type}`} key={`${commit.hash}-${ref.type}-${ref.name}`}>
-                {ref.type === "remoteBranch" ? <Cloud size={10} /> : ref.type === "localBranch" ? <GitBranch size={10} /> : null}
-                {ref.name}
-              </span>
-            ))}
-          </span>
-        ) : null}
-      </span>
-    </button>
+      </button>
+      {expanded ? (
+        <GraphCommitExpansion
+          commit={details ?? commit}
+          loading={loadingDetails}
+          error={detailsError}
+          selectedFilePath={selectedFilePath}
+          onSelectFile={onSelectFile}
+        />
+      ) : null}
+    </div>
   );
+}
+
+function GraphCommitExpansion({
+  commit,
+  loading,
+  error,
+  selectedFilePath,
+  onSelectFile
+}: {
+  commit: CommitNode;
+  loading: boolean;
+  error?: string;
+  selectedFilePath?: string;
+  onSelectFile: (file: ChangedFile) => void;
+}) {
+  if (loading) {
+    return <div className="graph-commit-expansion graph-commit-expansion-state">正在读取变更文件...</div>;
+  }
+
+  if (error) {
+    return <div className="graph-commit-expansion graph-commit-expansion-state error">{error}</div>;
+  }
+
+  if (commit.files.length === 0) {
+    return <div className="graph-commit-expansion graph-commit-expansion-state">没有可显示的变更文件。</div>;
+  }
+
+  return (
+    <div className="graph-commit-expansion" aria-label="提交变更文件">
+      {commit.files.map((file) => (
+        <button
+          type="button"
+          className={`graph-commit-file-row ${selectedFilePath === file.path ? "active" : ""}`}
+          title={file.path}
+          key={`${commit.hash}-${file.path}-${file.status}`}
+          onClick={() => onSelectFile(file)}
+        >
+          <span className={`scm-file-icon ${fileIconClass(file.path)}`}>{fileIcon(file.path)}</span>
+          <span className="graph-commit-file-main">
+            <span className="graph-commit-file-name">{file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? file.path}</span>
+            <span className="graph-commit-file-dir">{directoryName(file.path)}</span>
+          </span>
+          <span className={`graph-commit-file-status ${file.status}`}>{statusCode(file.status)}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function statusCode(status: ChangedFile["status"]): string {
+  const labels: Record<ChangedFile["status"], string> = {
+    added: "A",
+    modified: "M",
+    deleted: "D",
+    renamed: "R",
+    copied: "C",
+    untracked: "U",
+    ignored: "I",
+    conflicted: "!"
+  };
+
+  return labels[status];
+}
+
+function directoryName(filePath: string): string {
+  const parts = filePath.split(/[\\/]/).filter(Boolean);
+  parts.pop();
+  return parts.length > 0 ? parts.join("/") : "";
+}
+
+function fileIcon(filePath: string): string {
+  if (/\.(tsx|jsx)$/i.test(filePath)) {
+    return "TSX";
+  }
+  if (/\.tsx?$/i.test(filePath)) {
+    return "TS";
+  }
+  if (/\.css$/i.test(filePath)) {
+    return "#";
+  }
+  if (/\.md$/i.test(filePath)) {
+    return "MD";
+  }
+  return "";
+}
+
+function fileIconClass(filePath: string): string {
+  if (/\.(tsx|jsx)$/i.test(filePath)) {
+    return "react";
+  }
+  if (/\.tsx?$/i.test(filePath)) {
+    return "typescript";
+  }
+  if (/\.css$/i.test(filePath)) {
+    return "css";
+  }
+  if (/\.md$/i.test(filePath)) {
+    return "markdown";
+  }
+  return "";
 }
 
 function GraphSyncRow({ project }: { project: GitProject }) {
@@ -269,10 +494,13 @@ function CommitHoverCard({
         </ol>
       ) : null}
       <div className="commit-hover-footer">
-        {commit.refs.slice(0, 4).map((ref) => (
+        {commit.refs
+          .filter((ref) => ref.type !== "head" && !ref.name.endsWith("/HEAD"))
+          .slice(0, 4)
+          .map((ref) => (
           <span className={`ref-chip ${ref.type}`} key={`${commit.hash}-${ref.type}-${ref.name}`}>
             {ref.type === "remoteBranch" ? <Cloud size={10} /> : ref.type === "localBranch" ? <GitBranch size={10} /> : null}
-            {ref.name}
+            <span className="ref-chip-label">{ref.name}</span>
           </span>
         ))}
         <code>{commit.shortHash}</code>
@@ -283,10 +511,10 @@ function CommitHoverCard({
 
 function CompactGraphCell({ isFirst, isLast, tone }: { isFirst: boolean; isLast: boolean; tone: GraphTone }) {
   return (
-    <svg className={`compact-graph-cell graph-tone-${tone}`} viewBox="0 0 24 34" aria-hidden="true">
-      {!isFirst ? <line x1="12" y1="0" x2="12" y2="15" className="graph-line" /> : null}
-      {!isLast ? <line x1="12" y1="21" x2="12" y2="34" className="graph-line" /> : null}
-      <circle cx="12" cy="18" r="4.2" className="graph-node" />
+    <svg className={`compact-graph-cell graph-tone-${tone}`} viewBox="0 0 24 32" aria-hidden="true">
+      {!isFirst ? <line x1="12" y1="0" x2="12" y2="13" className="graph-line" /> : null}
+      {!isLast ? <line x1="12" y1="19" x2="12" y2="32" className="graph-line" /> : null}
+      <circle cx="12" cy="16" r="4.2" className="graph-node" />
     </svg>
   );
 }

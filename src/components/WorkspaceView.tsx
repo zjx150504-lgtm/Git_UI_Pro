@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Plus, RefreshCw, Trash2, Undo2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Plus, RefreshCw, Undo2 } from "lucide-react";
 import type { ChangedFile, CommitInput, GitProject, WorktreeState } from "../types/domain";
 
 interface WorkspaceViewProps {
@@ -172,30 +172,32 @@ export function WorkspaceView({
             ))}
           </ScmSection>
 
-          <ScmSection
-            title="已暂存的更改"
-            count={worktree.stagedFiles.length}
-            emptyText="没有已暂存改动。"
-            actionTitle="取消暂存所有更改"
-            actionIcon={<Undo2 size={16} />}
-            onAction={onUnstageAll}
-            open={stagedOpen}
-            onToggle={() => setStagedOpen((value) => !value)}
-          >
-            {worktree.stagedFiles.map((file) => (
-              <ScmFileRow
-                file={file}
-                selected={file.path === selectedFilePath && selectedFileStaged === true}
-                key={`staged-${file.path}-${file.status}`}
-                primaryActionTitle="取消暂存"
-                primaryActionIcon={<Undo2 size={15} />}
-                onPrimaryAction={() => onUnstageFile(file)}
-                onDiscard={() => onDiscardFile(file)}
-                onSelect={() => onSelectFile(file)}
-                onPin={() => onPinFile(file)}
-              />
-            ))}
-          </ScmSection>
+          {worktree.stagedFiles.length > 0 ? (
+            <ScmSection
+              title="已暂存的更改"
+              count={worktree.stagedFiles.length}
+              emptyText="没有已暂存改动。"
+              actionTitle="取消暂存所有更改"
+              actionIcon={<Undo2 size={16} />}
+              onAction={onUnstageAll}
+              open={stagedOpen}
+              onToggle={() => setStagedOpen((value) => !value)}
+            >
+              {worktree.stagedFiles.map((file) => (
+                <ScmFileRow
+                  file={file}
+                  selected={file.path === selectedFilePath && selectedFileStaged === true}
+                  key={`staged-${file.path}-${file.status}`}
+                  primaryActionTitle="取消暂存"
+                  primaryActionIcon={<Undo2 size={15} />}
+                  onPrimaryAction={() => onUnstageFile(file)}
+                  onDiscard={() => onDiscardFile(file)}
+                  onSelect={() => onSelectFile(file)}
+                  onPin={() => onPinFile(file)}
+                />
+              ))}
+            </ScmSection>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -323,7 +325,7 @@ function ScmFileRow({
               onDiscard();
             }}
           >
-            <Trash2 size={15} />
+            <Undo2 size={15} />
           </button>
         </span>
         <span className={`scm-file-status ${file.status}`}>{statusCode(file.status)}</span>

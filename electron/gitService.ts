@@ -599,6 +599,10 @@ function parseRefs(refText: string): CommitRef[] {
 
       const normalized = part.replace(/^HEAD -> /, "");
 
+      if (normalized === "HEAD" || normalized === "origin/HEAD" || normalized.endsWith("/HEAD")) {
+        return null;
+      }
+
       if (normalized.startsWith("tag: refs/tags/")) {
         return { type: "tag", name: normalized.replace("tag: refs/tags/", "") };
       }

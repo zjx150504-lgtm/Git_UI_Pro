@@ -6,6 +6,10 @@ export interface WorktreeEditorTab {
   file: ChangedFile;
   diffLines: DiffLine[];
   pinned: boolean;
+  sourceType?: "worktree" | "commit";
+  commitHash?: string;
+  sourceLabel?: string;
+  subtitle?: string;
 }
 
 interface WorktreeDetailPanelProps {
@@ -81,8 +85,9 @@ export function WorktreeDetailPanel({ tabs, activeTabId, onSelectTab, onCloseTab
       </div>
 
       <div className="editor-breadcrumb">
-        <span>{file.staged ? "已暂存的更改" : "更改"}</span>
+        <span>{activeTab.sourceLabel ?? (file.staged ? "已暂存的更改" : "更改")}</span>
         <span>{file.path}</span>
+        {activeTab.subtitle ? <span>{activeTab.subtitle}</span> : null}
       </div>
 
       <section className="diff-panel editor-diff-panel">

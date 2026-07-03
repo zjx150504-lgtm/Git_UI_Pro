@@ -125,6 +125,10 @@ export function App() {
     setStatusMessage(commit ? `已选中提交 ${commit.shortHash}` : "已选中提交。");
   }
 
+  async function handleSelectCommitFile(commit: CommitNode, file: ChangedFile) {
+    await openCommitFile(commit, file, false);
+  }
+
   async function handleSelectWorktreeFile(file: ChangedFile) {
     await openWorktreeFile(file, false);
   }
@@ -139,7 +143,7 @@ export function App() {
     }
 
     const tabId = worktreeTabId(file);
-    const pendingTab: WorktreeEditorTab = { id: tabId, file, diffLines: [], pinned };
+    const pendingTab: WorktreeEditorTab = { id: tabId, file, diffLines: [], pinned, sourceType: "worktree" };
     setWorktreeTabs((current) => upsertWorktreeTab(current, pendingTab, pinned));
     setActiveWorktreeTabId(tabId);
 
@@ -150,6 +154,36 @@ export function App() {
       );
     } catch (error) {
       setStatusMessage(error instanceof Error ? error.message : "加载工作区文件失败");
+    }
+  }
+
+  async function openCommitFile(commit: CommitNode, file: ChangedFile, pinned: boolean) {
+    if (!selectedProject) {
+      return;
+    }
+
+    const tabId = commitFileTabId(commit.hash, file.path);
+    const pendingTab: WorktreeEditorTab = {
+      id: tabId,
+      file,
+      diffLines: [],
+      pinned,
+      sourceType: "commit",
+      commitHash: commit.hash,
+      sourceLabel: `提交 ${commit.shortHash}`,
+      subtitle: commit.subject
+    };
+    setWorktreeTabs((current) => upsertWorktreeTab(current, pendingTab, pinned));
+    setActiveWorktreeTabId(tabId);
+
+    try {
+      const diffLines = await apiClient.getCommitDiff(selectedProject, commit.hash, file.path);
+      setWorktreeTabs((current) =>
+        current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines, pinned: tab.pinned || pinned } : tab))
+      );
+      setStatusMessage(`正在查看提交 ${commit.shortHash} 的 ${file.path}`);
+    } catch (error) {
+      setStatusMessage(error instanceof Error ? error.message : "加载提交文件失败");
     }
   }
 
@@ -574,6 +608,9 @@ export function App() {
               commits={commits}
               selectedHash={selectedCommitHash}
               onSelectCommit={handleSelectCommit}
+              onSelectCommitFile={handleSelectCommitFile}
+              selectedCommitFileHash={activeWorktreeTab?.sourceType === "commit" ? activeWorktreeTab.commitHash : undefined}
+              selectedCommitFilePath={activeWorktreeTab?.sourceType === "commit" ? activeWorktreeTab.file.path : undefined}
               onOperation={handleOperation}
               panelOpen={graphPanelOpen}
               onTogglePanel={() => setGraphPanelOpen((value) => !value)}
@@ -773,6 +810,10 @@ function hasWorktreeChanges(project: GitProject): boolean {
 
 function worktreeTabId(file: ChangedFile): string {
   return `${file.staged ? "staged" : "unstaged"}:${file.path}`;
+}
+
+function commitFileTabId(hash: string, filePath: string): string {
+  return `commit:${hash}:${filePath}`;
 }
 
 function upsertWorktreeTab(tabs: WorktreeEditorTab[], incomingTab: WorktreeEditorTab, forcePinned: boolean): WorktreeEditorTab[] {
