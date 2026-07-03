@@ -6,7 +6,6 @@ export type ThemeMode = "system" | "light" | "dark";
 interface TopBarProps {
   project?: GitProject;
   gitVersion: string;
-  statusMessage: string;
   themeMode: ThemeMode;
   leftCollapsed: boolean;
   rightCollapsed: boolean;
@@ -20,7 +19,6 @@ interface TopBarProps {
 export function TopBar({
   project,
   gitVersion,
-  statusMessage,
   themeMode,
   leftCollapsed,
   rightCollapsed,
@@ -40,7 +38,6 @@ export function TopBar({
         <div className="project-subline">
           <span>{project?.path ?? "请先添加一个本地 Git 仓库"}</span>
           <span>{gitVersion}</span>
-          <span>{statusMessage}</span>
         </div>
       </div>
 

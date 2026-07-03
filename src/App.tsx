@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { Check, FolderGit2, GitBranch, PanelLeftOpen, Plus, Terminal, X } from "lucide-react";
+import { Toaster, toast } from "sonner";
 import { apiClient } from "./api/client";
 import { ConsolePanel } from "./components/ConsolePanel";
 import { GraphSidebar } from "./components/GraphSidebar";
@@ -25,6 +26,7 @@ const emptyWorktree: WorktreeState = {
 const DEFAULT_SOURCE_PANE_HEIGHT = 320;
 
 type ResizeTarget = "sidebar" | "detail" | "sourceSplit";
+type ToastId = string | number;
 type BranchDialogState =
   | { mode: "create"; project: GitProject; branchName: string; checkout: boolean }
   | { mode: "switch"; project: GitProject; branches: BranchInfo[]; query: string };
@@ -53,6 +55,44 @@ export function App() {
   const [branchDialog, setBranchDialog] = useState<BranchDialogState | null>(null);
   const [branchDialogBusy, setBranchDialogBusy] = useState(false);
   const autoRefreshBusyRef = useRef(false);
+
+  function rememberStatus(message: string) {
+    setStatusMessage(message);
+  }
+
+  function notifyInfo(message: string, description?: string, id?: ToastId) {
+    rememberStatus(message);
+    toast.info(message, { description, id });
+  }
+
+  function notifySuccess(message: string, description?: string, id?: ToastId) {
+    rememberStatus(message);
+    toast.success(message, { description, id });
+  }
+
+  function notifyError(message: string, description?: string, id?: ToastId) {
+    rememberStatus(message);
+    toast.error(message, { description, id });
+  }
+
+  function notifyLoading(message: string): ToastId {
+    rememberStatus(message);
+    return toast.loading(message);
+  }
+
+  function notifyGitResult(result: GitOperationResult, successMessage: string, fallbackError: string, id?: ToastId): boolean {
+    if (result.ok) {
+      if (successMessage) {
+        notifySuccess(successMessage, undefined, id);
+      } else {
+        rememberStatus("操作完成");
+      }
+      return true;
+    }
+
+    notifyError(result.messageZh ?? fallbackError, gitOutputPreview(result), id);
+    return false;
+  }
 
   useEffect(() => {
     void loadInitialData();
@@ -131,13 +171,13 @@ export function App() {
       setSelectedProjectId(projectList[0]?.id ?? null);
       setGitVersion(formatGitVersion(versionResult));
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "初始化失败");
+      notifyError(error instanceof Error ? error.message : "初始化失败");
     }
   }
 
   async function loadProjectData(project: GitProject) {
     try {
-      setStatusMessage(`正在加载 ${project.name} 的 Git 状态...`);
+      rememberStatus(`正在加载 ${project.name} 的 Git 状态...`);
       const [status, history, worktreeState] = await Promise.all([
         apiClient.getProjectStatus(project),
         apiClient.getHistory(project),
@@ -152,25 +192,25 @@ export function App() {
       setWorktree(worktreeState);
       clearWorktreeEditorTabs();
       setSelectedCommitHash("");
-      setStatusMessage(history.length > 0 ? `已加载 ${history.length} 条提交。` : "当前仓库还没有提交历史。");
+      rememberStatus(history.length > 0 ? `已加载 ${history.length} 条提交。` : "当前仓库还没有提交历史。");
     } catch (error) {
       setCommits([]);
       setWorktree(emptyWorktree);
       clearWorktreeEditorTabs();
-      setStatusMessage(error instanceof Error ? error.message : "加载项目失败");
+      notifyError(error instanceof Error ? error.message : "加载项目失败");
     }
   }
 
   async function handleSelectCommit(hash: string) {
     if (!hash) {
       setSelectedCommitHash("");
-      setStatusMessage("已收起提交。");
+      rememberStatus("已收起提交。");
       return;
     }
 
     setSelectedCommitHash(hash);
     const commit = commits.find((item) => item.hash === hash);
-    setStatusMessage(commit ? `已选中提交 ${commit.shortHash}` : "已选中提交。");
+    rememberStatus(commit ? `已选中提交 ${commit.shortHash}` : "已选中提交。");
   }
 
   async function refreshProjectChanges(project: GitProject) {
@@ -234,7 +274,7 @@ export function App() {
         current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines, pinned: tab.pinned || pinned } : tab))
       );
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "加载工作区文件失败");
+      notifyError(error instanceof Error ? error.message : "加载工作区文件失败");
     }
   }
 
@@ -269,9 +309,9 @@ export function App() {
       setWorktreeTabs((current) =>
         current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines, pinned: tab.pinned || pinned } : tab))
       );
-      setStatusMessage(`正在查看提交 ${commit.shortHash} 的 ${file.path}`);
+      rememberStatus(`正在查看提交 ${commit.shortHash} 的 ${file.path}`);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "加载提交文件失败");
+      notifyError(error instanceof Error ? error.message : "加载提交文件失败");
     }
   }
 
@@ -312,9 +352,9 @@ export function App() {
 
       setProjects((current) => [project, ...current.filter((item) => item.id !== project.id)]);
       setSelectedProjectId(project.id);
-      setStatusMessage(`已添加项目：${project.name}`);
+      notifySuccess("已添加项目", project.name);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "添加项目失败");
+      notifyError(error instanceof Error ? error.message : "添加项目失败");
     }
   }
 
@@ -322,15 +362,15 @@ export function App() {
     try {
       const scannedProjects = await apiClient.chooseAndScanProjects();
       if (scannedProjects.length === 0) {
-        setStatusMessage("未发现新的 Git 项目");
+        notifyInfo("未发现新的 Git 项目");
         return;
       }
 
       setProjects((current) => mergeProjects(scannedProjects, current));
       setSelectedProjectId(scannedProjects[0].id);
-      setStatusMessage(`已扫描到 ${scannedProjects.length} 个 Git 项目`);
+      notifySuccess(`已扫描到 ${scannedProjects.length} 个 Git 项目`);
     } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "扫描目录失败");
+      notifyError(error instanceof Error ? error.message : "扫描目录失败");
     }
   }
 
@@ -348,12 +388,12 @@ export function App() {
     await apiClient.removeProject(projectId);
     setProjects((current) => current.filter((item) => item.id !== projectId));
     setSelectedProjectId((current) => (current === projectId ? projects.find((item) => item.id !== projectId)?.id ?? null : current));
-    setStatusMessage(`已移除项目记录：${project.name}`);
+    notifySuccess("已移除项目记录", project.name);
   }
 
   async function handleOperation(action: string) {
     if (!selectedProject) {
-      setStatusMessage("请先选择一个 Git 项目。");
+      notifyInfo("请先选择一个 Git 项目");
       return;
     }
 
@@ -379,24 +419,22 @@ export function App() {
 
     if (action === "提交") {
       setCommitFocusRequest((value) => value + 1);
-      setStatusMessage("请在工作区输入提交信息后提交。");
+      notifyInfo("请在工作区输入提交信息后提交");
       return;
     }
 
-    setStatusMessage(`暂不支持操作：${action}`);
+    notifyInfo(`暂不支持操作：${action}`);
   }
 
   async function runRemoteOperation(action: "fetch" | "pull" | "push", project: GitProject) {
     const label = { fetch: "抓取", pull: "拉取", push: "推送" }[action];
-    setStatusMessage(`正在${label}...`);
+    const toastId = notifyLoading(`正在${label}...`);
 
     const result = await apiClient[action](project);
-    if (!result.ok) {
-      setStatusMessage(result.messageZh ?? `${label}失败，请查看原始 Git 输出。`);
+    if (!notifyGitResult(result, `${label}完成`, `${label}失败，请查看原始 Git 输出。`, toastId)) {
       return;
     }
 
-    setStatusMessage(`${label}完成。`);
     await loadProjectData(project);
   }
 
@@ -411,21 +449,24 @@ export function App() {
 
     const branchName = branchDialog.branchName.trim();
     if (!branchName) {
-      setStatusMessage("分支名不能为空。");
+      notifyInfo("分支名不能为空");
       return;
     }
 
     setBranchDialogBusy(true);
-    setStatusMessage(`正在创建分支 ${branchName}...`);
+    const toastId = notifyLoading(`正在创建分支 ${branchName}...`);
     try {
       const result = await apiClient.createBranch(branchDialog.project, branchName, branchDialog.checkout);
-      if (!result.ok) {
-        setStatusMessage(result.messageZh ?? "创建分支失败，请查看原始 Git 输出。");
+      if (!notifyGitResult(
+        result,
+        branchDialog.checkout ? `已创建并切换到分支：${branchName}` : `已创建分支：${branchName}`,
+        "创建分支失败，请查看原始 Git 输出。",
+        toastId
+      )) {
         return;
       }
 
       setBranchDialog(null);
-      setStatusMessage(branchDialog.checkout ? `已创建并切换到分支：${branchName}` : `已创建分支：${branchName}`);
       await loadProjectData(branchDialog.project);
     } finally {
       setBranchDialogBusy(false);
@@ -433,15 +474,15 @@ export function App() {
   }
 
   async function switchBranchFromToolbar(project: GitProject) {
-    setStatusMessage("正在读取分支列表...");
+    rememberStatus("正在读取分支列表...");
     const branches = await apiClient.getBranches(project);
     if (branches.length === 0) {
-      setStatusMessage("没有可切换的分支。");
+      notifyInfo("没有可切换的分支");
       return;
     }
 
     setBranchDialog({ mode: "switch", project, branches, query: "" });
-    setStatusMessage(`已加载 ${branches.length} 个分支。`);
+    rememberStatus(`已加载 ${branches.length} 个分支。`);
   }
 
   async function submitSwitchBranch(target: BranchInfo) {
@@ -450,7 +491,7 @@ export function App() {
     }
 
     if (target.current) {
-      setStatusMessage(`当前已经在分支：${target.name}`);
+      notifyInfo(`当前已经在分支：${target.name}`);
       setBranchDialog(null);
       return;
     }
@@ -461,16 +502,14 @@ export function App() {
     }
 
     setBranchDialogBusy(true);
-    setStatusMessage(`正在切换到分支 ${target.name}...`);
+    const toastId = notifyLoading(`正在切换到分支 ${target.name}...`);
     try {
       const result = await apiClient.switchBranch(project, target);
-      if (!result.ok) {
-        setStatusMessage(result.messageZh ?? "切换分支失败，请查看原始 Git 输出。");
+      if (!notifyGitResult(result, `已切换到分支：${target.name}`, "切换分支失败，请查看原始 Git 输出。", toastId)) {
         return;
       }
 
       setBranchDialog(null);
-      setStatusMessage(`已切换到分支：${target.name}`);
       await loadProjectData(project);
     } finally {
       setBranchDialogBusy(false);
@@ -488,14 +527,12 @@ export function App() {
       return;
     }
 
-    setStatusMessage(`正在删除分支 ${target.name}...`);
+    const toastId = notifyLoading(`正在删除分支 ${target.name}...`);
     const result = await apiClient.deleteBranch(project, target.name);
-    if (!result.ok) {
-      setStatusMessage(result.messageZh ?? "删除分支失败，请查看原始 Git 输出。");
+    if (!notifyGitResult(result, `已删除本地分支：${target.name}`, "删除分支失败，请查看原始 Git 输出。", toastId)) {
       return;
     }
 
-    setStatusMessage(`已删除本地分支：${target.name}`);
     await loadProjectData(project);
   }
 
@@ -505,7 +542,7 @@ export function App() {
     }
 
     const result = await apiClient.stageFile(selectedProject, file.path);
-    setStatusMessage(result.ok ? `已暂存：${file.path}` : result.messageZh ?? "暂存失败");
+    notifyGitResult(result, `已暂存：${file.path}`, "暂存失败");
     clearWorktreeEditorTabs();
     await loadProjectData(selectedProject);
   }
@@ -516,7 +553,7 @@ export function App() {
     }
 
     const result = await apiClient.stageAll(selectedProject);
-    setStatusMessage(result.ok ? "已暂存所有更改。" : result.messageZh ?? "暂存所有更改失败");
+    notifyGitResult(result, "已暂存所有更改", "暂存所有更改失败");
     clearWorktreeEditorTabs();
     await loadProjectData(selectedProject);
   }
@@ -527,7 +564,7 @@ export function App() {
     }
 
     const result = await apiClient.unstageFile(selectedProject, file.path);
-    setStatusMessage(result.ok ? `已取消暂存：${file.path}` : result.messageZh ?? "取消暂存失败");
+    notifyGitResult(result, `已取消暂存：${file.path}`, "取消暂存失败");
     clearWorktreeEditorTabs();
     await loadProjectData(selectedProject);
   }
@@ -538,7 +575,7 @@ export function App() {
     }
 
     const result = await apiClient.unstageAll(selectedProject);
-    setStatusMessage(result.ok ? "已取消暂存所有更改。" : result.messageZh ?? "取消暂存所有更改失败");
+    notifyGitResult(result, "已取消暂存所有更改", "取消暂存所有更改失败");
     clearWorktreeEditorTabs();
     await loadProjectData(selectedProject);
   }
@@ -554,19 +591,19 @@ export function App() {
     }
 
     const result = await apiClient.discardFile(selectedProject, file);
-    setStatusMessage(result.ok ? `已放弃更改：${file.path}` : result.messageZh ?? "放弃更改失败");
+    notifyGitResult(result, `已放弃更改：${file.path}`, "放弃更改失败");
     clearWorktreeEditorTabs();
     await loadProjectData(selectedProject);
   }
 
   async function handleCommit(input: CommitInput): Promise<boolean> {
     if (!selectedProject) {
-      setStatusMessage("请先选择一个 Git 项目。");
+      notifyInfo("请先选择一个 Git 项目");
       return false;
     }
 
     if (!input.subject.trim() && !input.amend) {
-      setStatusMessage("提交标题不能为空。");
+      notifyInfo("提交标题不能为空");
       return false;
     }
 
@@ -576,26 +613,29 @@ export function App() {
 
     const shouldAutoStage = worktree.stagedFiles.length === 0 && worktree.unstagedFiles.length > 0;
     const autoStageCount = worktree.unstagedFiles.length;
+    let toastId: ToastId | undefined;
     if (shouldAutoStage) {
-      setStatusMessage(`正在自动暂存 ${autoStageCount} 个未暂存文件并提交。`);
+      toastId = notifyLoading(`正在自动暂存 ${autoStageCount} 个未暂存文件并提交...`);
       const stageResult = await apiClient.stageAll(selectedProject);
       if (!stageResult.ok) {
-        setStatusMessage(stageResult.messageZh ?? "自动暂存失败，提交已取消。");
+        notifyGitResult(stageResult, "", "自动暂存失败，提交已取消。", toastId);
         await loadProjectData(selectedProject);
         return false;
       }
+    } else {
+      toastId = notifyLoading(input.pushAfterCommit ? "正在提交并推送..." : input.amend ? "正在修改上次提交..." : "正在提交...");
     }
 
     const result = await apiClient.commit(selectedProject, input);
     if (!result.ok) {
-      setStatusMessage(result.messageZh ?? "提交失败，请展开原始输出查看原因。");
+      notifyGitResult(result, "", "提交失败，请展开原始输出查看原因。", toastId);
       if (shouldAutoStage) {
         await loadProjectData(selectedProject);
       }
       return false;
     }
 
-    setStatusMessage(
+    notifySuccess(
       shouldAutoStage
         ? input.pushAfterCommit
           ? `已自动暂存 ${autoStageCount} 个文件，提交并推送完成。`
@@ -606,7 +646,9 @@ export function App() {
           ? "提交并推送完成。"
           : input.amend
             ? "已修改上次提交。"
-            : "提交完成。"
+            : "提交完成。",
+      undefined,
+      toastId
     );
     await loadProjectData(selectedProject);
     return true;
@@ -687,7 +729,6 @@ export function App() {
         <TopBar
           project={selectedProject}
           gitVersion={gitVersion}
-          statusMessage={statusMessage}
           themeMode={themeMode}
           leftCollapsed={leftCollapsed}
           rightCollapsed={rightCollapsed}
@@ -757,6 +798,16 @@ export function App() {
           </button>
         ) : null}
         {consoleOpen ? <ConsolePanel project={selectedProject} onClose={() => setConsoleOpen(false)} /> : null}
+        <div className="sr-only" aria-live="polite">
+          {statusMessage}
+        </div>
+        <Toaster
+          position="top-right"
+          theme={resolvedTheme}
+          expand
+          visibleToasts={5}
+          toastOptions={{ duration: 2000 }}
+        />
         {branchDialog ? (
           <BranchDialog
             state={branchDialog}
@@ -881,6 +932,19 @@ function formatGitVersion(result: GitOperationResult): string {
   }
 
   return result.stdout.trim() || "Git 已就绪";
+}
+
+function gitOutputPreview(result: GitOperationResult): string | undefined {
+  const output = [result.stderr, result.stdout]
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .join("\n");
+
+  if (!output) {
+    return undefined;
+  }
+
+  return output.length > 180 ? `${output.slice(0, 180)}...` : output;
 }
 
 function mergeProjects(incoming: GitProject[], current: GitProject[]): GitProject[] {
