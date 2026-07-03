@@ -191,6 +191,10 @@ export function App() {
     await openCommitFile(commit, file, false);
   }
 
+  async function handlePinCommitFile(commit: CommitNode, file: ChangedFile) {
+    await openCommitFile(commit, file, true);
+  }
+
   async function handleSelectWorktreeFile(file: ChangedFile) {
     await openWorktreeFile(file, false);
   }
@@ -205,6 +209,13 @@ export function App() {
     }
 
     const tabId = worktreeTabId(file);
+    const existingTab = worktreeTabs.find((tab) => tab.id === tabId);
+    if (existingTab && pinned) {
+      setWorktreeTabs((current) => current.map((tab) => (tab.id === tabId ? { ...tab, pinned: true } : tab)));
+      setActiveWorktreeTabId(tabId);
+      return;
+    }
+
     const pendingTab: WorktreeEditorTab = { id: tabId, file, diffLines: [], pinned, sourceType: "worktree" };
     setWorktreeTabs((current) => upsertWorktreeTab(current, pendingTab, pinned));
     setActiveWorktreeTabId(tabId);
@@ -225,6 +236,13 @@ export function App() {
     }
 
     const tabId = commitFileTabId(commit.hash, file.path);
+    const existingTab = worktreeTabs.find((tab) => tab.id === tabId);
+    if (existingTab && pinned) {
+      setWorktreeTabs((current) => current.map((tab) => (tab.id === tabId ? { ...tab, pinned: true } : tab)));
+      setActiveWorktreeTabId(tabId);
+      return;
+    }
+
     const pendingTab: WorktreeEditorTab = {
       id: tabId,
       file,
@@ -672,6 +690,7 @@ export function App() {
               selectedHash={selectedCommitHash}
               onSelectCommit={handleSelectCommit}
               onSelectCommitFile={handleSelectCommitFile}
+              onPinCommitFile={handlePinCommitFile}
               selectedCommitFileHash={activeWorktreeTab?.sourceType === "commit" ? activeWorktreeTab.commitHash : undefined}
               selectedCommitFilePath={activeWorktreeTab?.sourceType === "commit" ? activeWorktreeTab.file.path : undefined}
               onOperation={handleOperation}
@@ -684,6 +703,7 @@ export function App() {
             <WorktreeDetailPanel
               tabs={worktreeTabs}
               activeTabId={activeWorktreeTabId}
+              repositoryPath={selectedProject?.path}
               onSelectTab={handleSelectWorktreeTab}
               onCloseTab={handleCloseWorktreeTab}
               onPinTab={handlePinWorktreeTab}

@@ -1,5 +1,6 @@
 import { Copy, FileText, X } from "lucide-react";
 import type { ChangedFile, DiffLine } from "../types/domain";
+import { absoluteFilePath } from "../utils/filePath";
 
 export interface WorktreeEditorTab {
   id: string;
@@ -15,12 +16,13 @@ export interface WorktreeEditorTab {
 interface WorktreeDetailPanelProps {
   tabs: WorktreeEditorTab[];
   activeTabId: string | null;
+  repositoryPath?: string;
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onPinTab: (tabId: string) => void;
 }
 
-export function WorktreeDetailPanel({ tabs, activeTabId, onSelectTab, onCloseTab, onPinTab }: WorktreeDetailPanelProps) {
+export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelectTab, onCloseTab, onPinTab }: WorktreeDetailPanelProps) {
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
 
   if (!activeTab) {
@@ -35,6 +37,7 @@ export function WorktreeDetailPanel({ tabs, activeTabId, onSelectTab, onCloseTab
   }
 
   const { file, diffLines } = activeTab;
+  const activeAbsolutePath = absoluteFilePath(repositoryPath, file.path);
 
   return (
     <aside className="detail-panel worktree-detail-panel editor-detail-panel">
@@ -47,7 +50,7 @@ export function WorktreeDetailPanel({ tabs, activeTabId, onSelectTab, onCloseTab
               aria-selected={tab.id === activeTab.id}
               className={`editor-tab ${tab.id === activeTab.id ? "active" : ""} ${tab.pinned ? "pinned" : "preview"}`}
               key={tab.id}
-              title={tab.pinned ? tab.file.path : `${tab.file.path} - 双击固定`}
+              title={absoluteFilePath(repositoryPath, tab.file.path)}
               onClick={() => onSelectTab(tab.id)}
               onDoubleClick={() => onPinTab(tab.id)}
               onKeyDown={(event) => {
@@ -79,7 +82,7 @@ export function WorktreeDetailPanel({ tabs, activeTabId, onSelectTab, onCloseTab
             </div>
           ))}
         </div>
-        <button type="button" className="icon-button compact-icon" title="复制文件路径" onClick={() => void navigator.clipboard.writeText(file.path)}>
+        <button type="button" className="icon-button compact-icon" title="复制绝对路径" onClick={() => void navigator.clipboard.writeText(activeAbsolutePath)}>
           <Copy size={15} />
         </button>
       </div>

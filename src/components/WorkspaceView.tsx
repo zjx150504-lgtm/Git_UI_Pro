@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Check, ChevronDown, ChevronRight, Plus, RefreshCw, Undo2 } from "lucide-react";
 import type { ChangedFile, CommitInput, GitProject, WorktreeState } from "../types/domain";
+import { absoluteFilePath } from "../utils/filePath";
 
 interface WorkspaceViewProps {
   project?: GitProject;
@@ -191,6 +192,7 @@ export function WorkspaceView({
                 onDiscard={() => onDiscardFile(file)}
                 onSelect={() => onSelectFile(file)}
                 onPin={() => onPinFile(file)}
+                repositoryPath={project?.path}
               />
             ))}
           </ScmSection>
@@ -214,9 +216,9 @@ export function WorkspaceView({
                   primaryActionTitle="取消暂存"
                   primaryActionIcon={<Undo2 size={15} />}
                   onPrimaryAction={() => onUnstageFile(file)}
-                  onDiscard={() => onDiscardFile(file)}
                   onSelect={() => onSelectFile(file)}
                   onPin={() => onPinFile(file)}
+                  repositoryPath={project?.path}
                 />
               ))}
             </ScmSection>
@@ -294,26 +296,57 @@ function ScmFileRow({
   onPrimaryAction,
   onDiscard,
   onSelect,
-  onPin
+  onPin,
+  repositoryPath
 }: {
   file: ChangedFile;
   selected: boolean;
   primaryActionTitle: string;
   primaryActionIcon: React.ReactNode;
   onPrimaryAction: () => void;
-  onDiscard: () => void;
+  onDiscard?: () => void;
   onSelect: () => void;
   onPin: () => void;
+  repositoryPath?: string;
 }) {
+  const clickTimerRef = useRef<number | undefined>();
+
+  useEffect(
+    () => () => {
+      window.clearTimeout(clickTimerRef.current);
+    },
+    []
+  );
+
+  function scheduleSelect() {
+    window.clearTimeout(clickTimerRef.current);
+    clickTimerRef.current = window.setTimeout(() => {
+      onSelect();
+    }, 260);
+  }
+
+  function pinImmediately() {
+    window.clearTimeout(clickTimerRef.current);
+    onPin();
+  }
+
   return (
     <div
       className={`scm-file-row ${selected ? "active" : ""}`}
       role="button"
       tabIndex={0}
-      title={file.path}
-      onClick={onSelect}
-      onDoubleClick={onPin}
+      title={absoluteFilePath(repositoryPath, file.path)}
+      onClick={scheduleSelect}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        pinImmediately();
+      }}
       onKeyDown={(event) => {
+        if (event.ctrlKey && event.key === "Enter") {
+          pinImmediately();
+          return;
+        }
+
         if (event.key === "Enter" || event.key === " ") {
           onSelect();
         }
@@ -321,7 +354,7 @@ function ScmFileRow({
     >
       <span className={`scm-file-icon ${fileIconClass(file.path)}`}>{fileIcon(file.path)}</span>
       <span className="scm-file-main">
-        <span className="scm-file-name" title={file.path}>
+        <span className="scm-file-name">
           {file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? file.path}
         </span>
         <span className="scm-file-dir">{directoryName(file.path)}</span>
@@ -339,17 +372,19 @@ function ScmFileRow({
           >
             {primaryActionIcon}
           </button>
-          <button
-            type="button"
-            className="icon-button compact-icon danger-icon"
-            title="放弃更改"
-            onClick={(event) => {
-              event.stopPropagation();
-              onDiscard();
-            }}
-          >
-            <Undo2 size={15} />
-          </button>
+          {onDiscard ? (
+            <button
+              type="button"
+              className="icon-button compact-icon danger-icon"
+              title="放弃更改"
+              onClick={(event) => {
+                event.stopPropagation();
+                onDiscard();
+              }}
+            >
+              <Undo2 size={15} />
+            </button>
+          ) : null}
         </span>
         <span className={`scm-file-status ${file.status}`}>{statusCode(file.status)}</span>
       </span>

@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight, Cloud, CloudDownload, CloudUpload, GitBranch
 import { useEffect, useMemo, useRef, useState } from "react";
 import { apiClient } from "../api/client";
 import type { ChangedFile, CommitNode, GitProject } from "../types/domain";
+import { absoluteFilePath } from "../utils/filePath";
 
 interface GraphSidebarProps {
   project?: GitProject;
@@ -9,6 +10,7 @@ interface GraphSidebarProps {
   selectedHash: string;
   onSelectCommit: (hash: string) => void;
   onSelectCommitFile: (commit: CommitNode, file: ChangedFile) => void;
+  onPinCommitFile: (commit: CommitNode, file: ChangedFile) => void;
   selectedCommitFileHash?: string;
   selectedCommitFilePath?: string;
   onOperation: (operation: string) => void;
@@ -32,6 +34,7 @@ export function GraphSidebar({
   selectedHash,
   onSelectCommit,
   onSelectCommitFile,
+  onPinCommitFile,
   selectedCommitFileHash,
   selectedCommitFilePath,
   onOperation,
@@ -255,11 +258,13 @@ export function GraphSidebar({
                   details={commitDetailsByHash[commit.hash]}
                   loadingDetails={loadingDetailsHash === commit.hash}
                   detailsError={detailsErrorByHash[commit.hash]}
+                  repositoryPath={project?.path}
                   selectedFilePath={selectedCommitFileHash === commit.hash ? selectedCommitFilePath : undefined}
                   isFirst={index === 0}
                   isLast={index === filteredCommits.length - 1}
                   onSelect={() => void handleCommitClick(commit)}
                   onSelectFile={(file) => onSelectCommitFile(commit, file)}
+                  onPinFile={(file) => onPinCommitFile(commit, file)}
                   onHoverStart={(row) => scheduleHover(commit, row)}
                   onHoverEnd={scheduleCloseHover}
                 />
@@ -283,11 +288,13 @@ function GraphCommitRow({
   details,
   loadingDetails,
   detailsError,
+  repositoryPath,
   selectedFilePath,
   isFirst,
   isLast,
   onSelect,
   onSelectFile,
+  onPinFile,
   onHoverStart,
   onHoverEnd
 }: {
@@ -298,11 +305,13 @@ function GraphCommitRow({
   details?: CommitNode;
   loadingDetails: boolean;
   detailsError?: string;
+  repositoryPath?: string;
   selectedFilePath?: string;
   isFirst: boolean;
   isLast: boolean;
   onSelect: () => void;
   onSelectFile: (file: ChangedFile) => void;
+  onPinFile: (file: ChangedFile) => void;
   onHoverStart: (row: HTMLElement) => void;
   onHoverEnd: () => void;
 }) {
@@ -374,8 +383,10 @@ function GraphCommitRow({
           commit={details ?? commit}
           loading={loadingDetails}
           error={detailsError}
+          repositoryPath={repositoryPath}
           selectedFilePath={selectedFilePath}
           onSelectFile={onSelectFile}
+          onPinFile={onPinFile}
         />
       ) : null}
     </div>
@@ -386,14 +397,18 @@ function GraphCommitExpansion({
   commit,
   loading,
   error,
+  repositoryPath,
   selectedFilePath,
-  onSelectFile
+  onSelectFile,
+  onPinFile
 }: {
   commit: CommitNode;
   loading: boolean;
   error?: string;
+  repositoryPath?: string;
   selectedFilePath?: string;
   onSelectFile: (file: ChangedFile) => void;
+  onPinFile: (file: ChangedFile) => void;
 }) {
   if (loading) {
     return <div className="graph-commit-expansion graph-commit-expansion-loading" aria-label="正在读取变更文件" />;
@@ -410,22 +425,71 @@ function GraphCommitExpansion({
   return (
     <div className="graph-commit-expansion" aria-label="提交变更文件">
       {commit.files.map((file) => (
-        <button
-          type="button"
-          className={`graph-commit-file-row ${selectedFilePath === file.path ? "active" : ""}`}
-          title={file.path}
+        <GraphCommitFileRow
+          file={file}
+          repositoryPath={repositoryPath}
+          selected={selectedFilePath === file.path}
           key={`${commit.hash}-${file.path}-${file.status}`}
-          onClick={() => onSelectFile(file)}
-        >
-          <span className={`scm-file-icon ${fileIconClass(file.path)}`}>{fileIcon(file.path)}</span>
-          <span className="graph-commit-file-main">
-            <span className="graph-commit-file-name">{file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? file.path}</span>
-            <span className="graph-commit-file-dir">{directoryName(file.path)}</span>
-          </span>
-          <span className={`graph-commit-file-status ${file.status}`}>{statusCode(file.status)}</span>
-        </button>
+          onSelect={() => onSelectFile(file)}
+          onPin={() => onPinFile(file)}
+        />
       ))}
     </div>
+  );
+}
+
+function GraphCommitFileRow({
+  file,
+  repositoryPath,
+  selected,
+  onSelect,
+  onPin
+}: {
+  file: ChangedFile;
+  repositoryPath?: string;
+  selected: boolean;
+  onSelect: () => void;
+  onPin: () => void;
+}) {
+  const clickTimerRef = useRef<number | undefined>();
+
+  useEffect(
+    () => () => {
+      window.clearTimeout(clickTimerRef.current);
+    },
+    []
+  );
+
+  function scheduleSelect() {
+    window.clearTimeout(clickTimerRef.current);
+    clickTimerRef.current = window.setTimeout(() => {
+      onSelect();
+    }, 260);
+  }
+
+  function pinImmediately() {
+    window.clearTimeout(clickTimerRef.current);
+    onPin();
+  }
+
+  return (
+    <button
+      type="button"
+      className={`graph-commit-file-row ${selected ? "active" : ""}`}
+      title={absoluteFilePath(repositoryPath, file.path)}
+      onClick={scheduleSelect}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        pinImmediately();
+      }}
+    >
+      <span className={`scm-file-icon ${fileIconClass(file.path)}`}>{fileIcon(file.path)}</span>
+      <span className="graph-commit-file-main">
+        <span className="graph-commit-file-name">{file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? file.path}</span>
+        <span className="graph-commit-file-dir">{directoryName(file.path)}</span>
+      </span>
+      <span className={`graph-commit-file-status ${file.status}`}>{statusCode(file.status)}</span>
+    </button>
   );
 }
 

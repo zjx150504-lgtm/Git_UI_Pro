@@ -2841,7 +2841,7 @@ button {
 }
 
 .editor-tab.preview .editor-tab-name {
-  font-style: italic;
+  font-style: oblique 12deg;
 }
 
 .editor-tab-name {
@@ -4033,6 +4033,28 @@ code,
 .source-control-pane .graph-section-title .graph-title-toggle svg {
   width: 16px;
   height: 16px;
+}
+
+.editor-tab.preview,
+.editor-tab.preview .editor-tab-name {
+  font-synthesis: style;
+  font-style: oblique 12deg;
+  font-weight: 500;
+}
+
+.editor-tab.pinned,
+.editor-tab.pinned .editor-tab-name {
+  font-style: normal;
+  font-weight: 500;
+}
+
+.scm-file-row {
+  user-select: none;
+}
+
+.source-control-pane .scm-commit-box textarea::placeholder {
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 @media (prefers-reduced-motion: reduce) {
