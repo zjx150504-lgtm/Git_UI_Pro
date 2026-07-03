@@ -3486,6 +3486,7 @@ button {
   grid-template-columns: minmax(0, 1fr) max-content;
   gap: 6px;
   padding: 0 10px;
+  overflow: visible;
 }
 
 .graph-title-label {
@@ -3536,6 +3537,50 @@ button {
 .graph-toolbar .icon-button.active {
   color: var(--blue);
   background: transparent;
+}
+
+.graph-toolbar {
+  position: relative;
+  z-index: 30;
+  overflow: visible;
+}
+
+.graph-toolbar .compact-icon {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+}
+
+.graph-view-menu {
+  top: 30px;
+  right: 0;
+  z-index: 90;
+  min-width: 202px;
+}
+
+.graph-view-menu button {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 34px;
+  font-size: 13px;
+}
+
+.graph-view-menu-check {
+  display: inline-grid;
+  width: 18px;
+  place-items: center;
+  color: var(--text);
+}
+
+.graph-view-menu button.active {
+  background: transparent;
+}
+
+.graph-view-menu button:hover {
+  background: var(--surface);
 }
 
 .source-control-pane .graph-search-row {
@@ -3775,7 +3820,7 @@ button {
 
 .graph-commit-file-row {
   position: relative;
-  grid-template-columns: 24px 20px minmax(0, 1fr) 18px;
+  grid-template-columns: calc(24px + var(--graph-file-indent, 0px)) 20px minmax(0, 1fr) 18px;
   width: 100%;
   color: var(--text);
   text-align: left;
@@ -3794,10 +3839,35 @@ button {
   top: 1px;
   right: 0;
   bottom: 1px;
-  left: 24px;
+  left: calc(24px + var(--graph-file-indent, 0px));
   border-radius: 3px;
   background: transparent;
   pointer-events: none;
+}
+
+.graph-commit-file-tree {
+  display: grid;
+}
+
+.graph-commit-folder-row {
+  display: grid;
+  grid-template-columns: calc(24px + var(--graph-file-indent, 0px)) 20px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  min-height: 24px;
+  padding: 0 3px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.graph-commit-folder-row svg {
+  color: var(--muted-strong);
+}
+
+.graph-commit-folder-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .graph-commit-file-row:hover::after {

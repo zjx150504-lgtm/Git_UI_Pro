@@ -1,5 +1,5 @@
-import { ChevronDown, ChevronRight, Cloud, CloudDownload, CloudUpload, GitBranch, MoreHorizontal, Plus, RefreshCw, Search } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, ChevronRight, Cloud, CloudDownload, CloudUpload, GitBranch, MoreHorizontal, Plus, RefreshCw, Search } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { apiClient } from "../api/client";
 import type { ChangedFile, CommitNode, GitProject } from "../types/domain";
 import { absoluteFilePath } from "../utils/filePath";
@@ -27,6 +27,9 @@ const graphOperations = [
 ];
 
 type GraphTone = "local" | "remote" | "synced" | "plain";
+type GraphFileViewMode = "list" | "tree";
+
+const GRAPH_TOOLBAR_ICON_SIZE = 16;
 
 export function GraphSidebar({
   project,
@@ -43,6 +46,8 @@ export function GraphSidebar({
 }: GraphSidebarProps) {
   const [commitQuery, setCommitQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [fileViewMode, setFileViewMode] = useState<GraphFileViewMode>("tree");
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [expandedHash, setExpandedHash] = useState<string | null>(null);
   const [commitDetailsByHash, setCommitDetailsByHash] = useState<Record<string, CommitNode>>({});
   const [loadingDetailsHash, setLoadingDetailsHash] = useState<string | null>(null);
@@ -53,6 +58,8 @@ export function GraphSidebar({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const searchRowRef = useRef<HTMLDivElement>(null);
+  const viewMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const viewMenuRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<number | undefined>();
   const closeTimerRef = useRef<number | undefined>();
   const filteredCommits = useMemo(() => {
@@ -97,6 +104,33 @@ export function GraphSidebar({
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [searchOpen]);
+
+  useEffect(() => {
+    if (!viewMenuOpen) {
+      return;
+    }
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (viewMenuRef.current?.contains(target) || viewMenuButtonRef.current?.contains(target)) {
+        return;
+      }
+
+      setViewMenuOpen(false);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setViewMenuOpen(false);
+      }
+    };
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [viewMenuOpen]);
 
   useEffect(() => {
     setExpandedHash(null);
@@ -147,6 +181,11 @@ export function GraphSidebar({
 
   function keepHoverOpen() {
     window.clearTimeout(closeTimerRef.current);
+  }
+
+  function selectFileViewMode(mode: GraphFileViewMode) {
+    setFileViewMode(mode);
+    setViewMenuOpen(false);
   }
 
   async function handleCommitClick(commit: CommitNode) {
@@ -231,21 +270,63 @@ export function GraphSidebar({
               type="button"
               className={`icon-button compact-icon ${searchOpen || commitQuery ? "active" : ""}`}
               title="搜索提交"
-              onClick={() => setSearchOpen((value) => !value)}
+              onClick={() => {
+                setViewMenuOpen(false);
+                setSearchOpen((value) => !value);
+              }}
             >
-              <Search size={14} />
+              <Search size={GRAPH_TOOLBAR_ICON_SIZE} />
             </button>
             {graphOperations.map((operation) => {
               const Icon = operation.icon;
               return (
                 <button type="button" className="icon-button compact-icon" title={operation.title} key={operation.label} onClick={() => onOperation(operation.label)}>
-                  <Icon size={14} />
+                  <Icon size={GRAPH_TOOLBAR_ICON_SIZE} />
                 </button>
               );
             })}
-            <button type="button" className="icon-button compact-icon" title="更多图表操作">
-              <MoreHorizontal size={14} />
+            <button
+              ref={viewMenuButtonRef}
+              type="button"
+              className={`icon-button compact-icon ${viewMenuOpen ? "active" : ""}`}
+              title="更多图表操作"
+              aria-haspopup="menu"
+              aria-expanded={viewMenuOpen}
+              onClick={() => {
+                setSearchOpen(false);
+                setViewMenuOpen((value) => !value);
+              }}
+            >
+              <MoreHorizontal size={GRAPH_TOOLBAR_ICON_SIZE} />
             </button>
+            {viewMenuOpen ? (
+              <div className="floating-menu graph-view-menu" role="menu" ref={viewMenuRef}>
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={fileViewMode === "list"}
+                  className={fileViewMode === "list" ? "active" : ""}
+                  onClick={() => selectFileViewMode("list")}
+                >
+                  <span className="graph-view-menu-check" aria-hidden="true">
+                    {fileViewMode === "list" ? <Check size={14} /> : null}
+                  </span>
+                  以列表形式查看
+                </button>
+                <button
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={fileViewMode === "tree"}
+                  className={fileViewMode === "tree" ? "active" : ""}
+                  onClick={() => selectFileViewMode("tree")}
+                >
+                  <span className="graph-view-menu-check" aria-hidden="true">
+                    {fileViewMode === "tree" ? <Check size={14} /> : null}
+                  </span>
+                  以树形式查看
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -287,6 +368,7 @@ export function GraphSidebar({
                   details={commitDetailsByHash[commit.hash]}
                   loadingDetails={loadingDetailsHash === commit.hash}
                   detailsError={detailsErrorByHash[commit.hash]}
+                  fileViewMode={fileViewMode}
                   repositoryPath={project?.path}
                   selectedFilePath={selectedCommitFileHash === commit.hash ? selectedCommitFilePath : undefined}
                   isFirst={index === 0}
@@ -317,6 +399,7 @@ function GraphCommitRow({
   details,
   loadingDetails,
   detailsError,
+  fileViewMode,
   repositoryPath,
   selectedFilePath,
   isFirst,
@@ -334,6 +417,7 @@ function GraphCommitRow({
   details?: CommitNode;
   loadingDetails: boolean;
   detailsError?: string;
+  fileViewMode: GraphFileViewMode;
   repositoryPath?: string;
   selectedFilePath?: string;
   isFirst: boolean;
@@ -381,6 +465,7 @@ function GraphCommitRow({
           commit={details ?? commit}
           loading={loadingDetails}
           error={detailsError}
+          viewMode={fileViewMode}
           repositoryPath={repositoryPath}
           selectedFilePath={selectedFilePath}
           onSelectFile={onSelectFile}
@@ -395,6 +480,7 @@ function GraphCommitExpansion({
   commit,
   loading,
   error,
+  viewMode,
   repositoryPath,
   selectedFilePath,
   onSelectFile,
@@ -403,6 +489,7 @@ function GraphCommitExpansion({
   commit: CommitNode;
   loading: boolean;
   error?: string;
+  viewMode: GraphFileViewMode;
   repositoryPath?: string;
   selectedFilePath?: string;
   onSelectFile: (file: ChangedFile) => void;
@@ -420,6 +507,20 @@ function GraphCommitExpansion({
     return <div className="graph-commit-expansion graph-commit-expansion-state">没有可显示的变更文件。</div>;
   }
 
+  if (viewMode === "tree") {
+    return (
+      <div className="graph-commit-expansion" aria-label="提交变更文件">
+        <GraphCommitFileTree
+          files={commit.files}
+          repositoryPath={repositoryPath}
+          selectedFilePath={selectedFilePath}
+          onSelectFile={onSelectFile}
+          onPinFile={onPinFile}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="graph-commit-expansion" aria-label="提交变更文件">
       {commit.files.map((file) => (
@@ -427,6 +528,7 @@ function GraphCommitExpansion({
           file={file}
           repositoryPath={repositoryPath}
           selected={selectedFilePath === file.path}
+          showDirectory
           key={`${commit.hash}-${file.path}-${file.status}`}
           onSelect={() => onSelectFile(file)}
           onPin={() => onPinFile(file)}
@@ -436,16 +538,123 @@ function GraphCommitExpansion({
   );
 }
 
+type GraphFileTreeEntry =
+  | {
+      type: "directory";
+      name: string;
+      path: string;
+      children: GraphFileTreeEntry[];
+    }
+  | {
+      type: "file";
+      name: string;
+      file: ChangedFile;
+    };
+
+type MutableGraphFileDirectory = {
+  name: string;
+  path: string;
+  directories: Map<string, MutableGraphFileDirectory>;
+  files: ChangedFile[];
+};
+
+function GraphCommitFileTree({
+  files,
+  repositoryPath,
+  selectedFilePath,
+  onSelectFile,
+  onPinFile
+}: {
+  files: ChangedFile[];
+  repositoryPath?: string;
+  selectedFilePath?: string;
+  onSelectFile: (file: ChangedFile) => void;
+  onPinFile: (file: ChangedFile) => void;
+}) {
+  const entries = useMemo(() => buildGraphFileTree(files), [files]);
+
+  return (
+    <div className="graph-commit-file-tree">
+      {entries.map((entry) => (
+        <GraphCommitFileTreeEntry
+          entry={entry}
+          level={0}
+          repositoryPath={repositoryPath}
+          selectedFilePath={selectedFilePath}
+          onSelectFile={onSelectFile}
+          onPinFile={onPinFile}
+          key={entry.type === "directory" ? `dir-${entry.path}` : `file-${entry.file.path}-${entry.file.status}`}
+        />
+      ))}
+    </div>
+  );
+}
+
+function GraphCommitFileTreeEntry({
+  entry,
+  level,
+  repositoryPath,
+  selectedFilePath,
+  onSelectFile,
+  onPinFile
+}: {
+  entry: GraphFileTreeEntry;
+  level: number;
+  repositoryPath?: string;
+  selectedFilePath?: string;
+  onSelectFile: (file: ChangedFile) => void;
+  onPinFile: (file: ChangedFile) => void;
+}) {
+  if (entry.type === "file") {
+    return (
+      <GraphCommitFileRow
+        file={entry.file}
+        repositoryPath={repositoryPath}
+        selected={selectedFilePath === entry.file.path}
+        showDirectory={false}
+        level={level}
+        onSelect={() => onSelectFile(entry.file)}
+        onPin={() => onPinFile(entry.file)}
+      />
+    );
+  }
+
+  return (
+    <>
+      <div className="graph-commit-folder-row" style={graphFileIndentStyle(level)}>
+        <span aria-hidden="true" />
+        <ChevronDown size={13} />
+        <span className="graph-commit-folder-name">{entry.name}</span>
+      </div>
+      {entry.children.map((child) => (
+        <GraphCommitFileTreeEntry
+          entry={child}
+          level={level + 1}
+          repositoryPath={repositoryPath}
+          selectedFilePath={selectedFilePath}
+          onSelectFile={onSelectFile}
+          onPinFile={onPinFile}
+          key={child.type === "directory" ? `dir-${child.path}` : `file-${child.file.path}-${child.file.status}`}
+        />
+      ))}
+    </>
+  );
+}
+
 function GraphCommitFileRow({
   file,
   repositoryPath,
   selected,
+  level = 0,
+  showDirectory = true,
   onSelect,
   onPin
 }: {
   file: ChangedFile;
   repositoryPath?: string;
   selected: boolean;
+  level?: number;
+  showDirectory?: boolean;
   onSelect: () => void;
   onPin: () => void;
 }) {
@@ -474,6 +683,7 @@ function GraphCommitFileRow({
     <button
       type="button"
       className={`graph-commit-file-row ${selected ? "active" : ""}`}
+      style={graphFileIndentStyle(level)}
       title={absoluteFilePath(repositoryPath, file.path)}
       onClick={scheduleSelect}
       onDoubleClick={(event) => {
@@ -484,11 +694,66 @@ function GraphCommitFileRow({
       <span className={`scm-file-icon ${fileIconClass(file.path)}`}>{fileIcon(file.path)}</span>
       <span className="graph-commit-file-main">
         <span className="graph-commit-file-name">{file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? file.path}</span>
-        <span className="graph-commit-file-dir">{directoryName(file.path)}</span>
+        {showDirectory ? <span className="graph-commit-file-dir">{directoryName(file.path)}</span> : null}
       </span>
       <span className={`graph-commit-file-status ${file.status}`}>{statusCode(file.status)}</span>
     </button>
   );
+}
+
+function buildGraphFileTree(files: ChangedFile[]): GraphFileTreeEntry[] {
+  const root: MutableGraphFileDirectory = createGraphFileDirectory("", "");
+
+  for (const file of files) {
+    const parts = file.path.split(/[\\/]/).filter(Boolean);
+    let directory = root;
+
+    for (const part of parts.slice(0, -1)) {
+      const nextPath = directory.path ? `${directory.path}/${part}` : part;
+      const existing = directory.directories.get(part);
+      if (existing) {
+        directory = existing;
+        continue;
+      }
+
+      const nextDirectory = createGraphFileDirectory(part, nextPath);
+      directory.directories.set(part, nextDirectory);
+      directory = nextDirectory;
+    }
+
+    directory.files.push(file);
+  }
+
+  return graphFileDirectoryEntries(root);
+}
+
+function createGraphFileDirectory(name: string, path: string): MutableGraphFileDirectory {
+  return {
+    name,
+    path,
+    directories: new Map(),
+    files: []
+  };
+}
+
+function graphFileDirectoryEntries(directory: MutableGraphFileDirectory): GraphFileTreeEntry[] {
+  const directories: GraphFileTreeEntry[] = Array.from(directory.directories.values()).map((child) => ({
+    type: "directory",
+    name: child.name,
+    path: child.path,
+    children: graphFileDirectoryEntries(child)
+  }));
+  const files: GraphFileTreeEntry[] = directory.files.map((file) => ({
+    type: "file",
+    name: file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? file.path,
+    file
+  }));
+
+  return [...directories, ...files].sort((left, right) => left.name.localeCompare(right.name, "zh-Hans-CN", { numeric: true, sensitivity: "base" }));
+}
+
+function graphFileIndentStyle(level: number): CSSProperties {
+  return { "--graph-file-indent": `${level * 16}px` } as CSSProperties;
 }
 
 function statusCode(status: ChangedFile["status"]): string {
