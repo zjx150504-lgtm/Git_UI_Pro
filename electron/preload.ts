@@ -1,8 +1,19 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from "electron";
+
+type WindowState = {
+  isMaximized: boolean;
+  isFullScreen: boolean;
+};
 
 contextBridge.exposeInMainWorld("gitUI", {
   runAppCommand: (command: string) => ipcRenderer.invoke("app:command", command),
   setNativeTheme: (themeSource: "system" | "light" | "dark") => ipcRenderer.invoke("theme:setNative", themeSource),
+  getWindowState: () => ipcRenderer.invoke("window:getState"),
+  onWindowStateChange: (callback: (state: WindowState) => void) => {
+    const listener = (_event: IpcRendererEvent, state: WindowState) => callback(state);
+    ipcRenderer.on("window:state", listener);
+    return () => ipcRenderer.removeListener("window:state", listener);
+  },
   getGitVersion: () => ipcRenderer.invoke("git:getVersion"),
   chooseDirectory: () => ipcRenderer.invoke("dialog:chooseDirectory"),
   getProjects: () => ipcRenderer.invoke("projects:list"),

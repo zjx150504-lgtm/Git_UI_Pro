@@ -31,7 +31,7 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
       <aside className="detail-panel worktree-detail-panel editor-detail-panel empty">
         <div className="editor-empty-state">
           <FileText size={20} />
-          <span>选择文件查看变更。</span>
+          <span>选择文件查看变更</span>
         </div>
       </aside>
     );

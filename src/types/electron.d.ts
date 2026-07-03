@@ -1,8 +1,15 @@
 import type { BranchInfo, ChangedFile, CommitInput, CommitNode, DiffLine, GitOperationResult, GitProject, GitStatusSummary, WorktreeState } from "./domain";
 
+export interface WindowState {
+  isMaximized: boolean;
+  isFullScreen: boolean;
+}
+
 export interface GitUIBridge {
   runAppCommand: (command: string) => Promise<boolean>;
   setNativeTheme: (themeSource: "system" | "light" | "dark") => Promise<boolean>;
+  getWindowState: () => Promise<WindowState>;
+  onWindowStateChange: (callback: (state: WindowState) => void) => () => void;
   getGitVersion: () => Promise<GitOperationResult>;
   chooseDirectory: () => Promise<string | null>;
   getProjects: () => Promise<GitProject[]>;

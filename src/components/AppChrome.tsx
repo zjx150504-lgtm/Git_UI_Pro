@@ -1,5 +1,6 @@
-import { GitBranch, Minus, Square, X } from "lucide-react";
+import { Copy, GitBranch, Minus, Square, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import type { WindowState } from "../types/electron";
 
 interface AppChromeProps {
   onCommand: (command: string) => void;
@@ -59,7 +60,9 @@ const chromeMenus: ChromeMenu[] = [
 
 export function AppChrome({ onCommand }: AppChromeProps) {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [windowState, setWindowState] = useState<WindowState>({ isMaximized: false, isFullScreen: false });
   const rootRef = useRef<HTMLDivElement>(null);
+  const shouldRestore = windowState.isMaximized || windowState.isFullScreen;
 
   useEffect(() => {
     if (!openMenuId) {
@@ -87,6 +90,23 @@ export function AppChrome({ onCommand }: AppChromeProps) {
     };
   }, [openMenuId]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const statePromise = window.gitUI?.getWindowState?.();
+    void statePromise?.then((state) => {
+      if (!cancelled) {
+        setWindowState(state);
+      }
+    });
+
+    const unsubscribe = window.gitUI?.onWindowStateChange?.((state) => setWindowState(state));
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, []);
+
   function runCommand(command: string) {
     setOpenMenuId(null);
     onCommand(command);
@@ -104,8 +124,8 @@ export function AppChrome({ onCommand }: AppChromeProps) {
           <button type="button" title="最小化" onClick={() => runCommand("window:minimize")}>
             <Minus size={14} />
           </button>
-          <button type="button" title="最大化/还原" onClick={() => runCommand("window:toggleMaximize")}>
-            <Square size={12} />
+          <button type="button" title={shouldRestore ? "还原" : "最大化"} onClick={() => runCommand("window:toggleMaximize")}>
+            {shouldRestore ? <Copy size={12} /> : <Square size={12} />}
           </button>
           <button type="button" className="close" title="关闭" onClick={() => runCommand("window:close")}>
             <X size={14} />

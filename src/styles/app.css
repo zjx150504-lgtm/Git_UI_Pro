@@ -929,7 +929,8 @@ button {
   grid-template-rows: 76px minmax(0, 1fr);
   position: relative;
   min-width: 0;
-  height: 100vh;
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -1138,7 +1139,9 @@ button {
 .main-grid {
   display: grid;
   grid-template-columns: minmax(420px, 1fr) 6px var(--detail-width);
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .right-collapsed .main-grid {
@@ -2453,12 +2456,16 @@ button {
 }
 
 .editor-empty-state {
-  display: grid;
-  gap: 10px;
-  place-content: center;
-  min-height: 100%;
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  justify-self: center;
+  align-self: center;
+  min-height: 0;
   color: var(--muted);
-  text-align: center;
+  text-align: left;
+  white-space: nowrap;
 }
 
 .source-control-pane {
@@ -3355,9 +3362,9 @@ button {
 }
 
 .editor-detail-panel.empty .editor-empty-state {
-  place-content: start center;
-  min-height: 0;
-  padding-top: clamp(120px, 24vh, 220px);
+  align-self: start;
+  justify-self: center;
+  margin-top: clamp(120px, 24vh, 220px);
   color: color-mix(in srgb, var(--muted) 80%, transparent);
   font-size: 13px;
 }
@@ -4320,13 +4327,17 @@ button {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 16%, transparent);
 }
 
-.floating-menu,
-.commit-menu,
 .branch-dialog,
-.commit-hover-card,
-.graph-search-row {
+.commit-hover-card {
   animation: surface-in var(--motion-slow) var(--motion-ease-out);
   transform-origin: top right;
+}
+
+.floating-menu,
+.commit-menu,
+.graph-search-row {
+  animation: none;
+  transform: none;
 }
 
 .branch-dialog-backdrop {
@@ -4656,6 +4667,8 @@ code,
 
 .source-control-pane {
   grid-template-rows: minmax(180px, var(--scm-pane-height)) 10px minmax(130px, 1fr);
+  height: 100%;
+  min-height: 0;
 }
 
 .source-control-pane.source-pane-customized {

@@ -9,6 +9,10 @@ const gitService = new GitService();
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 type AppThemeSource = "system" | "light" | "dark";
+type WindowState = {
+  isMaximized: boolean;
+  isFullScreen: boolean;
+};
 
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
@@ -25,6 +29,7 @@ async function createWindow(): Promise<void> {
       nodeIntegration: false
     }
   });
+  registerWindowStateEvents(mainWindow);
 
   if (isDev && process.env.VITE_DEV_SERVER_URL) {
     await mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
@@ -43,6 +48,8 @@ function registerIpc(): void {
     applyNativeTheme(themeSource);
     return true;
   });
+
+  ipcMain.handle("window:getState", () => getWindowState());
 
   ipcMain.handle("git:getVersion", () => gitService.getVersion());
 
@@ -110,6 +117,30 @@ function applyNativeTheme(themeSource: AppThemeSource): void {
   mainWindow?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? "#101317" : "#f5f7fa");
 }
 
+function getWindowState(): WindowState {
+  return {
+    isMaximized: mainWindow?.isMaximized() ?? false,
+    isFullScreen: mainWindow?.isFullScreen() ?? false
+  };
+}
+
+function emitWindowState(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  mainWindow.webContents.send("window:state", getWindowState());
+}
+
+function registerWindowStateEvents(window: BrowserWindow): void {
+  const emit = () => emitWindowState();
+  window.on("maximize", emit);
+  window.on("unmaximize", emit);
+  window.on("enter-full-screen", emit);
+  window.on("leave-full-screen", emit);
+  window.on("restore", emit);
+}
+
 function runAppCommand(command: string): void {
   if (command === "app:quit") {
     app.quit();
@@ -165,11 +196,14 @@ function runAppCommand(command: string): void {
       mainWindow.minimize();
       break;
     case "window:toggleMaximize":
-      if (mainWindow.isMaximized()) {
+      if (mainWindow.isFullScreen()) {
+        mainWindow.setFullScreen(false);
+      } else if (mainWindow.isMaximized()) {
         mainWindow.unmaximize();
       } else {
         mainWindow.maximize();
       }
+      emitWindowState();
       break;
     case "window:close":
       mainWindow.close();
