@@ -2701,6 +2701,19 @@ button {
   background: color-mix(in srgb, #ffffff 10%, transparent);
 }
 
+.source-control-pane .scm-commit-menu,
+.source-control-pane .scm-commit-menu:hover,
+.source-control-pane .scm-commit-menu:active {
+  transform: none;
+}
+
+.source-control-pane .scm-commit-menu svg,
+.source-control-pane .scm-commit-menu:hover svg,
+.source-control-pane .scm-commit-menu:active svg {
+  transform: none;
+  transition: color var(--motion-base) var(--motion-ease);
+}
+
 .commit-menu {
   top: 38px;
   right: 0;
@@ -3488,7 +3501,7 @@ button {
   position: absolute;
   z-index: 0;
   left: 12px;
-  top: 16px;
+  top: 14px;
   bottom: 0;
   width: 2px;
   border-radius: 999px;
@@ -3602,7 +3615,7 @@ button {
 }
 
 .graph-commit-file-row:hover {
-  background: var(--surface);
+  background: transparent;
 }
 
 .graph-commit-file-main {
@@ -3666,12 +3679,27 @@ button {
 }
 
 .graph-commit-expansion {
+  position: relative;
   margin: -1px 0 3px;
   border-left: 0;
   padding: 0;
 }
 
+.graph-commit-expansion::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  left: 12px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 999px;
+  background: #2f98ff;
+  pointer-events: none;
+}
+
 .graph-commit-file-row {
+  position: relative;
   grid-template-columns: 24px 20px minmax(0, 1fr) 18px;
   width: 100%;
   color: var(--text);
@@ -3684,9 +3712,35 @@ button {
   content: "";
 }
 
+.graph-commit-file-row::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  top: 1px;
+  right: 0;
+  bottom: 1px;
+  left: 24px;
+  border-radius: 3px;
+  background: transparent;
+  pointer-events: none;
+}
+
+.graph-commit-file-row:hover::after {
+  background: var(--surface);
+}
+
+.graph-commit-file-row > * {
+  position: relative;
+  z-index: 1;
+}
+
 .graph-commit-file-row.active {
   outline: 1px solid color-mix(in srgb, var(--accent) 62%, transparent);
   outline-offset: -1px;
+  background: transparent;
+}
+
+.graph-commit-file-row.active::after {
   background: color-mix(in srgb, var(--surface-hover) 70%, transparent);
 }
 
@@ -3745,40 +3799,7 @@ button {
     border-color var(--motion-base) var(--motion-ease),
     color var(--motion-base) var(--motion-ease),
     opacity var(--motion-base) var(--motion-ease),
-    outline-color var(--motion-base) var(--motion-ease),
-    transform var(--motion-fast) var(--motion-ease);
-}
-
-.icon-button:hover,
-.toolbar-button:hover,
-.text-button:hover,
-.filter-button:hover,
-.scm-commit-button:hover:not(:disabled),
-.scm-commit-menu:hover,
-.graph-title-toggle:hover,
-.project-rail-item:hover,
-.graph-commit-row:hover,
-.graph-commit-file-row:hover,
-.scm-file-row:hover,
-.branch-list-item:hover,
-.editor-tab:hover {
-  transform: translateY(-1px);
-}
-
-.icon-button:active,
-.toolbar-button:active,
-.text-button:active,
-.filter-button:active,
-.scm-commit-button:active:not(:disabled),
-.scm-commit-menu:active,
-.graph-title-toggle:active,
-.project-rail-item:active,
-.graph-commit-row:active,
-.graph-commit-file-row:active,
-.scm-file-row:active,
-.branch-list-item:active,
-.editor-tab:active {
-  transform: translateY(0) scale(0.98);
+    outline-color var(--motion-base) var(--motion-ease);
 }
 
 .icon-button svg,
@@ -3788,15 +3809,8 @@ button {
 .scm-commit-menu svg,
 .ref-chip svg {
   transition:
-    transform var(--motion-base) var(--motion-ease),
     color var(--motion-base) var(--motion-ease),
     opacity var(--motion-base) var(--motion-ease);
-}
-
-.icon-button:hover svg,
-.graph-title-toggle:hover svg,
-.scm-panel-toggle:hover svg {
-  transform: scale(1.08);
 }
 
 .search-box,
@@ -3845,40 +3859,11 @@ button {
   animation: content-in var(--motion-base) var(--motion-ease-out);
 }
 
-.graph-commit-file-row,
-.scm-file-row,
-.branch-list-item,
-.editor-tab {
-  will-change: transform;
-}
-
 .scm-row-actions,
 .scm-file-actions,
 .remove-project {
   transition:
-    opacity var(--motion-base) var(--motion-ease),
-    transform var(--motion-base) var(--motion-ease);
-}
-
-.scm-row-actions,
-.scm-file-actions {
-  transform: translateX(4px);
-}
-
-.scm-file-row:hover .scm-row-actions,
-.scm-row-actions:focus-within,
-.scm-file-row:hover .scm-file-actions,
-.scm-file-actions:focus-within {
-  transform: translateX(0);
-}
-
-.remove-project {
-  transform: translateX(3px) scale(0.96);
-}
-
-.project-rail-item:hover .remove-project,
-.remove-project:focus-visible {
-  transform: translateX(0) scale(1);
+    opacity var(--motion-base) var(--motion-ease);
 }
 
 .diff-line {
