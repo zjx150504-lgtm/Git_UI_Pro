@@ -4187,6 +4187,39 @@ code,
   background: color-mix(in srgb, var(--accent) 72%, transparent);
 }
 
+.main-grid {
+  grid-template-columns: var(--detail-width) 10px minmax(0, 1fr);
+}
+
+.detail-resize {
+  position: relative;
+  background: transparent;
+  cursor: col-resize;
+}
+
+.detail-resize:hover,
+.detail-resize:active {
+  background: transparent;
+}
+
+.detail-resize::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: color-mix(in srgb, var(--border) 68%, transparent);
+}
+
+.detail-resize:hover::before {
+  background: color-mix(in srgb, var(--accent) 72%, transparent);
+}
+
+.main-grid > .detail-panel {
+  border-left: 0;
+}
+
 .source-control-pane .graph-commit-row,
 .source-control-pane .graph-commit-row:hover,
 .source-control-pane .graph-commit-row.active,
