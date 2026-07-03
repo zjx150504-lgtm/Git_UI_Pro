@@ -1,4 +1,5 @@
 import { FolderPlus, GitBranch, Search, Star, Trash2 } from "lucide-react";
+import { PathTooltip } from "./PathTooltip";
 import type { GitProject } from "../types/domain";
 
 interface ProjectSidebarProps {
@@ -82,10 +83,11 @@ export function ProjectSidebar({
               >
                 <span className="project-item-main">
                   <span className="project-name-row">
-                    <span className="project-name">{project.name}</span>
+                    <PathTooltip path={project.path} className="project-name">
+                      {project.name}
+                    </PathTooltip>
                     {project.favorite ? <Star size={14} className="favorite-icon" fill="currentColor" /> : null}
                   </span>
-                  <span className="project-path">{project.path}</span>
                   <span className="project-meta-row">
                     <span className="branch-chip">
                       <GitBranch size={13} />

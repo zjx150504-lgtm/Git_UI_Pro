@@ -113,6 +113,26 @@ button {
   border: 0;
 }
 
+.path-tooltip-anchor {
+  min-width: 0;
+}
+
+.path-tooltip-popover {
+  position: fixed;
+  z-index: 10000;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 78%, transparent);
+  border-radius: 9px;
+  padding: 7px 9px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel-strong) 96%, transparent);
+  box-shadow: 0 14px 34px color-mix(in srgb, #000 24%, transparent);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width) 6px minmax(0, 1fr);
@@ -2634,48 +2654,92 @@ button {
 }
 
 .project-rail-main {
-  gap: 3px;
+  gap: 7px;
 }
 
 .project-rail-name {
+  max-width: 100%;
   gap: 5px;
   color: var(--text-strong);
   font-size: 13px;
   font-weight: 650;
 }
 
-.project-rail-path {
+.project-rail-name-text {
   overflow: hidden;
-  color: var(--muted);
-  font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.project-rail-meta {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .project-rail-branch {
+  display: inline-flex;
+  flex: 0 1 auto;
   gap: 5px;
+  align-items: center;
+  min-width: 0;
+  height: 22px;
+  border-radius: 999px;
+  padding: 0 7px;
   color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 13%, transparent);
+  cursor: pointer;
+}
+
+.project-rail-branch:hover,
+.project-rail-branch:focus-visible {
+  background: color-mix(in srgb, var(--blue) 20%, transparent);
+}
+
+.project-rail-branch span {
+  overflow: hidden;
+  min-width: 0;
   font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .project-status {
-  overflow: hidden;
-  margin-left: 4px;
-  color: var(--muted);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  height: 22px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 72%, transparent);
+  border-radius: 999px;
+  padding: 0 7px;
+  color: var(--muted-strong);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 20px;
 }
 
 .project-status.dirty {
   color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 13%, transparent);
 }
 
 .project-status.conflict {
   color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.project-status.sync {
+  color: var(--blue);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
 }
 
 .project-status.clean {
   color: var(--success);
+  background: color-mix(in srgb, var(--success) 11%, transparent);
 }
 
 .remove-project {

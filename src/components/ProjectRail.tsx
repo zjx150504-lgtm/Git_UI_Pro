@@ -1,5 +1,6 @@
 import { FolderGit2, FolderPlus, GitBranch, Search, Star, Trash2 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
+import { PathTooltip } from "./PathTooltip";
 import type { GitProject } from "../types/domain";
 
 interface ProjectRailProps {
@@ -9,10 +10,11 @@ interface ProjectRailProps {
   onAddProject: () => void;
   onScanProjects: () => void;
   onRemoveProject: (projectId: string) => void;
+  onSwitchBranch: (project: GitProject) => void;
   footer?: ReactNode;
 }
 
-export function ProjectRail({ projects, selectedProjectId, onSelectProject, onAddProject, onScanProjects, onRemoveProject, footer }: ProjectRailProps) {
+export function ProjectRail({ projects, selectedProjectId, onSelectProject, onAddProject, onScanProjects, onRemoveProject, onSwitchBranch, footer }: ProjectRailProps) {
   const [query, setQuery] = useState("");
   const filteredProjects = useMemo(() => {
     const keyword = query.trim().toLowerCase();
@@ -55,21 +57,34 @@ export function ProjectRail({ projects, selectedProjectId, onSelectProject, onAd
                 onSelectProject(project.id);
               }
             }}
-            title={project.path}
           >
             <span className="project-rail-icon">
               <FolderGit2 size={16} />
             </span>
             <span className="project-rail-main">
-              <span className="project-rail-name">
+              <PathTooltip path={project.path} className="project-rail-name">
                 {project.favorite ? <Star size={12} fill="currentColor" /> : null}
-                {project.name}
-              </span>
-              <span className="project-rail-path">{project.path}</span>
-              <span className="project-rail-branch">
-                <GitBranch size={12} />
-                {project.status?.currentBranch ?? "未知分支"}
-                <span className={`project-status ${projectStatusTone(project)}`}>{projectStatusText(project)}</span>
+                <span className="project-rail-name-text">{project.name}</span>
+              </PathTooltip>
+              <span className="project-rail-meta">
+                <button
+                  type="button"
+                  className="project-rail-branch"
+                  title="切换分支"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectProject(project.id);
+                    onSwitchBranch(project);
+                  }}
+                >
+                  <GitBranch size={12} />
+                  <span>{project.status?.currentBranch ?? "未知分支"}</span>
+                </button>
+                {projectStatusTags(project).map((status) => (
+                  <span className={`project-status ${status.tone}`} key={`${project.id}-${status.tone}-${status.label}`}>
+                    {status.label}
+                  </span>
+                ))}
               </span>
             </span>
             <button
@@ -92,45 +107,34 @@ export function ProjectRail({ projects, selectedProjectId, onSelectProject, onAd
   );
 }
 
-function projectStatusText(project: GitProject): string {
+type ProjectStatusTone = "unknown" | "conflict" | "dirty" | "sync" | "clean";
+
+function projectStatusTags(project: GitProject): Array<{ label: string; tone: ProjectStatusTone }> {
   const status = project.status;
   if (!status) {
-    return "未加载";
+    return [{ label: "未加载", tone: "unknown" }];
   }
 
+  const tags: Array<{ label: string; tone: ProjectStatusTone }> = [];
   if (status.hasConflicts) {
-    return "有冲突";
+    tags.push({ label: "有冲突", tone: "conflict" });
   }
 
   const changedCount = status.stagedCount + status.unstagedCount + status.untrackedCount;
   if (changedCount > 0) {
-    return `未提交 ${changedCount} 项`;
+    tags.push({ label: `${changedCount} 更改`, tone: "dirty" });
   }
 
   if (status.ahead > 0 || status.behind > 0) {
-    return [status.ahead > 0 ? `领先 ${status.ahead}` : "", status.behind > 0 ? `落后 ${status.behind}` : ""].filter(Boolean).join(" / ");
+    tags.push({
+      label: [status.ahead > 0 ? `领先 ${status.ahead}` : "", status.behind > 0 ? `落后 ${status.behind}` : ""].filter(Boolean).join(" / "),
+      tone: "sync"
+    });
   }
 
-  return "干净";
-}
-
-function projectStatusTone(project: GitProject): string {
-  const status = project.status;
-  if (!status) {
-    return "unknown";
+  if (tags.length === 0) {
+    tags.push({ label: "干净", tone: "clean" });
   }
 
-  if (status.hasConflicts) {
-    return "conflict";
-  }
-
-  if (status.stagedCount + status.unstagedCount + status.untrackedCount > 0) {
-    return "dirty";
-  }
-
-  if (status.ahead > 0 || status.behind > 0) {
-    return "sync";
-  }
-
-  return "clean";
+  return tags;
 }

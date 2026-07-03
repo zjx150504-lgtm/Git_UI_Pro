@@ -2,6 +2,7 @@ import { Check, ChevronDown, ChevronRight, Cloud, CloudDownload, CloudUpload, Gi
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { apiClient } from "../api/client";
+import { PathTooltip } from "./PathTooltip";
 import type { ChangedFile, CommitNode, GitProject } from "../types/domain";
 import { absoluteFilePath } from "../utils/filePath";
 
@@ -674,6 +675,7 @@ function GraphCommitFileRow({
   onPin: () => void;
 }) {
   const clickTimerRef = useRef<number | undefined>();
+  const fullPath = absoluteFilePath(repositoryPath, file.path);
 
   useEffect(
     () => () => {
@@ -699,7 +701,6 @@ function GraphCommitFileRow({
       type="button"
       className={`graph-commit-file-row ${selected ? "active" : ""}`}
       style={graphFileIndentStyle(level)}
-      title={absoluteFilePath(repositoryPath, file.path)}
       onClick={scheduleSelect}
       onDoubleClick={(event) => {
         event.preventDefault();
@@ -708,7 +709,9 @@ function GraphCommitFileRow({
     >
       <span className={`scm-file-icon ${fileIconClass(file.path)}`}>{fileIcon(file.path)}</span>
       <span className="graph-commit-file-main">
-        <span className="graph-commit-file-name">{file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? file.path}</span>
+        <PathTooltip path={fullPath} className="graph-commit-file-name">
+          {file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? file.path}
+        </PathTooltip>
         {showDirectory ? <span className="graph-commit-file-dir">{directoryName(file.path)}</span> : null}
       </span>
       <span className={`graph-commit-file-status ${file.status}`}>{statusCode(file.status)}</span>

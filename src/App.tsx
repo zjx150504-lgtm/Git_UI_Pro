@@ -800,6 +800,7 @@ export function App() {
           onAddProject={handleAddProject}
           onScanProjects={handleScanProjects}
           onRemoveProject={handleRemoveProject}
+          onSwitchBranch={(project) => void switchBranchFromToolbar(project)}
           footer={renderSidebarControls(false)}
         />
       )}

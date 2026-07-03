@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, ChevronRight, Plus, RefreshCw, Trash2, Undo2 } from "lucide-react";
+import { PathTooltip } from "./PathTooltip";
 import type { ChangedFile, CommitInput, GitProject, WorktreeState } from "../types/domain";
 import { absoluteFilePath } from "../utils/filePath";
 
@@ -380,6 +381,7 @@ function ScmFileRow({
   repositoryPath?: string;
 }) {
   const clickTimerRef = useRef<number | undefined>();
+  const fullPath = absoluteFilePath(repositoryPath, file.path);
 
   useEffect(
     () => () => {
@@ -405,7 +407,6 @@ function ScmFileRow({
       className={`scm-file-row ${selected ? "active" : ""}`}
       role="button"
       tabIndex={0}
-      title={absoluteFilePath(repositoryPath, file.path)}
       onClick={scheduleSelect}
       onDoubleClick={(event) => {
         event.preventDefault();
@@ -424,9 +425,9 @@ function ScmFileRow({
     >
       <span className={`scm-file-icon ${fileIconClass(file.path)}`}>{fileIcon(file.path)}</span>
       <span className="scm-file-main">
-        <span className="scm-file-name">
+        <PathTooltip path={fullPath} className="scm-file-name">
           {file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? file.path}
-        </span>
+        </PathTooltip>
         <span className="scm-file-dir">{directoryName(file.path)}</span>
       </span>
       <span className="scm-file-trailing">

@@ -1,4 +1,5 @@
 import { Copy, FileText, X } from "lucide-react";
+import { PathTooltip } from "./PathTooltip";
 import type { ChangedFile, DiffLine } from "../types/domain";
 import { absoluteFilePath } from "../utils/filePath";
 
@@ -50,7 +51,6 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
               aria-selected={tab.id === activeTab.id}
               className={`editor-tab ${tab.id === activeTab.id ? "active" : ""} ${tab.pinned ? "pinned" : "preview"}`}
               key={tab.id}
-              title={absoluteFilePath(repositoryPath, tab.file.path)}
               onClick={() => onSelectTab(tab.id)}
               onDoubleClick={() => onPinTab(tab.id)}
               onKeyDown={(event) => {
@@ -60,7 +60,9 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
               }}
             >
               <FileText size={14} />
-              <span className="editor-tab-name">{tab.file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? tab.file.path}</span>
+              <PathTooltip path={absoluteFilePath(repositoryPath, tab.file.path)} className="editor-tab-name">
+                {tab.file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? tab.file.path}
+              </PathTooltip>
               <small>{statusLabel(tab.file.status)}</small>
               <button
                 type="button"
