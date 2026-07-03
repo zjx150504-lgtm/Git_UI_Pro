@@ -4260,7 +4260,6 @@ button {
 
 .app-shell,
 .main-grid,
-.source-control-pane,
 .workspace-shell,
 .project-rail,
 .collapsed-sidebar,
@@ -4269,6 +4268,12 @@ button {
     grid-template-columns var(--motion-slow) var(--motion-ease),
     grid-template-rows var(--motion-slow) var(--motion-ease),
     width var(--motion-slow) var(--motion-ease),
+    background-color var(--motion-base) var(--motion-ease),
+    border-color var(--motion-base) var(--motion-ease);
+}
+
+.source-control-pane {
+  transition:
     background-color var(--motion-base) var(--motion-ease),
     border-color var(--motion-base) var(--motion-ease);
 }
@@ -4344,18 +4349,18 @@ button {
   animation: fade-in var(--motion-base) var(--motion-ease);
 }
 
-.graph-commit-expansion {
-  animation: reveal-down var(--motion-slow) var(--motion-ease-out);
-  transform-origin: top;
-}
-
 .scm-panel-body,
-.graph-commit-list,
 .scm-file-list,
 .branch-list,
 .editor-detail-panel:not(.empty),
 .console-panel {
   animation: content-in var(--motion-base) var(--motion-ease-out);
+}
+
+.graph-commit-expansion,
+.graph-commit-list {
+  animation: none;
+  transform: none;
 }
 
 .scm-row-actions,

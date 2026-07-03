@@ -1,4 +1,11 @@
-# Repository Guidelines
+docs(rules): 补充提交流程约束
+
+1. 在项目规则文档中新增中文 git commit 描述建议要求
+2. 明确提交信息必须包含标题、编号变更说明和涉及文件清单
+3. 补充不得自动执行 git commit 或 git push 的流程限制
+
+涉及文件:
+1. AGENTS.md# Repository Guidelines
 
 ## Project Structure & Module Organization
 
