@@ -6,7 +6,6 @@ import { absoluteFilePath } from "../utils/filePath";
 interface WorkspaceViewProps {
   project?: GitProject;
   worktree: WorktreeState;
-  onRefresh: () => void;
   onStageFile: (file: ChangedFile) => void;
   onStageAll: () => void;
   onUnstageFile: (file: ChangedFile) => void;
@@ -26,7 +25,6 @@ interface WorkspaceViewProps {
 export function WorkspaceView({
   project,
   worktree,
-  onRefresh,
   onStageFile,
   onStageAll,
   onUnstageFile,
@@ -61,7 +59,7 @@ export function WorkspaceView({
     : willAutoStage
       ? `${unstagedCount} 个文件未暂存，提交时会自动暂存并提交。`
       : "提交已暂存的更改";
-  const primaryActionLabel = canSyncOutgoing ? `同步更改 ${outgoingCount}↑` : "提交";
+  const primaryActionLabel = canSyncOutgoing ? `同步更改 ${outgoingCount} 个` : "提交";
 
   useEffect(() => {
     if (focusRequest > 0) {
@@ -137,13 +135,6 @@ export function WorkspaceView({
 
   return (
     <section className={`scm-view ${panelOpen ? "" : "panel-collapsed"}`}>
-      <div className="scm-titlebar">
-        <span>源代码管理</span>
-        <button type="button" className="icon-button" title="刷新工作区" onClick={onRefresh}>
-          <RefreshCw size={16} />
-        </button>
-      </div>
-
       <button type="button" className="scm-panel-toggle" onClick={onTogglePanel}>
         {panelOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         <span>更改</span>

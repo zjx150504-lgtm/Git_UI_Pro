@@ -833,6 +833,28 @@ button {
   white-space: nowrap;
 }
 
+.git-version-badge {
+  display: inline-flex;
+  gap: 5px;
+  align-items: center;
+  max-width: 190px;
+  height: 26px;
+  border-radius: 6px;
+  padding: 0 8px;
+  overflow: hidden;
+  color: var(--blue);
+  background: var(--surface);
+  font-family: var(--mono-font);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.git-version-badge span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .top-message {
   max-width: 0;
   display: none;
@@ -1913,11 +1935,12 @@ button {
 
 .top-bar {
   grid-template-columns: minmax(260px, 1fr) max-content;
-  min-height: 68px;
+  min-height: 56px;
+  padding: 10px 16px;
 }
 
 .workspace-shell {
-  grid-template-rows: 68px minmax(0, 1fr);
+  grid-template-rows: 56px minmax(0, 1fr);
 }
 
 .main-grid {
@@ -2608,7 +2631,7 @@ button {
 
 .source-control-pane .scm-view {
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   min-height: 0;
   padding: 0;
   overflow: hidden;
@@ -2616,7 +2639,7 @@ button {
 }
 
 .source-control-pane .scm-view.panel-collapsed {
-  grid-template-rows: auto auto;
+  grid-template-rows: auto;
   min-height: 0;
   padding: 0;
 }
@@ -2732,6 +2755,16 @@ button {
 
 .source-control-pane .scm-section-header > div {
   gap: 5px;
+}
+
+.source-control-pane .scm-section-header .compact-icon,
+.graph-toolbar .compact-icon {
+  background: transparent;
+}
+
+.source-control-pane .scm-section-header .compact-icon:hover,
+.graph-toolbar .compact-icon:hover {
+  background: var(--surface);
 }
 
 .source-control-pane .scm-count,
@@ -3464,7 +3497,7 @@ button {
 
 .graph-toolbar .icon-button.active {
   color: var(--blue);
-  background: color-mix(in srgb, var(--blue) 14%, var(--surface));
+  background: transparent;
 }
 
 .source-control-pane .graph-search-row {
@@ -3696,6 +3729,10 @@ button {
   border-radius: 999px;
   background: #2f98ff;
   pointer-events: none;
+}
+
+.graph-commit-entry.graph-tone-remote .graph-commit-expansion::before {
+  background: #b886ff;
 }
 
 .graph-commit-file-row {

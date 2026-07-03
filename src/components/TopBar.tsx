@@ -1,4 +1,4 @@
-import { Moon, PanelBottomClose, PanelBottomOpen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Sun } from "lucide-react";
+import { GitBranch, Moon, PanelBottomClose, PanelBottomOpen, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Sun } from "lucide-react";
 import type { GitProject } from "../types/domain";
 
 export type ThemeMode = "system" | "light" | "dark";
@@ -28,6 +28,8 @@ export function TopBar({
   onToggleRight,
   onToggleConsole
 }: TopBarProps) {
+  const gitVersionLabel = gitVersion.replace(/^git version\s*/i, "").trim() || gitVersion;
+
   return (
     <header className="top-bar">
       <div className="project-heading">
@@ -35,13 +37,13 @@ export function TopBar({
           <strong>{project?.name ?? "未选择项目"}</strong>
           {project?.status?.currentBranch ? <span className="project-branch-dot">{project.status.currentBranch}</span> : null}
         </div>
-        <div className="project-subline">
-          <span>{project?.path ?? "请先添加一个本地 Git 仓库"}</span>
-          <span>{gitVersion}</span>
-        </div>
       </div>
 
       <div className="layout-controls" aria-label="布局控制">
+        <span className="git-version-badge" title={gitVersion}>
+          <GitBranch size={13} />
+          <span>{gitVersionLabel}</span>
+        </span>
         <button type="button" className="icon-button" title={leftCollapsed ? "展开项目栏" : "收起项目栏"} onClick={onToggleLeft}>
           {leftCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </button>

@@ -748,7 +748,6 @@ export function App() {
             <WorkspaceView
               project={selectedProject}
               worktree={worktree}
-              onRefresh={() => selectedProject && void loadProjectData(selectedProject)}
               onStageFile={handleStageFile}
               onStageAll={handleStageAll}
               onUnstageFile={handleUnstageFile}
