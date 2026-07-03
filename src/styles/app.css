@@ -2620,41 +2620,48 @@ button {
 
 .project-rail-item {
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) 24px;
-  gap: 8px;
-  align-items: start;
-  min-height: 76px;
-  margin: 0 0 2px;
+  grid-template-columns: 22px minmax(0, 1fr) 22px;
+  gap: 7px;
+  align-items: center;
+  min-height: 56px;
+  margin: 0 0 1px;
   border: 1px solid transparent;
   border-left: 2px solid transparent;
-  border-radius: 4px;
-  padding: 8px 5px 8px 7px;
+  border-radius: 5px;
+  padding: 6px 5px 6px 7px;
   color: var(--text);
   background: transparent;
   cursor: pointer;
 }
 
 .project-rail-item:hover {
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
 }
 
 .project-rail-item.active {
-  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  border-color: transparent;
   border-left-color: var(--accent);
   outline: 0;
-  background: color-mix(in srgb, var(--surface) 72%, transparent);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
 }
 
 .project-rail-icon {
   display: grid;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   place-items: center;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--muted) 82%, transparent);
+}
+
+.project-rail-item.active .project-rail-icon {
+  color: var(--accent);
 }
 
 .project-rail-main {
-  gap: 7px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  min-width: 0;
 }
 
 .project-rail-name {
@@ -2673,7 +2680,7 @@ button {
 
 .project-rail-meta {
   display: flex;
-  gap: 5px;
+  gap: 4px;
   align-items: center;
   min-width: 0;
   overflow: hidden;
@@ -2682,27 +2689,32 @@ button {
 .project-rail-branch {
   display: inline-flex;
   flex: 0 1 auto;
-  gap: 5px;
+  gap: 4px;
   align-items: center;
-  min-width: 0;
-  height: 22px;
-  border-radius: 999px;
-  padding: 0 7px;
+  min-width: 58px;
+  max-width: 96px;
+  height: 18px;
+  border: 1px solid color-mix(in srgb, var(--blue) 24%, transparent);
+  border-radius: 4px;
+  padding: 0 5px;
   color: var(--blue);
-  background: color-mix(in srgb, var(--blue) 13%, transparent);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
   cursor: pointer;
 }
 
 .project-rail-branch:hover,
 .project-rail-branch:focus-visible {
-  background: color-mix(in srgb, var(--blue) 20%, transparent);
+  border-color: color-mix(in srgb, var(--blue) 38%, transparent);
+  background: color-mix(in srgb, var(--blue) 14%, transparent);
 }
 
 .project-rail-branch span {
   overflow: hidden;
   min-width: 0;
-  font-size: 11px;
+  max-width: 72px;
+  font-size: 10.5px;
   font-weight: 650;
+  line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2711,35 +2723,39 @@ button {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
-  height: 22px;
-  border: 1px solid color-mix(in srgb, var(--border-strong) 72%, transparent);
-  border-radius: 999px;
-  padding: 0 7px;
+  height: 18px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 58%, transparent);
+  border-radius: 4px;
+  padding: 0 5px;
   color: var(--muted-strong);
-  background: color-mix(in srgb, var(--surface) 78%, transparent);
-  font-size: 11px;
+  background: color-mix(in srgb, var(--surface) 50%, transparent);
+  font-size: 10.5px;
   font-weight: 650;
-  line-height: 20px;
+  line-height: 16px;
 }
 
 .project-status.dirty {
   color: var(--warning);
-  background: color-mix(in srgb, var(--warning) 13%, transparent);
+  border-color: color-mix(in srgb, var(--warning) 28%, transparent);
+  background: color-mix(in srgb, var(--warning) 9%, transparent);
 }
 
 .project-status.conflict {
   color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 12%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 28%, transparent);
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
 }
 
 .project-status.sync {
   color: var(--blue);
-  background: color-mix(in srgb, var(--blue) 12%, transparent);
+  border-color: color-mix(in srgb, var(--blue) 26%, transparent);
+  background: color-mix(in srgb, var(--blue) 8%, transparent);
 }
 
 .project-status.clean {
   color: var(--success);
-  background: color-mix(in srgb, var(--success) 11%, transparent);
+  border-color: color-mix(in srgb, var(--success) 26%, transparent);
+  background: color-mix(in srgb, var(--success) 8%, transparent);
 }
 
 .remove-project {
