@@ -47,8 +47,12 @@ export function WorkspaceView({
   const [stagedOpen, setStagedOpen] = useState(true);
   const commitActionsRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
-  const changeCount = worktree.unstagedFiles.length + worktree.stagedFiles.length;
-  const commitDisabled = worktree.stagedFiles.length === 0;
+  const stagedCount = worktree.stagedFiles.length;
+  const unstagedCount = worktree.unstagedFiles.length;
+  const changeCount = unstagedCount + stagedCount;
+  const willAutoStage = stagedCount === 0 && unstagedCount > 0;
+  const commitDisabled = changeCount === 0;
+  const commitTitle = willAutoStage ? `${unstagedCount} 个文件未暂存，提交时会自动暂存并提交。` : "提交已暂存的更改";
 
   useEffect(() => {
     if (focusRequest > 0) {
@@ -148,7 +152,7 @@ export function WorkspaceView({
               rows={1}
             />
             <div className="scm-commit-actions" ref={commitActionsRef}>
-              <button type="submit" className="scm-commit-button" disabled={commitDisabled || commitBusy}>
+              <button type="submit" className="scm-commit-button" title={commitTitle} disabled={commitDisabled || commitBusy}>
                 <Check size={17} />
                 提交
               </button>
@@ -157,14 +161,14 @@ export function WorkspaceView({
               </button>
               {commitMenuOpen ? (
                 <div className="floating-menu commit-menu">
-                  <button type="button" disabled={commitDisabled || commitBusy} onClick={() => void submitCommit()}>
-                    提交
+                  <button type="button" title={commitTitle} disabled={commitDisabled || commitBusy} onClick={() => void submitCommit()}>
+                    {willAutoStage ? `暂存 ${unstagedCount} 个文件并提交` : "提交"}
                   </button>
                   <button type="button" disabled={commitBusy} onClick={() => void submitCommit({ amend: true })}>
                     修改上次提交
                   </button>
-                  <button type="button" disabled={commitDisabled || commitBusy} onClick={() => void submitCommit({ pushAfterCommit: true })}>
-                    提交并推送
+                  <button type="button" title={commitTitle} disabled={commitDisabled || commitBusy} onClick={() => void submitCommit({ pushAfterCommit: true })}>
+                    {willAutoStage ? `暂存 ${unstagedCount} 个文件并推送` : "提交并推送"}
                   </button>
                 </div>
               ) : null}

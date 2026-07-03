@@ -48,8 +48,11 @@ export function GraphSidebar({
   const [loadingDetailsHash, setLoadingDetailsHash] = useState<string | null>(null);
   const [detailsErrorByHash, setDetailsErrorByHash] = useState<Record<string, string>>({});
   const [hoveredCommit, setHoveredCommit] = useState<CommitNode | undefined>();
+  const [hoveredDotHash, setHoveredDotHash] = useState<string | null>(null);
   const [hoverPosition, setHoverPosition] = useState({ x: 0, y: 0 });
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const searchButtonRef = useRef<HTMLButtonElement>(null);
+  const searchRowRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<number | undefined>();
   const closeTimerRef = useRef<number | undefined>();
   const filteredCommits = useMemo(() => {
@@ -78,10 +81,29 @@ export function GraphSidebar({
   }, [searchOpen]);
 
   useEffect(() => {
+    if (!searchOpen) {
+      return;
+    }
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (searchRowRef.current?.contains(target) || searchButtonRef.current?.contains(target)) {
+        return;
+      }
+
+      setSearchOpen(false);
+    };
+
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [searchOpen]);
+
+  useEffect(() => {
     setExpandedHash(null);
     setCommitDetailsByHash({});
     setDetailsErrorByHash({});
     setLoadingDetailsHash(null);
+    setHoveredDotHash(null);
   }, [project?.id]);
 
   useEffect(() => {
@@ -104,6 +126,7 @@ export function GraphSidebar({
   }, [project?.id, commits]);
 
   function scheduleHover(commit: CommitNode, row: HTMLElement) {
+    setHoveredDotHash(commit.hash);
     window.clearTimeout(closeTimerRef.current);
     window.clearTimeout(hoverTimerRef.current);
     const rect = row.getBoundingClientRect();
@@ -114,6 +137,7 @@ export function GraphSidebar({
   }
 
   function scheduleCloseHover() {
+    setHoveredDotHash(null);
     window.clearTimeout(hoverTimerRef.current);
     window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = window.setTimeout(() => {
@@ -127,12 +151,16 @@ export function GraphSidebar({
 
   async function handleCommitClick(commit: CommitNode) {
     const nextExpandedHash = expandedHash === commit.hash ? null : commit.hash;
-    onSelectCommit(commit.hash);
 
     if (!nextExpandedHash) {
+      onSelectCommit("");
       setExpandedHash(null);
+      setHoveredDotHash(null);
       return;
     }
+
+    onSelectCommit(commit.hash);
+    setHoveredDotHash(commit.hash);
 
     const hasReadyDetails = Boolean(commitDetailsByHash[commit.hash]) || commit.files.length > 0;
     if (!hasReadyDetails) {
@@ -199,6 +227,7 @@ export function GraphSidebar({
         {panelOpen ? (
           <div className="graph-toolbar" aria-label="图表操作">
             <button
+              ref={searchButtonRef}
               type="button"
               className={`icon-button compact-icon ${searchOpen || commitQuery ? "active" : ""}`}
               title="搜索提交"
@@ -224,7 +253,7 @@ export function GraphSidebar({
       {panelOpen ? (
         <>
           {searchOpen ? (
-            <div className="graph-search-row">
+            <div className="graph-search-row" ref={searchRowRef}>
               <label className="history-search graph-search">
                 <Search size={14} />
                 <input
@@ -253,7 +282,7 @@ export function GraphSidebar({
                   key={commit.hash}
                   commit={commit}
                   tone={tone}
-                  selected={commit.hash === selectedHash}
+                  selected={commit.hash === selectedHash || commit.hash === hoveredDotHash || commit.hash === expandedHash}
                   expanded={commit.hash === expandedHash}
                   details={commitDetailsByHash[commit.hash]}
                   loadingDetails={loadingDetailsHash === commit.hash}

@@ -151,7 +151,7 @@ export function App() {
       setCommits(history);
       setWorktree(worktreeState);
       clearWorktreeEditorTabs();
-      setSelectedCommitHash(history[0]?.hash ?? "");
+      setSelectedCommitHash("");
       setStatusMessage(history.length > 0 ? `已加载 ${history.length} 条提交。` : "当前仓库还没有提交历史。");
     } catch (error) {
       setCommits([]);
@@ -162,6 +162,12 @@ export function App() {
   }
 
   async function handleSelectCommit(hash: string) {
+    if (!hash) {
+      setSelectedCommitHash("");
+      setStatusMessage("已收起提交。");
+      return;
+    }
+
     setSelectedCommitHash(hash);
     const commit = commits.find((item) => item.hash === hash);
     setStatusMessage(commit ? `已选中提交 ${commit.shortHash}` : "已选中提交。");
@@ -568,13 +574,40 @@ export function App() {
       return false;
     }
 
+    const shouldAutoStage = worktree.stagedFiles.length === 0 && worktree.unstagedFiles.length > 0;
+    const autoStageCount = worktree.unstagedFiles.length;
+    if (shouldAutoStage) {
+      setStatusMessage(`正在自动暂存 ${autoStageCount} 个未暂存文件并提交。`);
+      const stageResult = await apiClient.stageAll(selectedProject);
+      if (!stageResult.ok) {
+        setStatusMessage(stageResult.messageZh ?? "自动暂存失败，提交已取消。");
+        await loadProjectData(selectedProject);
+        return false;
+      }
+    }
+
     const result = await apiClient.commit(selectedProject, input);
     if (!result.ok) {
       setStatusMessage(result.messageZh ?? "提交失败，请展开原始输出查看原因。");
+      if (shouldAutoStage) {
+        await loadProjectData(selectedProject);
+      }
       return false;
     }
 
-    setStatusMessage(input.pushAfterCommit ? "提交并推送完成。" : input.amend ? "已修改上次提交。" : "提交完成。");
+    setStatusMessage(
+      shouldAutoStage
+        ? input.pushAfterCommit
+          ? `已自动暂存 ${autoStageCount} 个文件，提交并推送完成。`
+          : input.amend
+            ? `已自动暂存 ${autoStageCount} 个文件，并修改上次提交。`
+            : `已自动暂存 ${autoStageCount} 个文件并提交。`
+        : input.pushAfterCommit
+          ? "提交并推送完成。"
+          : input.amend
+            ? "已修改上次提交。"
+            : "提交完成。"
+    );
     await loadProjectData(selectedProject);
     return true;
   }

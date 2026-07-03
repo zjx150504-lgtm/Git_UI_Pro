@@ -4128,6 +4128,15 @@ code,
   line-height: 1.35;
 }
 
+.source-control-pane .scm-panel-toggle,
+.source-control-pane .scm-panel-toggle:hover {
+  background: transparent;
+}
+
+.source-control-pane .scm-panel-toggle:hover {
+  transform: none;
+}
+
 .source-control-pane {
   grid-template-rows: minmax(180px, var(--scm-pane-height)) 10px minmax(130px, 1fr);
 }
@@ -4176,6 +4185,48 @@ code,
 
 .source-graph-divider:hover::before {
   background: color-mix(in srgb, var(--accent) 72%, transparent);
+}
+
+.source-control-pane .graph-commit-row,
+.source-control-pane .graph-commit-row:hover,
+.source-control-pane .graph-commit-row.active,
+.source-control-pane .graph-commit-row:focus-visible,
+.graph-commit-entry.expanded .graph-commit-row {
+  outline: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.source-control-pane .graph-commit-row:hover,
+.source-control-pane .graph-commit-row:active,
+.source-control-pane .graph-commit-row.active {
+  transform: none;
+}
+
+.compact-graph-cell .graph-node {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition:
+    transform var(--motion-base) var(--motion-ease),
+    stroke-width var(--motion-base) var(--motion-ease);
+}
+
+.source-control-pane .graph-commit-row.active .graph-node {
+  stroke-width: 2.4;
+  transform: scale(1.38);
+}
+
+.graph-commit-file-row.active,
+.graph-commit-file-row.active:hover,
+.graph-commit-file-row:focus-visible {
+  outline: 0;
+  box-shadow: none;
+  background: transparent;
+}
+
+.graph-commit-file-row.active,
+.graph-commit-file-row:active {
+  transform: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
