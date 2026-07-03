@@ -2996,15 +2996,16 @@ button {
   grid-column: 1;
   width: 100%;
   min-height: 34px;
-  max-height: 96px;
+  max-height: 260px;
   border: 1px solid var(--border-strong);
   border-radius: 5px;
   outline: 0;
   padding: 6px 10px;
   color: var(--text);
   background: var(--sunken);
-  line-height: 1.45;
-  resize: vertical;
+  font-size: 13px;
+  line-height: 20px;
+  resize: none;
 }
 
 .source-control-pane .scm-commit-box textarea:focus {
@@ -4181,7 +4182,7 @@ code,
 }
 
 .source-control-pane .scm-commit-box textarea::placeholder {
-  font-size: 12px;
+  font-size: 13px;
   line-height: 20px;
 }
 
@@ -4191,12 +4192,13 @@ code,
 }
 
 .source-control-pane .scm-commit-box textarea {
-  height: 34px !important;
+  height: 34px;
   min-height: 34px;
-  max-height: 34px;
+  max-height: 260px;
   overflow: hidden;
   padding-top: 6px;
   padding-bottom: 6px;
+  font-size: 13px;
   line-height: 20px;
   resize: none;
   scrollbar-width: none;

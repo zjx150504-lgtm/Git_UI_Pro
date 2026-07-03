@@ -24,6 +24,9 @@ interface WorkspaceViewProps {
   onTogglePanel: () => void;
 }
 
+const COMMIT_MESSAGE_MIN_HEIGHT = 34;
+const COMMIT_MESSAGE_MAX_HEIGHT = 260;
+
 export function WorkspaceView({
   project,
   worktree,
@@ -79,7 +82,10 @@ export function WorkspaceView({
       return;
     }
 
-    input.style.height = "34px";
+    input.style.height = `${COMMIT_MESSAGE_MIN_HEIGHT}px`;
+    const nextHeight = Math.min(COMMIT_MESSAGE_MAX_HEIGHT, Math.max(COMMIT_MESSAGE_MIN_HEIGHT, input.scrollHeight));
+    input.style.height = `${nextHeight}px`;
+    input.style.overflowY = input.scrollHeight > COMMIT_MESSAGE_MAX_HEIGHT ? "auto" : "hidden";
   }, [message, panelOpen]);
 
   useEffect(() => {
