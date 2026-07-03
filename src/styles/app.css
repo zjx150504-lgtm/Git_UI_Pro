@@ -3559,6 +3559,12 @@ button {
   min-width: 202px;
 }
 
+.graph-view-menu.graph-view-menu-portal {
+  position: fixed;
+  z-index: 320;
+  right: auto;
+}
+
 .graph-view-menu button {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);

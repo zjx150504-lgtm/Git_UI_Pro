@@ -1,5 +1,6 @@
 import { Check, ChevronDown, ChevronRight, Cloud, CloudDownload, CloudUpload, GitBranch, MoreHorizontal, Plus, RefreshCw, Search } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { apiClient } from "../api/client";
 import type { ChangedFile, CommitNode, GitProject } from "../types/domain";
 import { absoluteFilePath } from "../utils/filePath";
@@ -48,6 +49,7 @@ export function GraphSidebar({
   const [searchOpen, setSearchOpen] = useState(false);
   const [fileViewMode, setFileViewMode] = useState<GraphFileViewMode>("tree");
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const [viewMenuPosition, setViewMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [expandedHash, setExpandedHash] = useState<string | null>(null);
   const [commitDetailsByHash, setCommitDetailsByHash] = useState<Record<string, CommitNode>>({});
   const [loadingDetailsHash, setLoadingDetailsHash] = useState<string | null>(null);
@@ -188,6 +190,19 @@ export function GraphSidebar({
     setViewMenuOpen(false);
   }
 
+  function toggleViewMenu() {
+    const rect = viewMenuButtonRef.current?.getBoundingClientRect();
+    if (rect) {
+      setViewMenuPosition({
+        top: rect.bottom + 4,
+        left: rect.left - 1
+      });
+    }
+
+    setSearchOpen(false);
+    setViewMenuOpen((value) => !value);
+  }
+
   async function handleCommitClick(commit: CommitNode) {
     const nextExpandedHash = expandedHash === commit.hash ? null : commit.hash;
 
@@ -292,41 +307,41 @@ export function GraphSidebar({
               title="更多图表操作"
               aria-haspopup="menu"
               aria-expanded={viewMenuOpen}
-              onClick={() => {
-                setSearchOpen(false);
-                setViewMenuOpen((value) => !value);
-              }}
+              onClick={toggleViewMenu}
             >
               <MoreHorizontal size={GRAPH_TOOLBAR_ICON_SIZE} />
             </button>
-            {viewMenuOpen ? (
-              <div className="floating-menu graph-view-menu" role="menu" ref={viewMenuRef}>
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={fileViewMode === "list"}
-                  className={fileViewMode === "list" ? "active" : ""}
-                  onClick={() => selectFileViewMode("list")}
-                >
-                  <span className="graph-view-menu-check" aria-hidden="true">
-                    {fileViewMode === "list" ? <Check size={14} /> : null}
-                  </span>
-                  以列表形式查看
-                </button>
-                <button
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={fileViewMode === "tree"}
-                  className={fileViewMode === "tree" ? "active" : ""}
-                  onClick={() => selectFileViewMode("tree")}
-                >
-                  <span className="graph-view-menu-check" aria-hidden="true">
-                    {fileViewMode === "tree" ? <Check size={14} /> : null}
-                  </span>
-                  以树形式查看
-                </button>
-              </div>
-            ) : null}
+            {viewMenuOpen && viewMenuPosition && typeof document !== "undefined"
+              ? createPortal(
+                  <div className="floating-menu graph-view-menu graph-view-menu-portal" role="menu" style={viewMenuPosition} ref={viewMenuRef}>
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={fileViewMode === "list"}
+                      className={fileViewMode === "list" ? "active" : ""}
+                      onClick={() => selectFileViewMode("list")}
+                    >
+                      <span className="graph-view-menu-check" aria-hidden="true">
+                        {fileViewMode === "list" ? <Check size={14} /> : null}
+                      </span>
+                      以列表形式查看
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={fileViewMode === "tree"}
+                      className={fileViewMode === "tree" ? "active" : ""}
+                      onClick={() => selectFileViewMode("tree")}
+                    >
+                      <span className="graph-view-menu-check" aria-hidden="true">
+                        {fileViewMode === "tree" ? <Check size={14} /> : null}
+                      </span>
+                      以树形式查看
+                    </button>
+                  </div>,
+                  document.querySelector(".app-shell") ?? document.body
+                )
+              : null}
           </div>
         ) : null}
       </div>
