@@ -95,10 +95,17 @@
   box-sizing: border-box;
 }
 
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
 body {
   margin: 0;
-  min-width: 1180px;
-  min-height: 760px;
   overflow: hidden;
   background: var(--bg);
 }
@@ -136,8 +143,11 @@ button {
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width) 6px minmax(0, 1fr);
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   background: var(--bg);
   color: var(--text);
 }
@@ -4567,6 +4577,31 @@ code,
 
 .detail-resize:hover::before {
   background: color-mix(in srgb, var(--accent) 72%, transparent);
+}
+
+@media (max-width: 900px) {
+  .app-shell {
+    grid-template-columns: clamp(180px, 36vw, var(--sidebar-width)) 2px minmax(0, 1fr);
+  }
+
+  .app-shell.left-collapsed {
+    grid-template-columns: 52px 2px minmax(0, 1fr);
+  }
+
+  .main-grid,
+  .right-collapsed .main-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .detail-resize,
+  .main-grid > .editor-detail-panel,
+  .main-grid > .editor-detail-panel.empty {
+    display: none;
+  }
+
+  .top-bar {
+    grid-template-columns: minmax(0, 1fr) max-content;
+  }
 }
 
 .main-grid > .detail-panel {

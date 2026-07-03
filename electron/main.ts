@@ -13,8 +13,8 @@ async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 920,
-    minWidth: 1180,
-    minHeight: 760,
+    minWidth: 860,
+    minHeight: 640,
     backgroundColor: "#101317",
     title: "Git UI Pro",
     webPreferences: {
