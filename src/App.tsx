@@ -438,6 +438,27 @@ export function App() {
     await loadProjectData(project);
   }
 
+  async function runSyncOperation(project: GitProject) {
+    const toastId = notifyLoading("正在同步...");
+
+    const pullResult = await apiClient.pull(project);
+    if (!pullResult.ok) {
+      notifyGitResult(pullResult, "", "同步失败：拉取远程更改失败。", toastId);
+      await loadProjectData(project);
+      return;
+    }
+
+    const pushResult = await apiClient.push(project);
+    if (!pushResult.ok) {
+      notifyGitResult(pushResult, "", "同步失败：推送本地提交失败。", toastId);
+      await loadProjectData(project);
+      return;
+    }
+
+    notifySuccess("同步完成", undefined, toastId);
+    await loadProjectData(project);
+  }
+
   async function createBranchFromToolbar(project: GitProject) {
     setBranchDialog({ mode: "create", project, branchName: "", checkout: true });
   }
@@ -592,6 +613,33 @@ export function App() {
 
     const result = await apiClient.discardFile(selectedProject, file);
     notifyGitResult(result, `已放弃更改：${file.path}`, "放弃更改失败");
+    clearWorktreeEditorTabs();
+    await loadProjectData(selectedProject);
+  }
+
+  async function handleDiscardAll() {
+    if (!selectedProject || worktree.unstagedFiles.length === 0) {
+      return;
+    }
+
+    const count = worktree.unstagedFiles.length;
+    const confirmed = window.confirm(`放弃 ${count} 个未暂存更改？该操作无法从 Git 恢复未提交内容。`);
+    if (!confirmed) {
+      return;
+    }
+
+    const toastId = notifyLoading(`正在放弃 ${count} 个更改...`);
+    for (const file of worktree.unstagedFiles) {
+      const result = await apiClient.discardFile(selectedProject, file);
+      if (!result.ok) {
+        notifyGitResult(result, "", `放弃更改失败：${file.path}`, toastId);
+        clearWorktreeEditorTabs();
+        await loadProjectData(selectedProject);
+        return;
+      }
+    }
+
+    notifySuccess(`已放弃 ${count} 个更改`, undefined, toastId);
     clearWorktreeEditorTabs();
     await loadProjectData(selectedProject);
   }
@@ -753,12 +801,13 @@ export function App() {
               onUnstageFile={handleUnstageFile}
               onUnstageAll={handleUnstageAll}
               onDiscardFile={handleDiscardFile}
+              onDiscardAll={handleDiscardAll}
               onSelectFile={handleSelectWorktreeFile}
               onPinFile={handlePinWorktreeFile}
               selectedFilePath={activeWorktreeTab?.file.path}
               selectedFileStaged={activeWorktreeTab?.file.staged}
               onCommit={handleCommit}
-              onSyncChanges={() => (selectedProject ? runRemoteOperation("push", selectedProject) : Promise.resolve())}
+              onSyncChanges={() => (selectedProject ? runSyncOperation(selectedProject) : Promise.resolve())}
               focusRequest={commitFocusRequest}
               panelOpen={changesPanelOpen}
               onTogglePanel={() => setChangesPanelOpen((value) => !value)}
@@ -802,7 +851,7 @@ export function App() {
           {statusMessage}
         </div>
         <Toaster
-          position="top-right"
+          position="top-center"
           theme={resolvedTheme}
           expand
           visibleToasts={5}

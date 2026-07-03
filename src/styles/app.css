@@ -2688,6 +2688,13 @@ button {
   background: var(--sunken);
 }
 
+.source-control-pane .scm-commit-control {
+  position: relative;
+  grid-column: 1;
+  grid-row: auto;
+  min-width: 0;
+}
+
 .source-control-pane .scm-commit-actions {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 38px;
@@ -2711,12 +2718,24 @@ button {
 }
 
 .source-control-pane .scm-commit-menu {
+  position: relative;
   width: 38px;
   min-height: 34px;
-  border-left: 1px solid color-mix(in srgb, #ffffff 24%, transparent);
+  border-left: 0;
   border-radius: 0;
   color: #ffffff;
   background: transparent;
+}
+
+.source-control-pane .scm-commit-menu::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  bottom: 7px;
+  left: 0;
+  width: 1px;
+  background: color-mix(in srgb, #ffffff 24%, transparent);
+  pointer-events: none;
 }
 
 .source-control-pane .scm-commit-menu:hover,
@@ -2742,6 +2761,13 @@ button {
   right: 0;
 }
 
+.commit-menu.commit-menu-portal {
+  position: fixed;
+  z-index: 320;
+  right: auto;
+  min-width: 202px;
+}
+
 .source-control-pane .scm-section {
   margin-top: 7px;
 }
@@ -2755,6 +2781,12 @@ button {
 
 .source-control-pane .scm-section-header > div {
   gap: 5px;
+}
+
+.source-control-pane .scm-section-actions {
+  display: inline-flex;
+  gap: 2px;
+  align-items: center;
 }
 
 .source-control-pane .scm-section-header .compact-icon,
@@ -2844,9 +2876,14 @@ button {
 
 .source-control-pane .scm-file-status {
   display: inline-grid;
-  width: 16px;
+  width: 20px;
+  min-width: 20px;
+  height: 20px;
   place-items: center;
-  font-size: 11px;
+  font-family: var(--mono-font);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 20px;
 }
 
 .source-control-pane .scm-file-trailing .compact-icon {
@@ -4145,7 +4182,28 @@ code,
 
 .source-control-pane .scm-commit-box textarea::placeholder {
   font-size: 12px;
-  line-height: 1.35;
+  line-height: 20px;
+}
+
+.source-control-pane .scm-commit-button,
+.source-control-pane .scm-commit-menu {
+  min-height: 34px;
+}
+
+.source-control-pane .scm-commit-box textarea {
+  height: 34px !important;
+  min-height: 34px;
+  max-height: 34px;
+  overflow: hidden;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  line-height: 20px;
+  resize: none;
+  scrollbar-width: none;
+}
+
+.source-control-pane .scm-commit-box textarea::-webkit-scrollbar {
+  display: none;
 }
 
 .source-control-pane .scm-panel-toggle,

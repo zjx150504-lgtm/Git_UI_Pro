@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, ChevronDown, ChevronRight, Plus, RefreshCw, Undo2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Check, ChevronDown, ChevronRight, Plus, RefreshCw, Trash2, Undo2 } from "lucide-react";
 import type { ChangedFile, CommitInput, GitProject, WorktreeState } from "../types/domain";
 import { absoluteFilePath } from "../utils/filePath";
 
@@ -11,6 +12,7 @@ interface WorkspaceViewProps {
   onUnstageFile: (file: ChangedFile) => void;
   onUnstageAll: () => void;
   onDiscardFile: (file: ChangedFile) => void;
+  onDiscardAll: () => void;
   onSelectFile: (file: ChangedFile) => void;
   onPinFile: (file: ChangedFile) => void;
   selectedFilePath?: string;
@@ -30,6 +32,7 @@ export function WorkspaceView({
   onUnstageFile,
   onUnstageAll,
   onDiscardFile,
+  onDiscardAll,
   onSelectFile,
   onPinFile,
   selectedFilePath,
@@ -43,9 +46,12 @@ export function WorkspaceView({
   const [message, setMessage] = useState("");
   const [commitBusy, setCommitBusy] = useState(false);
   const [commitMenuOpen, setCommitMenuOpen] = useState(false);
+  const [commitMenuPosition, setCommitMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [changesOpen, setChangesOpen] = useState(true);
   const [stagedOpen, setStagedOpen] = useState(true);
   const commitActionsRef = useRef<HTMLDivElement>(null);
+  const commitMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const commitMenuRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
   const stagedCount = worktree.stagedFiles.length;
   const unstagedCount = worktree.unstagedFiles.length;
@@ -74,7 +80,6 @@ export function WorkspaceView({
     }
 
     input.style.height = "34px";
-    input.style.height = `${Math.min(Math.max(input.scrollHeight, 34), 96)}px`;
   }, [message, panelOpen]);
 
   useEffect(() => {
@@ -83,7 +88,8 @@ export function WorkspaceView({
     }
 
     const onPointerDown = (event: PointerEvent) => {
-      if (!commitActionsRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (!commitActionsRef.current?.contains(target) && !commitMenuRef.current?.contains(target)) {
         setCommitMenuOpen(false);
       }
     };
@@ -101,12 +107,25 @@ export function WorkspaceView({
     };
   }, [commitMenuOpen]);
 
-  async function submitCommit(options: Partial<CommitInput> = {}) {
+  function toggleCommitMenu() {
+    const rect = commitMenuButtonRef.current?.getBoundingClientRect();
+    if (rect) {
+      setCommitMenuPosition({
+        top: rect.bottom + 4,
+        left: rect.left - 1
+      });
+    }
+    setCommitMenuOpen((value) => !value);
+  }
+
+  async function submitCommit(options: Partial<CommitInput> & { syncAfterCommit?: boolean } = {}) {
     if (commitBusy) {
       return;
     }
 
-    if (canSyncOutgoing && !options.amend && !options.pushAfterCommit) {
+    const { syncAfterCommit, ...commitOptions } = options;
+
+    if (canSyncOutgoing && !commitOptions.amend && !commitOptions.pushAfterCommit && !syncAfterCommit) {
       setCommitBusy(true);
       try {
         await onSyncChanges();
@@ -122,10 +141,13 @@ export function WorkspaceView({
     try {
       const committed = await onCommit({
         ...commitMessage,
-        ...options
+        ...commitOptions
       });
       if (committed) {
         setMessage("");
+        if (syncAfterCommit) {
+          await onSyncChanges();
+        }
       }
       setCommitMenuOpen(false);
     } finally {
@@ -162,66 +184,52 @@ export function WorkspaceView({
               placeholder={`消息(Ctrl+Enter) 在"${project?.status?.currentBranch ?? "当前分支"}"提交`}
               rows={1}
             />
-            <div className={`scm-commit-actions ${canSyncOutgoing ? "sync-mode" : ""}`} ref={commitActionsRef}>
-              <button type="submit" className="scm-commit-button" title={commitTitle} disabled={commitDisabled || commitBusy}>
-                {canSyncOutgoing ? <RefreshCw size={17} /> : <Check size={17} />}
-                {primaryActionLabel}
-              </button>
-              {!canSyncOutgoing ? (
-                <button type="button" className="scm-commit-menu" title="提交选项" onClick={() => setCommitMenuOpen((value) => !value)}>
-                  <ChevronDown size={17} />
+            <div className="scm-commit-control" ref={commitActionsRef}>
+              <div className={`scm-commit-actions ${canSyncOutgoing ? "sync-mode" : ""}`}>
+                <button type="submit" className="scm-commit-button" title={commitTitle} disabled={commitDisabled || commitBusy}>
+                  {canSyncOutgoing ? <RefreshCw size={17} /> : <Check size={17} />}
+                  {primaryActionLabel}
                 </button>
-              ) : null}
-              {!canSyncOutgoing && commitMenuOpen ? (
-                <div className="floating-menu commit-menu">
-                  <button type="button" title={commitTitle} disabled={commitDisabled || commitBusy} onClick={() => void submitCommit()}>
-                    {willAutoStage ? `暂存 ${unstagedCount} 个文件并提交` : "提交"}
+                {!canSyncOutgoing ? (
+                  <button type="button" className="scm-commit-menu" title="提交选项" onClick={toggleCommitMenu} ref={commitMenuButtonRef}>
+                    <ChevronDown size={17} />
                   </button>
-                  <button type="button" disabled={commitBusy} onClick={() => void submitCommit({ amend: true })}>
-                    修改上次提交
-                  </button>
-                  <button type="button" title={commitTitle} disabled={commitDisabled || commitBusy} onClick={() => void submitCommit({ pushAfterCommit: true })}>
-                    {willAutoStage ? `暂存 ${unstagedCount} 个文件并推送` : "提交并推送"}
-                  </button>
-                </div>
-              ) : null}
+                ) : null}
+              </div>
+              {!canSyncOutgoing && commitMenuOpen && commitMenuPosition && typeof document !== "undefined"
+                ? createPortal(
+                    <div className="floating-menu commit-menu commit-menu-portal" style={commitMenuPosition} ref={commitMenuRef}>
+                      <button type="button" title={commitTitle} disabled={commitDisabled || commitBusy} onClick={() => void submitCommit()}>
+                        提交
+                      </button>
+                      <button type="button" disabled={commitBusy} onClick={() => void submitCommit({ amend: true })}>
+                        提交(修改)
+                      </button>
+                      <button type="button" title={commitTitle} disabled={commitDisabled || commitBusy} onClick={() => void submitCommit({ pushAfterCommit: true })}>
+                        提交和推送
+                      </button>
+                      <button type="button" title={commitTitle} disabled={commitDisabled || commitBusy} onClick={() => void submitCommit({ syncAfterCommit: true })}>
+                        提交和同步
+                      </button>
+                    </div>,
+                    document.querySelector(".app-shell") ?? document.body
+                  )
+                : null}
             </div>
           </form>
 
-          <ScmSection
-            title="更改"
-            count={worktree.unstagedFiles.length}
-            emptyText="没有未暂存改动。"
-            actionTitle="暂存所有更改"
-            actionIcon={<Plus size={16} />}
-            onAction={onStageAll}
-            open={changesOpen}
-            onToggle={() => setChangesOpen((value) => !value)}
-          >
-            {worktree.unstagedFiles.map((file) => (
-              <ScmFileRow
-                file={file}
-                selected={file.path === selectedFilePath && selectedFileStaged === false}
-                key={`unstaged-${file.path}-${file.status}`}
-                primaryActionTitle="暂存更改"
-                primaryActionIcon={<Plus size={15} />}
-                onPrimaryAction={() => onStageFile(file)}
-                onDiscard={() => onDiscardFile(file)}
-                onSelect={() => onSelectFile(file)}
-                onPin={() => onPinFile(file)}
-                repositoryPath={project?.path}
-              />
-            ))}
-          </ScmSection>
-
           {worktree.stagedFiles.length > 0 ? (
             <ScmSection
-              title="已暂存的更改"
+              title="暂存的更改"
               count={worktree.stagedFiles.length}
               emptyText="没有已暂存改动。"
-              actionTitle="取消暂存所有更改"
-              actionIcon={<Undo2 size={16} />}
-              onAction={onUnstageAll}
+              actions={[
+                {
+                  title: "取消暂存所有更改",
+                  icon: <Undo2 size={16} />,
+                  onAction: onUnstageAll
+                }
+              ]}
               open={stagedOpen}
               onToggle={() => setStagedOpen((value) => !value)}
             >
@@ -233,6 +241,44 @@ export function WorkspaceView({
                   primaryActionTitle="取消暂存"
                   primaryActionIcon={<Undo2 size={15} />}
                   onPrimaryAction={() => onUnstageFile(file)}
+                  onSelect={() => onSelectFile(file)}
+                  onPin={() => onPinFile(file)}
+                  repositoryPath={project?.path}
+                />
+              ))}
+            </ScmSection>
+          ) : null}
+
+          {worktree.unstagedFiles.length > 0 ? (
+            <ScmSection
+              title="更改"
+              count={worktree.unstagedFiles.length}
+              emptyText="没有未暂存改动。"
+              actions={[
+                {
+                  title: "取消所有更改",
+                  icon: <Trash2 size={15} />,
+                  onAction: onDiscardAll,
+                  danger: true
+                },
+                {
+                  title: "暂存所有更改",
+                  icon: <Plus size={16} />,
+                  onAction: onStageAll
+                }
+              ]}
+              open={changesOpen}
+              onToggle={() => setChangesOpen((value) => !value)}
+            >
+              {worktree.unstagedFiles.map((file) => (
+                <ScmFileRow
+                  file={file}
+                  selected={file.path === selectedFilePath && selectedFileStaged === false}
+                  key={`unstaged-${file.path}-${file.status}`}
+                  primaryActionTitle="暂存更改"
+                  primaryActionIcon={<Plus size={15} />}
+                  onPrimaryAction={() => onStageFile(file)}
+                  onDiscard={() => onDiscardFile(file)}
                   onSelect={() => onSelectFile(file)}
                   onPin={() => onPinFile(file)}
                   repositoryPath={project?.path}
@@ -262,9 +308,7 @@ function ScmSection({
   title,
   count,
   emptyText,
-  actionTitle,
-  actionIcon,
-  onAction,
+  actions,
   open,
   onToggle,
   children
@@ -272,9 +316,7 @@ function ScmSection({
   title: string;
   count: number;
   emptyText: string;
-  actionTitle: string;
-  actionIcon: React.ReactNode;
-  onAction: () => void;
+  actions: Array<{ title: string; icon: React.ReactNode; onAction: () => void; danger?: boolean; disabled?: boolean }>;
   open: boolean;
   onToggle: () => void;
   children: React.ReactNode;
@@ -287,18 +329,23 @@ function ScmSection({
           <span>{title}</span>
           <span className="scm-count">{count}</span>
         </div>
-        <button
-          type="button"
-          className="icon-button compact-icon"
-          title={actionTitle}
-          onClick={(event) => {
-            event.stopPropagation();
-            onAction();
-          }}
-          disabled={count === 0}
-        >
-          {actionIcon}
-        </button>
+        <div className="scm-section-actions">
+          {actions.map((action) => (
+            <button
+              type="button"
+              className={`icon-button compact-icon ${action.danger ? "danger-icon" : ""}`}
+              title={action.title}
+              key={action.title}
+              onClick={(event) => {
+                event.stopPropagation();
+                action.onAction();
+              }}
+              disabled={count === 0 || action.disabled}
+            >
+              {action.icon}
+            </button>
+          ))}
+        </div>
       </div>
       {open ? count === 0 ? <div className="empty-inline scm-empty">{emptyText}</div> : <div className="scm-file-list">{children}</div> : null}
     </section>
