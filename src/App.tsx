@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { Check, FolderGit2, GitBranch, PanelLeftOpen, Plus, Terminal, X } from "lucide-react";
 import { apiClient } from "./api/client";
 import { ConsolePanel } from "./components/ConsolePanel";
@@ -50,6 +50,7 @@ export function App() {
   const [graphPanelOpen, setGraphPanelOpen] = useState(true);
   const [branchDialog, setBranchDialog] = useState<BranchDialogState | null>(null);
   const [branchDialogBusy, setBranchDialogBusy] = useState(false);
+  const autoRefreshBusyRef = useRef(false);
 
   useEffect(() => {
     void loadInitialData();
@@ -81,6 +82,45 @@ export function App() {
     setSelectedCommitHash("");
     void loadProjectData(selectedProject);
   }, [selectedProject?.id]);
+
+  useEffect(() => {
+    if (!selectedProject) {
+      return;
+    }
+
+    let disposed = false;
+    const refresh = async () => {
+      if (disposed || autoRefreshBusyRef.current) {
+        return;
+      }
+
+      autoRefreshBusyRef.current = true;
+      try {
+        await refreshProjectChanges(selectedProject);
+      } finally {
+        autoRefreshBusyRef.current = false;
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void refresh();
+    }, 1600);
+    const onFocus = () => void refresh();
+    const onVisibilityChange = () => {
+      if (!document.hidden) {
+        void refresh();
+      }
+    };
+
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [selectedProject?.id, selectedProject?.path]);
 
   async function loadInitialData() {
     try {
@@ -123,6 +163,28 @@ export function App() {
     setSelectedCommitHash(hash);
     const commit = commits.find((item) => item.hash === hash);
     setStatusMessage(commit ? `已选中提交 ${commit.shortHash}` : "已选中提交。");
+  }
+
+  async function refreshProjectChanges(project: GitProject) {
+    try {
+      const [status, worktreeState] = await Promise.all([apiClient.getProjectStatus(project), apiClient.getWorktree(project)]);
+
+      if (status) {
+        setProjects((current) =>
+          current.map((item) => {
+            if (item.id !== project.id) {
+              return item;
+            }
+
+            return statusSignature(item.status) === statusSignature(status) ? item : { ...item, status };
+          })
+        );
+      }
+
+      setWorktree((current) => (worktreeSignature(current) === worktreeSignature(worktreeState) ? current : worktreeState));
+    } catch {
+      // Background refresh should not replace the user's current status message.
+    }
   }
 
   async function handleSelectCommitFile(commit: CommitNode, file: ChangedFile) {
@@ -471,29 +533,30 @@ export function App() {
     await loadProjectData(selectedProject);
   }
 
-  async function handleCommit(input: CommitInput) {
+  async function handleCommit(input: CommitInput): Promise<boolean> {
     if (!selectedProject) {
       setStatusMessage("请先选择一个 Git 项目。");
-      return;
+      return false;
     }
 
     if (!input.subject.trim() && !input.amend) {
       setStatusMessage("提交标题不能为空。");
-      return;
+      return false;
     }
 
     if (input.amend && !window.confirm("amend 会修改上一次提交，是否继续？")) {
-      return;
+      return false;
     }
 
     const result = await apiClient.commit(selectedProject, input);
     if (!result.ok) {
       setStatusMessage(result.messageZh ?? "提交失败，请展开原始输出查看原因。");
-      return;
+      return false;
     }
 
     setStatusMessage(input.pushAfterCommit ? "提交并推送完成。" : input.amend ? "已修改上次提交。" : "提交完成。");
     await loadProjectData(selectedProject);
+    return true;
   }
 
   function handleThemeModeChange(mode: ThemeMode) {
@@ -814,6 +877,35 @@ function worktreeTabId(file: ChangedFile): string {
 
 function commitFileTabId(hash: string, filePath: string): string {
   return `commit:${hash}:${filePath}`;
+}
+
+function worktreeSignature(state: WorktreeState): string {
+  return [state.stagedFiles, state.unstagedFiles]
+    .map((files) =>
+      files
+        .map((file) => `${file.staged ? "1" : "0"}:${file.status}:${file.path}:${file.oldPath ?? ""}`)
+        .sort()
+        .join("|")
+    )
+    .join("::");
+}
+
+function statusSignature(status: GitProject["status"]): string {
+  if (!status) {
+    return "";
+  }
+
+  return [
+    status.currentBranch ?? "",
+    status.upstream ?? "",
+    status.ahead,
+    status.behind,
+    status.stagedCount,
+    status.unstagedCount,
+    status.untrackedCount,
+    status.hasConflicts ? "1" : "0",
+    status.operationState ?? ""
+  ].join(":");
 }
 
 function upsertWorktreeTab(tabs: WorktreeEditorTab[], incomingTab: WorktreeEditorTab, forcePinned: boolean): WorktreeEditorTab[] {

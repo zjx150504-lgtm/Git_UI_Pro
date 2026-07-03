@@ -15,7 +15,7 @@ interface WorkspaceViewProps {
   onPinFile: (file: ChangedFile) => void;
   selectedFilePath?: string;
   selectedFileStaged?: boolean;
-  onCommit: (input: CommitInput) => void;
+  onCommit: (input: CommitInput) => Promise<boolean>;
   focusRequest: number;
   panelOpen: boolean;
   onTogglePanel: () => void;
@@ -40,6 +40,7 @@ export function WorkspaceView({
   onTogglePanel
 }: WorkspaceViewProps) {
   const [message, setMessage] = useState("");
+  const [commitBusy, setCommitBusy] = useState(false);
   const [commitMenuOpen, setCommitMenuOpen] = useState(false);
   const [changesOpen, setChangesOpen] = useState(true);
   const [stagedOpen, setStagedOpen] = useState(true);
@@ -53,6 +54,16 @@ export function WorkspaceView({
       messageInputRef.current?.focus();
     }
   }, [focusRequest]);
+
+  useEffect(() => {
+    const input = messageInputRef.current;
+    if (!input) {
+      return;
+    }
+
+    input.style.height = "34px";
+    input.style.height = `${Math.min(Math.max(input.scrollHeight, 34), 96)}px`;
+  }, [message, panelOpen]);
 
   useEffect(() => {
     if (!commitMenuOpen) {
@@ -78,13 +89,25 @@ export function WorkspaceView({
     };
   }, [commitMenuOpen]);
 
-  function submitCommit(options: Partial<CommitInput> = {}) {
+  async function submitCommit(options: Partial<CommitInput> = {}) {
+    if (commitBusy) {
+      return;
+    }
+
     const commitMessage = splitCommitMessage(message);
-    onCommit({
-      ...commitMessage,
-      ...options
-    });
-    setCommitMenuOpen(false);
+    setCommitBusy(true);
+    try {
+      const committed = await onCommit({
+        ...commitMessage,
+        ...options
+      });
+      if (committed) {
+        setMessage("");
+      }
+      setCommitMenuOpen(false);
+    } finally {
+      setCommitBusy(false);
+    }
   }
 
   return (
@@ -108,7 +131,7 @@ export function WorkspaceView({
             className="scm-commit-box"
             onSubmit={(event) => {
               event.preventDefault();
-              submitCommit();
+              void submitCommit();
             }}
           >
             <textarea
@@ -121,10 +144,10 @@ export function WorkspaceView({
                 }
               }}
               placeholder={`消息(Ctrl+Enter) 在"${project?.status?.currentBranch ?? "当前分支"}"提交`}
-              rows={2}
+              rows={1}
             />
             <div className="scm-commit-actions" ref={commitActionsRef}>
-              <button type="submit" className="scm-commit-button" disabled={commitDisabled}>
+              <button type="submit" className="scm-commit-button" disabled={commitDisabled || commitBusy}>
                 <Check size={17} />
                 提交
               </button>
@@ -133,13 +156,13 @@ export function WorkspaceView({
               </button>
               {commitMenuOpen ? (
                 <div className="floating-menu commit-menu">
-                  <button type="button" disabled={commitDisabled} onClick={() => submitCommit()}>
+                  <button type="button" disabled={commitDisabled || commitBusy} onClick={() => void submitCommit()}>
                     提交
                   </button>
-                  <button type="button" onClick={() => submitCommit({ amend: true })}>
+                  <button type="button" disabled={commitBusy} onClick={() => void submitCommit({ amend: true })}>
                     修改上次提交
                   </button>
-                  <button type="button" disabled={commitDisabled} onClick={() => submitCommit({ pushAfterCommit: true })}>
+                  <button type="button" disabled={commitDisabled || commitBusy} onClick={() => void submitCommit({ pushAfterCommit: true })}>
                     提交并推送
                   </button>
                 </div>

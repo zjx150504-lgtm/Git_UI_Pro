@@ -81,6 +81,25 @@ export function GraphSidebar({
     setLoadingDetailsHash(null);
   }, [project?.id]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const prefetch = async () => {
+      for (const commit of commits.slice(0, 40)) {
+        if (cancelled) {
+          return;
+        }
+
+        await ensureCommitDetails(commit);
+      }
+    };
+
+    void prefetch();
+    return () => {
+      cancelled = true;
+    };
+  }, [project?.id, commits]);
+
   function scheduleHover(commit: CommitNode, row: HTMLElement) {
     window.clearTimeout(closeTimerRef.current);
     window.clearTimeout(hoverTimerRef.current);
@@ -103,24 +122,43 @@ export function GraphSidebar({
     window.clearTimeout(closeTimerRef.current);
   }
 
-  function handleCommitClick(commit: CommitNode) {
+  async function handleCommitClick(commit: CommitNode) {
     const nextExpandedHash = expandedHash === commit.hash ? null : commit.hash;
     onSelectCommit(commit.hash);
-    setExpandedHash(nextExpandedHash);
 
-    if (nextExpandedHash) {
+    if (!nextExpandedHash) {
+      setExpandedHash(null);
+      return;
+    }
+
+    const hasReadyDetails = Boolean(commitDetailsByHash[commit.hash]) || commit.files.length > 0;
+    if (!hasReadyDetails) {
+      await ensureCommitDetails(commit);
+    } else {
       void ensureCommitDetails(commit);
     }
+
+    setExpandedHash(nextExpandedHash);
   }
 
-  async function ensureCommitDetails(commit: CommitNode) {
-    if (commitDetailsByHash[commit.hash] || loadingDetailsHash === commit.hash) {
-      return;
+  async function ensureCommitDetails(commit: CommitNode): Promise<CommitNode | undefined> {
+    const cached = commitDetailsByHash[commit.hash];
+    if (cached) {
+      return cached;
+    }
+
+    if (commit.files.length > 0) {
+      setCommitDetailsByHash((current) => (current[commit.hash] ? current : { ...current, [commit.hash]: commit }));
+      return commit;
+    }
+
+    if (loadingDetailsHash === commit.hash) {
+      return undefined;
     }
 
     if (!project) {
       setCommitDetailsByHash((current) => ({ ...current, [commit.hash]: commit }));
-      return;
+      return commit;
     }
 
     setLoadingDetailsHash(commit.hash);
@@ -133,11 +171,13 @@ export function GraphSidebar({
     try {
       const details = await apiClient.getCommitDetails(project, commit.hash);
       setCommitDetailsByHash((current) => ({ ...current, [commit.hash]: details }));
+      return details;
     } catch (error) {
       setDetailsErrorByHash((current) => ({
         ...current,
         [commit.hash]: error instanceof Error ? error.message : "无法读取提交变更。"
       }));
+      return undefined;
     } finally {
       setLoadingDetailsHash((current) => (current === commit.hash ? null : current));
     }
@@ -218,7 +258,7 @@ export function GraphSidebar({
                   selectedFilePath={selectedCommitFileHash === commit.hash ? selectedCommitFilePath : undefined}
                   isFirst={index === 0}
                   isLast={index === filteredCommits.length - 1}
-                  onSelect={() => handleCommitClick(commit)}
+                  onSelect={() => void handleCommitClick(commit)}
                   onSelectFile={(file) => onSelectCommitFile(commit, file)}
                   onHoverStart={(row) => scheduleHover(commit, row)}
                   onHoverEnd={scheduleCloseHover}
@@ -294,7 +334,7 @@ function GraphCommitRow({
   }, [commit.authorName, commit.subject]);
 
   return (
-    <div role="listitem" className={`graph-commit-entry ${expanded ? "expanded" : ""}`}>
+    <div role="listitem" className={`graph-commit-entry graph-tone-${tone} ${expanded ? "expanded" : ""} ${isLast ? "last" : ""}`}>
       <button
         type="button"
         className={`graph-commit-row graph-tone-${tone} ${selected ? "active" : ""}`}
@@ -356,7 +396,7 @@ function GraphCommitExpansion({
   onSelectFile: (file: ChangedFile) => void;
 }) {
   if (loading) {
-    return <div className="graph-commit-expansion graph-commit-expansion-state">正在读取变更文件...</div>;
+    return <div className="graph-commit-expansion graph-commit-expansion-loading" aria-label="正在读取变更文件" />;
   }
 
   if (error) {

@@ -1,6 +1,10 @@
 :root {
+  --app-font:
+    "Segoe UI Variable Text", "Segoe UI Variable", "HarmonyOS Sans SC", "MiSans", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei",
+    "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono-font: "Cascadia Code", "Cascadia Mono", Consolas, monospace;
   font-family:
-    Inter, "Segoe UI", "Microsoft YaHei", "PingFang SC", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    var(--app-font);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -2901,12 +2905,12 @@ button {
 .source-control-pane .scm-commit-box textarea {
   grid-column: 1;
   width: 100%;
-  min-height: 58px;
-  max-height: 150px;
+  min-height: 34px;
+  max-height: 96px;
   border: 1px solid var(--border-strong);
   border-radius: 5px;
   outline: 0;
-  padding: 8px 10px;
+  padding: 6px 10px;
   color: var(--text);
   background: var(--sunken);
   line-height: 1.45;
@@ -3158,7 +3162,7 @@ button {
 }
 
 .source-control-pane .scm-commit-box textarea {
-  min-height: 48px;
+  min-height: 34px;
 }
 
 .branch-dialog-backdrop {
@@ -3476,11 +3480,31 @@ button {
 }
 
 .graph-commit-entry {
+  position: relative;
   min-width: 0;
   border-radius: 4px;
 }
 
+.graph-commit-entry.expanded:not(.last)::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  left: 12px;
+  top: 16px;
+  bottom: 0;
+  width: 2px;
+  border-radius: 999px;
+  background: #2f98ff;
+  pointer-events: none;
+}
+
+.graph-commit-entry.expanded.graph-tone-remote::before {
+  background: #b886ff;
+}
+
 .source-control-pane .graph-commit-row {
+  position: relative;
+  z-index: 1;
   grid-template-columns: 24px minmax(0, 1fr);
   gap: 5px;
   min-height: 32px;
@@ -3545,6 +3569,8 @@ button {
 }
 
 .graph-commit-expansion {
+  position: relative;
+  z-index: 1;
   display: grid;
   gap: 0;
   margin: -1px 4px 3px 31px;
@@ -3561,6 +3587,10 @@ button {
 
 .graph-commit-expansion-state.error {
   color: var(--danger);
+}
+
+.graph-commit-expansion-loading {
+  min-height: 1px;
 }
 
 .graph-commit-file-row {
@@ -3670,4 +3700,348 @@ button {
 .scm-panel-body,
 .branch-list {
   scrollbar-gutter: stable;
+}
+
+/* Motion polish */
+:root {
+  --motion-fast: 110ms;
+  --motion-base: 170ms;
+  --motion-slow: 240ms;
+  --motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.app-shell,
+.main-grid,
+.source-control-pane,
+.workspace-shell,
+.project-rail,
+.collapsed-sidebar,
+.detail-panel {
+  transition:
+    grid-template-columns var(--motion-slow) var(--motion-ease),
+    grid-template-rows var(--motion-slow) var(--motion-ease),
+    width var(--motion-slow) var(--motion-ease),
+    background-color var(--motion-base) var(--motion-ease),
+    border-color var(--motion-base) var(--motion-ease);
+}
+
+.icon-button,
+.toolbar-button,
+.text-button,
+.filter-button,
+.scm-commit-button,
+.scm-commit-menu,
+.graph-title-toggle,
+.scm-panel-toggle,
+.branch-list-item,
+.editor-tab,
+.file-row-button,
+.project-rail-item,
+.project-item,
+.graph-commit-row,
+.graph-commit-file-row,
+.scm-file-row {
+  transition:
+    background-color var(--motion-base) var(--motion-ease),
+    border-color var(--motion-base) var(--motion-ease),
+    color var(--motion-base) var(--motion-ease),
+    opacity var(--motion-base) var(--motion-ease),
+    outline-color var(--motion-base) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease);
+}
+
+.icon-button:hover,
+.toolbar-button:hover,
+.text-button:hover,
+.filter-button:hover,
+.scm-commit-button:hover:not(:disabled),
+.scm-commit-menu:hover,
+.graph-title-toggle:hover,
+.project-rail-item:hover,
+.graph-commit-row:hover,
+.graph-commit-file-row:hover,
+.scm-file-row:hover,
+.branch-list-item:hover,
+.editor-tab:hover {
+  transform: translateY(-1px);
+}
+
+.icon-button:active,
+.toolbar-button:active,
+.text-button:active,
+.filter-button:active,
+.scm-commit-button:active:not(:disabled),
+.scm-commit-menu:active,
+.graph-title-toggle:active,
+.project-rail-item:active,
+.graph-commit-row:active,
+.graph-commit-file-row:active,
+.scm-file-row:active,
+.branch-list-item:active,
+.editor-tab:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.icon-button svg,
+.scm-panel-toggle svg,
+.graph-title-toggle svg,
+.scm-commit-button svg,
+.scm-commit-menu svg,
+.ref-chip svg {
+  transition:
+    transform var(--motion-base) var(--motion-ease),
+    color var(--motion-base) var(--motion-ease),
+    opacity var(--motion-base) var(--motion-ease);
+}
+
+.icon-button:hover svg,
+.graph-title-toggle:hover svg,
+.scm-panel-toggle:hover svg {
+  transform: scale(1.08);
+}
+
+.search-box,
+.history-search,
+.branch-search,
+.branch-create-form input[type="text"],
+.branch-create-form input:not([type]),
+.source-control-pane .scm-commit-box textarea {
+  transition:
+    border-color var(--motion-base) var(--motion-ease),
+    background-color var(--motion-base) var(--motion-ease),
+    box-shadow var(--motion-base) var(--motion-ease);
+}
+
+.search-box:focus-within,
+.history-search:focus-within,
+.branch-search:focus-within,
+.source-control-pane .scm-commit-box textarea:focus {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 16%, transparent);
+}
+
+.floating-menu,
+.commit-menu,
+.branch-dialog,
+.commit-hover-card,
+.graph-search-row {
+  animation: surface-in var(--motion-slow) var(--motion-ease-out);
+  transform-origin: top right;
+}
+
+.branch-dialog-backdrop {
+  animation: fade-in var(--motion-base) var(--motion-ease);
+}
+
+.graph-commit-expansion {
+  animation: reveal-down var(--motion-slow) var(--motion-ease-out);
+  transform-origin: top;
+}
+
+.scm-panel-body,
+.graph-commit-list,
+.scm-file-list,
+.branch-list,
+.editor-detail-panel:not(.empty),
+.console-panel {
+  animation: content-in var(--motion-base) var(--motion-ease-out);
+}
+
+.graph-commit-file-row,
+.scm-file-row,
+.branch-list-item,
+.editor-tab {
+  will-change: transform;
+}
+
+.scm-row-actions,
+.scm-file-actions,
+.remove-project {
+  transition:
+    opacity var(--motion-base) var(--motion-ease),
+    transform var(--motion-base) var(--motion-ease);
+}
+
+.scm-row-actions,
+.scm-file-actions {
+  transform: translateX(4px);
+}
+
+.scm-file-row:hover .scm-row-actions,
+.scm-row-actions:focus-within,
+.scm-file-row:hover .scm-file-actions,
+.scm-file-actions:focus-within {
+  transform: translateX(0);
+}
+
+.remove-project {
+  transform: translateX(3px) scale(0.96);
+}
+
+.project-rail-item:hover .remove-project,
+.remove-project:focus-visible {
+  transform: translateX(0) scale(1);
+}
+
+.diff-line {
+  transition:
+    background-color var(--motion-base) var(--motion-ease),
+    color var(--motion-base) var(--motion-ease);
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes surface-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes reveal-down {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scaleY(0.98);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0) scaleY(1);
+  }
+}
+
+@keyframes content-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Typography consistency */
+body,
+button,
+input,
+textarea {
+  font-family: var(--app-font);
+}
+
+code,
+.line-number,
+.muted-command,
+.commit-hash,
+.commit-hover-footer code,
+.graph-commit-meta,
+.scm-file-status {
+  font-family: var(--mono-font);
+}
+
+.source-control-pane .scm-panel-toggle,
+.source-control-pane .graph-section-title {
+  color: var(--text);
+  font-family: var(--app-font);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.source-control-pane .scm-panel-toggle > span:not(.scm-count),
+.source-control-pane .graph-title-text,
+.source-control-pane .graph-section-title .graph-title-text,
+.source-control-pane .graph-section-title .graph-title-label > .graph-title-text {
+  display: inline-flex;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  margin: 0;
+  place-items: initial;
+  border-radius: 0;
+  color: var(--text);
+  background: transparent;
+  font-family: var(--app-font);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.source-control-pane .scm-count,
+.source-control-pane .graph-count,
+.source-control-pane .graph-section-title .graph-count,
+.source-control-pane .graph-section-title .graph-title-label > .graph-count {
+  display: inline-grid;
+  min-width: 20px;
+  height: 18px;
+  margin-left: 2px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface);
+  font-family: var(--app-font);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.source-control-pane .scm-panel-toggle,
+.source-control-pane .graph-section-title {
+  min-height: 30px;
+  align-items: center;
+  padding: 0 10px;
+}
+
+.source-control-pane .scm-panel-toggle {
+  gap: 6px;
+}
+
+.source-control-pane .scm-panel-toggle > svg {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.source-control-pane .graph-section-title .graph-title-label,
+.source-control-pane .graph-section-title > div.graph-title-label {
+  gap: 6px;
+  align-items: center;
+}
+
+.source-control-pane .graph-section-title .graph-title-toggle {
+  flex: 0 0 16px;
+  width: 16px;
+  min-height: 24px;
+  padding: 0;
+}
+
+.source-control-pane .graph-section-title .graph-title-toggle svg {
+  width: 16px;
+  height: 16px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
 }
