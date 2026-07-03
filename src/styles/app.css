@@ -3021,6 +3021,7 @@ button {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 7px;
+  width: 100%;
   margin: 0 0 10px;
 }
 
@@ -3037,6 +3038,7 @@ button {
   grid-column: 1;
   grid-row: auto;
   min-width: 0;
+  width: 100%;
 }
 
 .source-control-pane .scm-commit-actions {
@@ -3045,6 +3047,7 @@ button {
   gap: 0;
   grid-column: 1;
   grid-row: auto;
+  width: 100%;
   overflow: hidden;
   border-radius: 5px;
   background: #0e639c;
@@ -3470,6 +3473,10 @@ button {
 
 .compact-graph-cell.graph-tone-plain .graph-node {
   fill: #2f98ff;
+}
+
+.compact-graph-cell.graph-first-node .graph-node {
+  fill: var(--panel);
 }
 
 .source-control-pane .graph-commit-main {
@@ -3954,6 +3961,26 @@ button {
   display: grid;
   gap: 0;
   padding: 2px 8px 10px;
+  scrollbar-color: transparent transparent;
+}
+
+.source-control-pane .graph-commit-list:hover,
+.source-control-pane .graph-commit-list:focus-within {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.source-control-pane .graph-commit-list::-webkit-scrollbar-thumb {
+  border-color: transparent;
+  background: transparent;
+}
+
+.source-control-pane .graph-commit-list:hover::-webkit-scrollbar-thumb,
+.source-control-pane .graph-commit-list:focus-within::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+}
+
+.source-control-pane .graph-commit-list:hover::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
 }
 
 .graph-commit-entry {
@@ -4670,6 +4697,12 @@ code,
   transform: none;
 }
 
+.source-control-pane .scm-panel-body {
+  padding-right: 10px;
+  padding-left: 10px;
+  scrollbar-gutter: auto;
+}
+
 .source-control-pane {
   grid-template-rows: minmax(180px, var(--scm-pane-height)) 10px minmax(130px, 1fr);
   height: 100%;
@@ -4728,13 +4761,13 @@ code,
 
 .detail-resize {
   position: relative;
-  background: transparent;
+  background: var(--panel);
   cursor: col-resize;
 }
 
 .detail-resize:hover,
 .detail-resize:active {
-  background: transparent;
+  background: var(--panel);
 }
 
 .detail-resize::before {

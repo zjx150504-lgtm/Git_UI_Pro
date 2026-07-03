@@ -896,7 +896,7 @@ function CommitHoverCard({
 
 function CompactGraphCell({ isFirst, isLast, tone }: { isFirst: boolean; isLast: boolean; tone: GraphTone }) {
   return (
-    <svg className={`compact-graph-cell graph-tone-${tone}`} viewBox="0 0 24 32" aria-hidden="true">
+    <svg className={`compact-graph-cell graph-tone-${tone} ${isFirst ? "graph-first-node" : ""}`} viewBox="0 0 24 32" aria-hidden="true">
       {!isFirst ? <line x1="12" y1="0" x2="12" y2="13" className="graph-line" /> : null}
       {!isLast ? <line x1="12" y1="19" x2="12" y2="32" className="graph-line" /> : null}
       <circle cx="12" cy="16" r="4.2" className="graph-node" />
