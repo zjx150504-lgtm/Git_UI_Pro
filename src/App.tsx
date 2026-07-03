@@ -759,6 +759,7 @@ export function App() {
               selectedFilePath={activeWorktreeTab?.file.path}
               selectedFileStaged={activeWorktreeTab?.file.staged}
               onCommit={handleCommit}
+              onSyncChanges={() => (selectedProject ? runRemoteOperation("push", selectedProject) : Promise.resolve())}
               focusRequest={commitFocusRequest}
               panelOpen={changesPanelOpen}
               onTogglePanel={() => setChangesPanelOpen((value) => !value)}

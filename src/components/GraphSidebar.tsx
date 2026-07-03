@@ -344,32 +344,7 @@ function GraphCommitRow({
   onHoverStart: (row: HTMLElement) => void;
   onHoverEnd: () => void;
 }) {
-  const textRef = useRef<HTMLSpanElement>(null);
-  const subjectMeasureRef = useRef<HTMLSpanElement>(null);
-  const authorMeasureRef = useRef<HTMLSpanElement>(null);
-  const [showAuthor, setShowAuthor] = useState(false);
   const visibleRefs = commit.refs.filter((ref) => ref.type !== "head" && !ref.name.endsWith("/HEAD"));
-
-  useEffect(() => {
-    const textElement = textRef.current;
-    if (!textElement || !commit.authorName) {
-      setShowAuthor(false);
-      return;
-    }
-
-    const measure = () => {
-      const subjectWidth = subjectMeasureRef.current?.getBoundingClientRect().width ?? 0;
-      const authorWidth = authorMeasureRef.current?.getBoundingClientRect().width ?? 0;
-      const availableWidth = textElement.getBoundingClientRect().width;
-      const authorGap = 8;
-      setShowAuthor(subjectWidth + authorGap + authorWidth <= availableWidth);
-    };
-
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(textElement);
-    return () => observer.disconnect();
-  }, [commit.authorName, commit.subject]);
 
   return (
     <div role="listitem" className={`graph-commit-entry graph-tone-${tone} ${expanded ? "expanded" : ""} ${isLast ? "last" : ""}`}>
@@ -385,15 +360,9 @@ function GraphCommitRow({
       >
         <CompactGraphCell isFirst={isFirst} isLast={isLast} tone={tone} />
         <span className="graph-commit-main">
-          <span className="graph-commit-text" ref={textRef}>
+          <span className="graph-commit-text">
             <span className="graph-commit-subject">{commit.subject}</span>
-            {showAuthor ? <span className="graph-commit-author">{commit.authorName}</span> : null}
-            <span className="graph-measure" ref={subjectMeasureRef} aria-hidden="true">
-              {commit.subject}
-            </span>
-            <span className="graph-measure" ref={authorMeasureRef} aria-hidden="true">
-              {commit.authorName}
-            </span>
+            {commit.authorName ? <span className="graph-commit-author">{commit.authorName}</span> : null}
           </span>
           {visibleRefs.length > 0 ? (
             <span className="graph-ref-row">

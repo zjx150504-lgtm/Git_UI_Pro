@@ -2671,27 +2671,34 @@ button {
   gap: 0;
   grid-column: 1;
   grid-row: auto;
+  overflow: hidden;
+  border-radius: 5px;
+  background: #0e639c;
+}
+
+.source-control-pane .scm-commit-actions.sync-mode {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .source-control-pane .scm-commit-button {
   min-height: 34px;
-  border-radius: 5px 0 0 5px;
-  background: #0e639c;
+  border-radius: 0;
+  background: transparent;
   font-weight: 500;
 }
 
 .source-control-pane .scm-commit-menu {
   width: 38px;
   min-height: 34px;
-  border-left: 1px solid color-mix(in srgb, #ffffff 35%, transparent);
-  border-radius: 0 5px 5px 0;
+  border-left: 1px solid color-mix(in srgb, #ffffff 24%, transparent);
+  border-radius: 0;
   color: #ffffff;
-  background: #0e639c;
+  background: transparent;
 }
 
 .source-control-pane .scm-commit-menu:hover,
 .source-control-pane .scm-commit-button:hover:not(:disabled) {
-  background: #1177bb;
+  background: color-mix(in srgb, #ffffff 10%, transparent);
 }
 
 .commit-menu {
@@ -3366,14 +3373,15 @@ button {
 .graph-commit-text {
   position: relative;
   display: inline-flex;
-  gap: 8px;
+  gap: 6px;
   align-items: baseline;
+  max-width: 100%;
   min-width: 0;
   overflow: hidden;
 }
 
 .source-control-pane .graph-commit-text .graph-commit-subject {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
 }
 
@@ -3382,16 +3390,6 @@ button {
   color: color-mix(in srgb, var(--muted) 82%, transparent);
   font-size: 12px;
   font-weight: 500;
-  white-space: nowrap;
-}
-
-.graph-measure {
-  position: absolute;
-  left: 0;
-  top: 0;
-  width: max-content;
-  visibility: hidden;
-  pointer-events: none;
   white-space: nowrap;
 }
 
@@ -3506,8 +3504,8 @@ button {
   position: relative;
   z-index: 1;
   grid-template-columns: 24px minmax(0, 1fr);
-  gap: 5px;
-  min-height: 32px;
+  gap: 4px;
+  min-height: 28px;
   border-radius: 4px;
   padding-right: 3px;
 }
@@ -3518,7 +3516,7 @@ button {
 
 .compact-graph-cell {
   width: 24px;
-  height: 32px;
+  height: 28px;
 }
 
 .source-control-pane .graph-commit-main {
@@ -3549,10 +3547,10 @@ button {
   gap: 3px;
   max-width: 116px;
   min-width: 0;
-  min-height: 18px;
-  padding: 0 6px;
+  min-height: 20px;
+  padding: 1px 6px 2px;
   overflow: hidden;
-  line-height: 1;
+  line-height: 1.2;
   text-overflow: clip;
 }
 
@@ -3563,7 +3561,7 @@ button {
 .ref-chip-label {
   min-width: 0;
   overflow: hidden;
-  line-height: 1;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

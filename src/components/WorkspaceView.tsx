@@ -17,6 +17,7 @@ interface WorkspaceViewProps {
   selectedFilePath?: string;
   selectedFileStaged?: boolean;
   onCommit: (input: CommitInput) => Promise<boolean>;
+  onSyncChanges: () => Promise<void>;
   focusRequest: number;
   panelOpen: boolean;
   onTogglePanel: () => void;
@@ -36,6 +37,7 @@ export function WorkspaceView({
   selectedFilePath,
   selectedFileStaged,
   onCommit,
+  onSyncChanges,
   focusRequest,
   panelOpen,
   onTogglePanel
@@ -51,8 +53,15 @@ export function WorkspaceView({
   const unstagedCount = worktree.unstagedFiles.length;
   const changeCount = unstagedCount + stagedCount;
   const willAutoStage = stagedCount === 0 && unstagedCount > 0;
-  const commitDisabled = changeCount === 0;
-  const commitTitle = willAutoStage ? `${unstagedCount} 个文件未暂存，提交时会自动暂存并提交。` : "提交已暂存的更改";
+  const outgoingCount = project?.status?.ahead ?? 0;
+  const canSyncOutgoing = changeCount === 0 && outgoingCount > 0;
+  const commitDisabled = changeCount === 0 && !canSyncOutgoing;
+  const commitTitle = canSyncOutgoing
+    ? `同步 ${outgoingCount} 个本地提交到远程。`
+    : willAutoStage
+      ? `${unstagedCount} 个文件未暂存，提交时会自动暂存并提交。`
+      : "提交已暂存的更改";
+  const primaryActionLabel = canSyncOutgoing ? `同步更改 ${outgoingCount}↑` : "提交";
 
   useEffect(() => {
     if (focusRequest > 0) {
@@ -96,6 +105,17 @@ export function WorkspaceView({
 
   async function submitCommit(options: Partial<CommitInput> = {}) {
     if (commitBusy) {
+      return;
+    }
+
+    if (canSyncOutgoing && !options.amend && !options.pushAfterCommit) {
+      setCommitBusy(true);
+      try {
+        await onSyncChanges();
+        setCommitMenuOpen(false);
+      } finally {
+        setCommitBusy(false);
+      }
       return;
     }
 
@@ -151,15 +171,17 @@ export function WorkspaceView({
               placeholder={`消息(Ctrl+Enter) 在"${project?.status?.currentBranch ?? "当前分支"}"提交`}
               rows={1}
             />
-            <div className="scm-commit-actions" ref={commitActionsRef}>
+            <div className={`scm-commit-actions ${canSyncOutgoing ? "sync-mode" : ""}`} ref={commitActionsRef}>
               <button type="submit" className="scm-commit-button" title={commitTitle} disabled={commitDisabled || commitBusy}>
-                <Check size={17} />
-                提交
+                {canSyncOutgoing ? <RefreshCw size={17} /> : <Check size={17} />}
+                {primaryActionLabel}
               </button>
-              <button type="button" className="scm-commit-menu" title="提交选项" onClick={() => setCommitMenuOpen((value) => !value)}>
-                <ChevronDown size={17} />
-              </button>
-              {commitMenuOpen ? (
+              {!canSyncOutgoing ? (
+                <button type="button" className="scm-commit-menu" title="提交选项" onClick={() => setCommitMenuOpen((value) => !value)}>
+                  <ChevronDown size={17} />
+                </button>
+              ) : null}
+              {!canSyncOutgoing && commitMenuOpen ? (
                 <div className="floating-menu commit-menu">
                   <button type="button" title={commitTitle} disabled={commitDisabled || commitBusy} onClick={() => void submitCommit()}>
                     {willAutoStage ? `暂存 ${unstagedCount} 个文件并提交` : "提交"}
