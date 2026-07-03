@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 contextBridge.exposeInMainWorld("gitUI", {
+  runAppCommand: (command: string) => ipcRenderer.invoke("app:command", command),
+  setNativeTheme: (themeSource: "system" | "light" | "dark") => ipcRenderer.invoke("theme:setNative", themeSource),
   getGitVersion: () => ipcRenderer.invoke("git:getVersion"),
   chooseDirectory: () => ipcRenderer.invoke("dialog:chooseDirectory"),
   getProjects: () => ipcRenderer.invoke("projects:list"),

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEve
 import { Check, FolderGit2, GitBranch, Moon, PanelLeftClose, PanelLeftOpen, Plus, Sun, Terminal, X } from "lucide-react";
 import { Toaster, toast } from "sonner";
 import { apiClient } from "./api/client";
+import { AppChrome } from "./components/AppChrome";
 import { ConsolePanel } from "./components/ConsolePanel";
 import { GraphSidebar } from "./components/GraphSidebar";
 import { ProjectRail } from "./components/ProjectRail";
@@ -104,6 +105,10 @@ export function App() {
     syncTheme();
     media.addEventListener("change", syncTheme);
     return () => media.removeEventListener("change", syncTheme);
+  }, [themeMode]);
+
+  useEffect(() => {
+    void window.gitUI?.setNativeTheme(themeMode);
   }, [themeMode]);
 
   const selectedProject = useMemo(
@@ -712,6 +717,10 @@ export function App() {
     handleThemeModeChange(resolvedTheme === "dark" ? "light" : "dark");
   }
 
+  function runAppCommand(command: string) {
+    void window.gitUI?.runAppCommand(command);
+  }
+
   function renderSidebarControls(collapsed: boolean) {
     return (
       <div className={`sidebar-bottom-controls ${collapsed ? "collapsed" : ""}`} aria-label="左侧栏控制">
@@ -770,6 +779,7 @@ export function App() {
       }`}
       style={layoutStyle}
     >
+      <AppChrome onCommand={runAppCommand} />
       {leftCollapsed ? (
         <aside className="collapsed-sidebar">
           <div className="collapsed-project-list" aria-label="项目列表">

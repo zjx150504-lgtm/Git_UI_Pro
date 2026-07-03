@@ -1,6 +1,8 @@
 import type { BranchInfo, ChangedFile, CommitInput, CommitNode, DiffLine, GitOperationResult, GitProject, GitStatusSummary, WorktreeState } from "./domain";
 
 export interface GitUIBridge {
+  runAppCommand: (command: string) => Promise<boolean>;
+  setNativeTheme: (themeSource: "system" | "light" | "dark") => Promise<boolean>;
   getGitVersion: () => Promise<GitOperationResult>;
   chooseDirectory: () => Promise<string | null>;
   getProjects: () => Promise<GitProject[]>;

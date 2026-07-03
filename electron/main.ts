@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, type MenuItemConstructorOptions } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme } from "electron";
 import path from "node:path";
 import { ConfigStore } from "./configStore";
 import { GitService } from "./gitService";
@@ -8,6 +8,7 @@ let configStore: ConfigStore;
 const gitService = new GitService();
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
+type AppThemeSource = "system" | "light" | "dark";
 
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
@@ -15,6 +16,7 @@ async function createWindow(): Promise<void> {
     height: 920,
     minWidth: 860,
     minHeight: 640,
+    frame: false,
     backgroundColor: "#101317",
     title: "Git UI Pro",
     webPreferences: {
@@ -32,6 +34,16 @@ async function createWindow(): Promise<void> {
 }
 
 function registerIpc(): void {
+  ipcMain.handle("app:command", (_event, command: string) => {
+    runAppCommand(command);
+    return true;
+  });
+
+  ipcMain.handle("theme:setNative", (_event, themeSource: AppThemeSource) => {
+    applyNativeTheme(themeSource);
+    return true;
+  });
+
   ipcMain.handle("git:getVersion", () => gitService.getVersion());
 
   ipcMain.handle("dialog:chooseDirectory", async () => {
@@ -93,6 +105,81 @@ function registerIpc(): void {
   ipcMain.handle("git:deleteBranch", (_event, repositoryPath: string, branchName: string) => gitService.deleteBranch(repositoryPath, branchName));
 }
 
+function applyNativeTheme(themeSource: AppThemeSource): void {
+  nativeTheme.themeSource = themeSource;
+  mainWindow?.setBackgroundColor(nativeTheme.shouldUseDarkColors ? "#101317" : "#f5f7fa");
+}
+
+function runAppCommand(command: string): void {
+  if (command === "app:quit") {
+    app.quit();
+    return;
+  }
+
+  if (!mainWindow) {
+    return;
+  }
+
+  const webContents = mainWindow.webContents;
+  switch (command) {
+    case "edit:undo":
+      webContents.undo();
+      break;
+    case "edit:redo":
+      webContents.redo();
+      break;
+    case "edit:cut":
+      webContents.cut();
+      break;
+    case "edit:copy":
+      webContents.copy();
+      break;
+    case "edit:paste":
+      webContents.paste();
+      break;
+    case "edit:selectAll":
+      webContents.selectAll();
+      break;
+    case "view:reload":
+      webContents.reload();
+      break;
+    case "view:forceReload":
+      webContents.reloadIgnoringCache();
+      break;
+    case "view:toggleDevTools":
+      webContents.toggleDevTools();
+      break;
+    case "view:resetZoom":
+      webContents.setZoomLevel(0);
+      break;
+    case "view:zoomIn":
+      webContents.setZoomLevel(webContents.getZoomLevel() + 1);
+      break;
+    case "view:zoomOut":
+      webContents.setZoomLevel(webContents.getZoomLevel() - 1);
+      break;
+    case "view:toggleFullscreen":
+      mainWindow.setFullScreen(!mainWindow.isFullScreen());
+      break;
+    case "window:minimize":
+      mainWindow.minimize();
+      break;
+    case "window:toggleMaximize":
+      if (mainWindow.isMaximized()) {
+        mainWindow.unmaximize();
+      } else {
+        mainWindow.maximize();
+      }
+      break;
+    case "window:close":
+      mainWindow.close();
+      break;
+    case "help:about":
+      showAboutDialog();
+      break;
+  }
+}
+
 app.whenReady().then(async () => {
   configStore = new ConfigStore(app.getPath("userData"));
   configureApplicationMenu();
@@ -113,68 +200,21 @@ app.on("window-all-closed", () => {
 });
 
 function configureApplicationMenu(): void {
-  const template: MenuItemConstructorOptions[] = [
-    {
-      label: "文件",
-      submenu: [{ role: "quit", label: "退出" }]
-    },
-    {
-      label: "编辑",
-      submenu: [
-        { role: "undo", label: "撤销" },
-        { role: "redo", label: "重做" },
-        { type: "separator" },
-        { role: "cut", label: "剪切" },
-        { role: "copy", label: "复制" },
-        { role: "paste", label: "粘贴" },
-        { role: "selectAll", label: "全选" }
-      ]
-    },
-    {
-      label: "视图",
-      submenu: [
-        { role: "reload", label: "重新加载" },
-        { role: "forceReload", label: "强制重新加载" },
-        { role: "toggleDevTools", label: "开发者工具" },
-        { type: "separator" },
-        { role: "resetZoom", label: "实际大小" },
-        { role: "zoomIn", label: "放大" },
-        { role: "zoomOut", label: "缩小" },
-        { type: "separator" },
-        { role: "togglefullscreen", label: "切换全屏" }
-      ]
-    },
-    {
-      label: "窗口",
-      submenu: [
-        { role: "minimize", label: "最小化" },
-        { role: "close", label: "关闭窗口" }
-      ]
-    },
-    {
-      label: "帮助",
-      submenu: [
-        {
-          label: "关于 Git UI Pro",
-          click: () => {
-            const options = {
-              type: "info",
-              title: "关于 Git UI Pro",
-              message: "Git UI Pro",
-              detail: "中文桌面 Git Graph + 多项目管理器"
-            } as const;
+  Menu.setApplicationMenu(null);
+}
 
-            if (mainWindow) {
-              void dialog.showMessageBox(mainWindow, options);
-              return;
-            }
+function showAboutDialog(): void {
+  const options = {
+    type: "info",
+    title: "关于 Git UI Pro",
+    message: "Git UI Pro",
+    detail: "中文桌面 Git Graph + 多项目管理器"
+  } as const;
 
-            void dialog.showMessageBox(options);
-          }
-        }
-      ]
-    }
-  ];
+  if (mainWindow) {
+    void dialog.showMessageBox(mainWindow, options);
+    return;
+  }
 
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+  void dialog.showMessageBox(options);
 }

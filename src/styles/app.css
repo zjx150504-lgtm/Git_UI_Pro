@@ -143,6 +143,7 @@ button {
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width) 6px minmax(0, 1fr);
+  grid-template-rows: 52px minmax(0, 1fr);
   width: 100%;
   height: 100%;
   min-width: 0;
@@ -154,6 +155,159 @@ button {
 
 .app-shell.left-collapsed {
   grid-template-columns: var(--sidebar-width) 2px minmax(0, 1fr);
+}
+
+.app-chrome {
+  position: relative;
+  z-index: 80;
+  display: grid;
+  grid-column: 1 / -1;
+  grid-row: 1;
+  grid-template-rows: 28px 24px;
+  min-width: 0;
+  min-height: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  user-select: none;
+  -webkit-app-region: drag;
+}
+
+.app-chrome-titlebar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  min-width: 0;
+  min-height: 0;
+}
+
+.app-chrome-brand {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  min-width: 0;
+  padding: 0 10px 0 8px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.app-chrome-brand svg {
+  color: var(--muted);
+}
+
+.app-chrome-drag-region {
+  min-width: 0;
+  height: 100%;
+}
+
+.app-window-controls,
+.app-chrome-menu,
+.app-chrome-menu button,
+.app-window-controls button {
+  -webkit-app-region: no-drag;
+}
+
+.app-window-controls {
+  display: flex;
+  align-self: stretch;
+  height: 28px;
+}
+
+.app-window-controls button {
+  display: grid;
+  width: 46px;
+  height: 28px;
+  place-items: center;
+  border-radius: 0;
+  color: var(--muted-strong);
+  background: transparent;
+  cursor: pointer;
+}
+
+.app-window-controls button:hover {
+  color: var(--text-strong);
+  background: var(--surface);
+}
+
+.app-window-controls button.close:hover {
+  color: #fff;
+  background: #c42b1c;
+}
+
+.app-chrome-menu {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+  min-height: 0;
+  padding-left: 4px;
+}
+
+.app-chrome-menu-group {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+}
+
+.app-chrome-menu-group > button {
+  height: 24px;
+  border-radius: 4px;
+  padding: 0 8px;
+  color: var(--text);
+  background: transparent;
+  font-size: 12px;
+  line-height: 24px;
+  cursor: pointer;
+}
+
+.app-chrome-menu-group > button:hover,
+.app-chrome-menu-group > button.active {
+  background: var(--surface);
+}
+
+.app-chrome-menu-popover {
+  position: absolute;
+  z-index: 120;
+  top: 24px;
+  left: 0;
+  display: grid;
+  min-width: 168px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  padding: 5px;
+  background: var(--panel-strong);
+  box-shadow: 0 16px 34px rgb(0 0 0 / 26%);
+}
+
+.app-chrome-menu-popover button {
+  justify-content: flex-start;
+  width: 100%;
+  min-height: 28px;
+  border-radius: 4px;
+  padding: 0 10px;
+  color: var(--text);
+  background: transparent;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-chrome-menu-popover button.with-separator {
+  margin-top: 5px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 4px 4px;
+  padding-top: 5px;
+}
+
+.app-chrome-menu-popover button:hover {
+  background: var(--surface);
+}
+
+.project-rail,
+.collapsed-sidebar,
+.sidebar-resize,
+.workspace-shell {
+  grid-row: 2;
 }
 
 .collapsed-sidebar {
@@ -1890,7 +2044,7 @@ button {
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
   min-width: 0;
-  height: 100vh;
+  height: 100%;
   border-right: 1px solid var(--border);
   background: var(--panel);
 }
