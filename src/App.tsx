@@ -456,6 +456,45 @@ export function App() {
     }
   }
 
+  async function handleReorderProjects(projectIds: string[]) {
+    const previousProjects = projects;
+    const reorderedProjects = reorderProjectsByIds(projects, projectIds);
+    if (projects.map((project) => project.id).join("|") === reorderedProjects.map((project) => project.id).join("|")) {
+      return;
+    }
+
+    setProjects(reorderedProjects);
+    try {
+      await apiClient.reorderProjects(reorderedProjects.map((project) => project.id));
+    } catch (error) {
+      setProjects(previousProjects);
+      notifyError(error instanceof Error ? error.message : "保存项目排序失败");
+    }
+  }
+
+  async function handleToggleProjectPinned(projectId: string) {
+    const project = projects.find((item) => item.id === projectId);
+    if (!project) {
+      return;
+    }
+
+    const previousProjects = projects;
+    const nextFavorite = !project.favorite;
+    const updatedProject = { ...project, favorite: nextFavorite };
+    const nextProjects = nextFavorite
+      ? [updatedProject, ...projects.filter((item) => item.id !== projectId)]
+      : projects.map((item) => (item.id === projectId ? updatedProject : item));
+
+    setProjects(nextProjects);
+    try {
+      await apiClient.setProjectFavorite(projectId, nextFavorite);
+      notifySuccess(nextFavorite ? "已置顶项目" : "已取消置顶", project.name);
+    } catch (error) {
+      setProjects(previousProjects);
+      notifyError(error instanceof Error ? error.message : "保存项目置顶状态失败");
+    }
+  }
+
   async function handleRemoveProject(projectId: string) {
     const project = projects.find((item) => item.id === projectId);
     if (!project) {
@@ -887,6 +926,8 @@ export function App() {
           onAddProject={handleAddProject}
           onScanProjects={handleScanProjects}
           onRemoveProject={handleRemoveProject}
+          onReorderProjects={(projectIds) => void handleReorderProjects(projectIds)}
+          onToggleProjectPinned={(projectId) => void handleToggleProjectPinned(projectId)}
           onSwitchBranch={(project) => void switchBranchFromToolbar(project)}
           footer={renderSidebarControls(false)}
         />
@@ -1124,6 +1165,15 @@ function mergeProjects(incoming: GitProject[], current: GitProject[]): GitProjec
   }
 
   return Array.from(map.values());
+}
+
+function reorderProjectsByIds(projects: GitProject[], projectIds: string[]): GitProject[] {
+  const projectById = new Map(projects.map((project) => [project.id, project]));
+  const reorderedProjects = projectIds
+    .map((projectId) => projectById.get(projectId))
+    .filter((project): project is GitProject => Boolean(project));
+  const reorderedIds = new Set(reorderedProjects.map((project) => project.id));
+  return [...reorderedProjects, ...projects.filter((project) => !reorderedIds.has(project.id))];
 }
 
 function chooseBranch(branches: BranchInfo[], promptTitle: string): BranchInfo | undefined {

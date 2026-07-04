@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld("gitUI", {
   getProjects: () => ipcRenderer.invoke("projects:list"),
   addProject: (directoryPath: string) => ipcRenderer.invoke("projects:add", directoryPath),
   scanProjects: (rootPath: string) => ipcRenderer.invoke("projects:scan", rootPath),
+  reorderProjects: (projectIds: string[]) => ipcRenderer.invoke("projects:reorder", projectIds),
+  setProjectFavorite: (projectId: string, favorite: boolean) => ipcRenderer.invoke("projects:setFavorite", projectId, favorite),
   removeProject: (projectId: string) => ipcRenderer.invoke("projects:remove", projectId),
   getProjectStatus: (repositoryPath: string) => ipcRenderer.invoke("git:getStatus", repositoryPath),
   getHistory: (repositoryPath: string) => ipcRenderer.invoke("git:getHistory", repositoryPath),

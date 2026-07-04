@@ -59,7 +59,14 @@ export class ConfigStore {
   async read(): Promise<AppConfig> {
     try {
       const raw = await readFile(this.configPath, "utf8");
-      return { ...defaultConfig, ...JSON.parse(raw) } as AppConfig;
+      const config = { ...defaultConfig, ...JSON.parse(raw) } as AppConfig;
+      return {
+        ...config,
+        projects: config.projects.map((project) => ({ ...project, favorite: Boolean(project.favorite) })),
+        groups: config.groups ?? defaultConfig.groups,
+        recentProjectIds: config.recentProjectIds ?? defaultConfig.recentProjectIds,
+        ui: { ...defaultConfig.ui, ...config.ui }
+      };
     } catch {
       await this.write(defaultConfig);
       return defaultConfig;
@@ -101,6 +108,44 @@ export class ConfigStore {
     await this.write(config);
 
     return project;
+  }
+
+  async reorderProjects(projectIds: string[]): Promise<void> {
+    const config = await this.read();
+    const projectById = new Map(config.projects.map((project) => [project.id, project]));
+    const orderedProjects = projectIds
+      .map((projectId) => projectById.get(projectId))
+      .filter((project): project is GitProject => Boolean(project));
+    const orderedIds = new Set(orderedProjects.map((project) => project.id));
+    const remainingProjects = config.projects.filter((project) => !orderedIds.has(project.id));
+
+    config.projects = [...orderedProjects, ...remainingProjects];
+    await this.write(config);
+  }
+
+  async setProjectFavorite(projectId: string, favorite: boolean): Promise<GitProject | undefined> {
+    const config = await this.read();
+    const projectIndex = config.projects.findIndex((project) => project.id === projectId);
+    if (projectIndex < 0) {
+      return undefined;
+    }
+
+    const updatedProject: GitProject = {
+      ...config.projects[projectIndex],
+      favorite,
+      updatedAt: new Date().toISOString()
+    };
+    const remainingProjects = config.projects.filter((project) => project.id !== projectId);
+    config.projects = favorite
+      ? [updatedProject, ...remainingProjects]
+      : [
+          ...config.projects.slice(0, projectIndex),
+          updatedProject,
+          ...config.projects.slice(projectIndex + 1)
+        ];
+
+    await this.write(config);
+    return updatedProject;
   }
 
   async removeProject(projectId: string): Promise<void> {

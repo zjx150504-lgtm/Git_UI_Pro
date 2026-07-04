@@ -80,6 +80,13 @@ function registerIpc(): void {
     return projects;
   });
 
+  ipcMain.handle("projects:reorder", async (_event, projectIds: string[]) => {
+    await configStore.reorderProjects(projectIds);
+    return true;
+  });
+
+  ipcMain.handle("projects:setFavorite", (_event, projectId: string, favorite: boolean) => configStore.setProjectFavorite(projectId, favorite));
+
   ipcMain.handle("projects:remove", async (_event, projectId: string) => {
     await configStore.removeProject(projectId);
     return true;

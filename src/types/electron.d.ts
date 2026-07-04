@@ -15,6 +15,8 @@ export interface GitUIBridge {
   getProjects: () => Promise<GitProject[]>;
   addProject: (directoryPath: string) => Promise<GitProject>;
   scanProjects: (rootPath: string) => Promise<GitProject[]>;
+  reorderProjects: (projectIds: string[]) => Promise<boolean>;
+  setProjectFavorite: (projectId: string, favorite: boolean) => Promise<GitProject | undefined>;
   removeProject: (projectId: string) => Promise<boolean>;
   getProjectStatus: (repositoryPath: string) => Promise<GitStatusSummary>;
   getHistory: (repositoryPath: string) => Promise<CommitNode[]>;

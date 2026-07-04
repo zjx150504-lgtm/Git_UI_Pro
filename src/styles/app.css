@@ -2794,7 +2794,7 @@ button {
 
 .project-rail-item {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) 22px;
+  grid-template-columns: 22px minmax(0, 1fr) 48px;
   gap: 7px;
   align-items: center;
   min-height: 56px;
@@ -2806,6 +2806,29 @@ button {
   color: var(--text);
   background: transparent;
   cursor: pointer;
+}
+
+.project-rail-item[draggable="true"] {
+  cursor: grab;
+}
+
+.project-rail-item.dragging {
+  border-color: color-mix(in srgb, var(--accent) 42%, transparent);
+  background: color-mix(in srgb, var(--surface) 62%, transparent);
+  opacity: 0.62;
+}
+
+.project-rail-item.drag-over {
+  border-color: color-mix(in srgb, var(--accent) 62%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+}
+
+.project-rail-item.drag-over-before {
+  box-shadow: 0 -1px 0 var(--accent);
+}
+
+.project-rail-item.drag-over-after {
+  box-shadow: 0 1px 0 var(--accent);
 }
 
 .project-rail-item:hover {
@@ -2932,10 +2955,19 @@ button {
   background: color-mix(in srgb, var(--success) 8%, transparent);
 }
 
+.project-rail-item-actions {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.pin-project,
 .remove-project {
   display: grid;
-  width: 24px;
-  height: 24px;
+  width: 22px;
+  height: 22px;
   place-items: center;
   border-radius: 4px;
   color: var(--muted);
@@ -2944,9 +2976,22 @@ button {
   opacity: 0;
 }
 
+.project-rail-item:hover .pin-project,
+.project-rail-item.pinned .pin-project,
+.pin-project:focus-visible,
 .project-rail-item:hover .remove-project,
 .remove-project:focus-visible {
   opacity: 1;
+}
+
+.pin-project.active {
+  color: var(--warning);
+  opacity: 1;
+}
+
+.pin-project:hover {
+  color: var(--warning);
+  background: var(--surface-hover);
 }
 
 .remove-project:hover {
@@ -4326,6 +4371,7 @@ button {
 .branch-list-item,
 .editor-tab,
 .file-row-button,
+.pin-project,
 .project-rail-item,
 .project-item,
 .graph-commit-row,
@@ -4402,6 +4448,7 @@ button {
 
 .scm-row-actions,
 .scm-file-actions,
+.pin-project,
 .remove-project {
   transition:
     opacity var(--motion-base) var(--motion-ease);

@@ -88,6 +88,24 @@ export const apiClient = {
     return Boolean(projectId);
   },
 
+  async reorderProjects(projectIds: string[]): Promise<boolean> {
+    if (window.gitUI) {
+      return window.gitUI.reorderProjects(projectIds);
+    }
+
+    await wait(mockDelay);
+    return projectIds.length >= 0;
+  },
+
+  async setProjectFavorite(projectId: string, favorite: boolean): Promise<GitProject | undefined> {
+    if (window.gitUI) {
+      return window.gitUI.setProjectFavorite(projectId, favorite);
+    }
+
+    await wait(mockDelay);
+    return mockProjects.find((project) => project.id === projectId) ? { ...mockProjects.find((project) => project.id === projectId)!, favorite } : undefined;
+  },
+
   async getProjectStatus(project: GitProject): Promise<GitStatusSummary | undefined> {
     if (window.gitUI) {
       return window.gitUI.getProjectStatus(project.path);
