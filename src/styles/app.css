@@ -2967,13 +2967,13 @@ button {
 }
 
 .commit-hover-body {
-  display: grid;
-  gap: 4px;
+  display: block;
   margin: 10px 0 0;
-  padding-left: 18px;
+  padding-left: 0;
   color: var(--muted-strong);
   font-size: 12px;
   line-height: 1.45;
+  white-space: pre-wrap;
 }
 
 .commit-hover-footer {
@@ -4058,15 +4058,13 @@ button {
 .commit-hover-card {
   width: 420px;
   max-width: min(420px, calc(100vw - 24px));
-  max-height: min(520px, calc(100vh - 24px));
-  overflow: auto;
+  overflow: visible;
   overflow-wrap: anywhere;
 }
 
 .commit-hover-author,
 .commit-hover-subject,
 .commit-hover-body,
-.commit-hover-body li,
 .commit-hover-footer {
   min-width: 0;
   overflow-wrap: anywhere;
@@ -4089,7 +4087,7 @@ button {
   content: "";
   position: absolute;
   left: -7px;
-  top: 16px;
+  top: var(--commit-hover-arrow-top, 16px);
   width: 12px;
   height: 12px;
   border-bottom: 1px solid var(--border-strong);
@@ -4104,9 +4102,6 @@ button {
 }
 
 .commit-hover-body {
-  gap: 3px;
-  max-height: 210px;
-  overflow: auto;
   font-size: 12px;
 }
 

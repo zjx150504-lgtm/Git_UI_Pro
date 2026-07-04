@@ -18,7 +18,7 @@ import {
   Search,
   Undo2
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { apiClient } from "../api/client";
 import { PathTooltip } from "./PathTooltip";
@@ -60,6 +60,9 @@ type CommitContextMenuState = {
 };
 
 const GRAPH_TOOLBAR_ICON_SIZE = 16;
+const COMMIT_HOVER_CARD_WIDTH = 400;
+const COMMIT_HOVER_VIEWPORT_GAP = 12;
+const COMMIT_HOVER_TOP_OFFSET = 20;
 
 export function GraphSidebar({
   project,
@@ -226,7 +229,7 @@ export function GraphSidebar({
     window.clearTimeout(closeTimerRef.current);
     window.clearTimeout(hoverTimerRef.current);
     const rect = row.getBoundingClientRect();
-    setHoverPosition({ x: rect.right + 8, y: rect.top - 4 });
+    setHoverPosition({ x: rect.right + 8, y: rect.top + rect.height / 2 });
     hoverTimerRef.current = window.setTimeout(() => {
       setHoveredCommit(commit);
     }, 450);
@@ -1019,29 +1022,28 @@ function CommitHoverCard({
   onMouseEnter: () => void;
   onMouseLeave: () => void;
 }) {
-  const bodyLines = commit.body
-    ?.split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .slice(0, 7);
+  const bodyText = commit.body?.trim();
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [cardHeight, setCardHeight] = useState<number>();
+  const style = commitHoverCardStyle(x, y, cardHeight);
 
-  const left = typeof window === "undefined" ? x : Math.max(12, Math.min(x, window.innerWidth - 430));
-  const top = typeof window === "undefined" ? y : Math.max(12, Math.min(y, window.innerHeight - 360));
+  useLayoutEffect(() => {
+    const nextHeight = cardRef.current?.getBoundingClientRect().height;
+    if (!nextHeight) {
+      return;
+    }
+
+    setCardHeight((current) => (current && Math.abs(current - nextHeight) < 1 ? current : nextHeight));
+  }, [bodyText, commit.hash]);
 
   return (
-    <div className="commit-hover-card" style={{ left, top }} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
+    <div className="commit-hover-card" style={style} ref={cardRef} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave}>
       <div className="commit-hover-author">
         <strong>{commit.authorName}</strong>
         <span>{commit.authorDate}</span>
       </div>
       <div className="commit-hover-subject">{commit.subject}</div>
-      {bodyLines && bodyLines.length > 0 ? (
-        <ol className="commit-hover-body">
-          {bodyLines.map((line, index) => (
-            <li key={`${commit.hash}-${index}`}>{line.replace(/^\d+[.)、]\s*/, "")}</li>
-          ))}
-        </ol>
-      ) : null}
+      {bodyText ? <div className="commit-hover-body">{bodyText}</div> : null}
       <div className="commit-hover-footer">
         {commit.refs
           .filter((ref) => ref.type !== "head" && !ref.name.endsWith("/HEAD"))
@@ -1056,6 +1058,25 @@ function CommitHoverCard({
       </div>
     </div>
   );
+}
+
+function commitHoverCardStyle(x: number, targetY: number, cardHeight?: number): CSSProperties {
+  if (typeof window === "undefined") {
+    return { left: x, top: targetY };
+  }
+
+  const left = Math.max(COMMIT_HOVER_VIEWPORT_GAP, Math.min(x, window.innerWidth - COMMIT_HOVER_CARD_WIDTH - COMMIT_HOVER_VIEWPORT_GAP));
+  const measuredHeight = cardHeight ?? 0;
+  const preferredTop = targetY - COMMIT_HOVER_TOP_OFFSET;
+  const maxTop = measuredHeight > 0 ? window.innerHeight - measuredHeight - COMMIT_HOVER_VIEWPORT_GAP : window.innerHeight - COMMIT_HOVER_VIEWPORT_GAP;
+  const top = Math.max(COMMIT_HOVER_VIEWPORT_GAP, Math.min(preferredTop, maxTop));
+  const arrowTop = Math.max(16, Math.min(targetY - top, Math.max(16, measuredHeight - 16)));
+
+  return {
+    left,
+    top,
+    "--commit-hover-arrow-top": `${arrowTop}px`
+  } as CSSProperties;
 }
 
 function CompactGraphCell({ isFirst, isLast, tone }: { isFirst: boolean; isLast: boolean; tone: GraphTone }) {
