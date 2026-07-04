@@ -427,19 +427,21 @@ export function ProjectRail({
                 <span className="project-rail-name-text">{project.name}</span>
               </PathTooltip>
               <span className="project-rail-meta">
-                <button
-                  type="button"
-                  className="project-rail-branch"
-                  title="切换分支"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onSelectProject(project.id);
-                    onSwitchBranch(project);
-                  }}
-                >
-                  <GitBranch size={12} />
-                  <span>{project.status?.currentBranch ?? "未知分支"}</span>
-                </button>
+                <PathTooltip content="切换分支" className="project-rail-branch-tooltip">
+                  <button
+                    type="button"
+                    className="project-rail-branch"
+                    aria-label="切换分支"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelectProject(project.id);
+                      onSwitchBranch(project);
+                    }}
+                  >
+                    <GitBranch size={12} />
+                    <span>{project.status?.currentBranch ?? "未知分支"}</span>
+                  </button>
+                </PathTooltip>
                 {projectStatusTags(project).map((status) => (
                   <span className={`project-status ${status.tone}`} key={`${project.id}-${status.tone}-${status.label}`}>
                     {status.label}
@@ -448,9 +450,11 @@ export function ProjectRail({
               </span>
             </span>
             {project.favorite ? (
-              <span className="project-rail-pin-indicator" title="已置顶" aria-label="已置顶">
-                <Pin size={12} />
-              </span>
+              <PathTooltip content="已置顶" className="project-rail-pin-tooltip">
+                <span className="project-rail-pin-indicator" aria-label="已置顶">
+                  <Pin size={12} />
+                </span>
+              </PathTooltip>
             ) : null}
           </div>
         ))}

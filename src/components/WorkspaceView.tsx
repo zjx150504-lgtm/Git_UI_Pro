@@ -193,29 +193,33 @@ export function WorkspaceView({
             />
             <div className="scm-commit-control" ref={commitActionsRef}>
               <div className={`scm-commit-actions ${canSyncOutgoing ? "sync-mode" : ""}`}>
-                <button type="submit" className="scm-commit-button" title={commitTitle} disabled={commitDisabled || commitBusy}>
-                  {canSyncOutgoing ? <RefreshCw size={17} /> : <Check size={17} />}
-                  {primaryActionLabel}
-                </button>
-                {!canSyncOutgoing ? (
-                  <button type="button" className="scm-commit-menu" title="提交选项" onClick={toggleCommitMenu} ref={commitMenuButtonRef}>
-                    <ChevronDown size={17} />
+                <PathTooltip content={commitTitle} className="scm-commit-button-tooltip">
+                  <button type="submit" className="scm-commit-button" aria-label={commitTitle} disabled={commitDisabled || commitBusy}>
+                    {canSyncOutgoing ? <RefreshCw size={17} /> : <Check size={17} />}
+                    {primaryActionLabel}
                   </button>
+                </PathTooltip>
+                {!canSyncOutgoing ? (
+                  <PathTooltip content="提交选项" className="scm-commit-menu-tooltip">
+                    <button type="button" className="scm-commit-menu" aria-label="提交选项" onClick={toggleCommitMenu} ref={commitMenuButtonRef}>
+                      <ChevronDown size={17} />
+                    </button>
+                  </PathTooltip>
                 ) : null}
               </div>
               {!canSyncOutgoing && commitMenuOpen && commitMenuPosition && typeof document !== "undefined"
                 ? createPortal(
                     <div className="floating-menu commit-menu commit-menu-portal" style={commitMenuPosition} ref={commitMenuRef}>
-                      <button type="button" title={commitTitle} disabled={commitDisabled || commitBusy} onClick={() => void submitCommit()}>
+                      <button type="button" disabled={commitDisabled || commitBusy} onClick={() => void submitCommit()}>
                         提交
                       </button>
                       <button type="button" disabled={commitBusy} onClick={() => void submitCommit({ amend: true })}>
                         提交(修改)
                       </button>
-                      <button type="button" title={commitTitle} disabled={commitDisabled || commitBusy} onClick={() => void submitCommit({ pushAfterCommit: true })}>
+                      <button type="button" disabled={commitDisabled || commitBusy} onClick={() => void submitCommit({ pushAfterCommit: true })}>
                         提交和推送
                       </button>
-                      <button type="button" title={commitTitle} disabled={commitDisabled || commitBusy} onClick={() => void submitCommit({ syncAfterCommit: true })}>
+                      <button type="button" disabled={commitDisabled || commitBusy} onClick={() => void submitCommit({ syncAfterCommit: true })}>
                         提交和同步
                       </button>
                     </div>,
@@ -338,19 +342,20 @@ function ScmSection({
         </div>
         <div className="scm-section-actions">
           {actions.map((action) => (
-            <button
-              type="button"
-              className={`icon-button compact-icon ${action.danger ? "danger-icon" : ""}`}
-              title={action.title}
-              key={action.title}
-              onClick={(event) => {
-                event.stopPropagation();
-                action.onAction();
-              }}
-              disabled={count === 0 || action.disabled}
-            >
-              {action.icon}
-            </button>
+            <PathTooltip content={action.title} className="scm-section-action-tooltip" key={action.title}>
+              <button
+                type="button"
+                className={`icon-button compact-icon ${action.danger ? "danger-icon" : ""}`}
+                aria-label={action.title}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  action.onAction();
+                }}
+                disabled={count === 0 || action.disabled}
+              >
+                {action.icon}
+              </button>
+            </PathTooltip>
           ))}
         </div>
       </div>
@@ -432,29 +437,33 @@ function ScmFileRow({
       </span>
       <span className="scm-file-trailing">
         <span className="scm-row-actions">
-          <button
-            type="button"
-            className="icon-button compact-icon"
-            title={primaryActionTitle}
-            onClick={(event) => {
-              event.stopPropagation();
-              onPrimaryAction();
-            }}
-          >
-            {primaryActionIcon}
-          </button>
-          {onDiscard ? (
+          <PathTooltip content={primaryActionTitle} className="scm-row-action-tooltip">
             <button
               type="button"
-              className="icon-button compact-icon danger-icon"
-              title="放弃更改"
+              className="icon-button compact-icon"
+              aria-label={primaryActionTitle}
               onClick={(event) => {
                 event.stopPropagation();
-                onDiscard();
+                onPrimaryAction();
               }}
             >
-              <Undo2 size={15} />
+              {primaryActionIcon}
             </button>
+          </PathTooltip>
+          {onDiscard ? (
+            <PathTooltip content="放弃更改" className="scm-row-action-tooltip">
+              <button
+                type="button"
+                className="icon-button compact-icon danger-icon"
+                aria-label="放弃更改"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onDiscard();
+                }}
+              >
+                <Undo2 size={15} />
+              </button>
+            </PathTooltip>
           ) : null}
         </span>
         <span className={`scm-file-status ${file.status}`}>{statusCode(file.status)}</span>

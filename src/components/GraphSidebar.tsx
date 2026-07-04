@@ -272,46 +272,54 @@ export function GraphSidebar({
   return (
     <section className={`graph-sidebar graph-panel ${panelOpen ? "" : "panel-collapsed"}`}>
       <div className="graph-section-title">
-        <button type="button" className="graph-title-label" title={panelOpen ? "收起图表" : "展开图表"} onClick={onTogglePanel}>
-          <span className="graph-title-toggle" aria-hidden="true">
-            {panelOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-          </span>
-          <span className="graph-title-text">图表</span>
-          <span className="graph-count">{commits.length}</span>
-        </button>
+        <PathTooltip content={panelOpen ? "收起图表" : "展开图表"} className="graph-title-tooltip">
+          <button type="button" className="graph-title-label" aria-label={panelOpen ? "收起图表" : "展开图表"} onClick={onTogglePanel}>
+            <span className="graph-title-toggle" aria-hidden="true">
+              {panelOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            </span>
+            <span className="graph-title-text">图表</span>
+            <span className="graph-count">{commits.length}</span>
+          </button>
+        </PathTooltip>
         {panelOpen ? (
           <div className="graph-toolbar" aria-label="图表操作">
-            <button
-              ref={searchButtonRef}
-              type="button"
-              className={`icon-button compact-icon ${searchOpen || commitQuery ? "active" : ""}`}
-              title="搜索提交"
-              onClick={() => {
-                setViewMenuOpen(false);
-                setSearchOpen((value) => !value);
-              }}
-            >
-              <Search size={GRAPH_TOOLBAR_ICON_SIZE} />
-            </button>
+            <PathTooltip content="搜索提交" className="graph-toolbar-tooltip">
+              <button
+                ref={searchButtonRef}
+                type="button"
+                className={`icon-button compact-icon ${searchOpen || commitQuery ? "active" : ""}`}
+                aria-label="搜索提交"
+                onClick={() => {
+                  setViewMenuOpen(false);
+                  setSearchOpen((value) => !value);
+                }}
+              >
+                <Search size={GRAPH_TOOLBAR_ICON_SIZE} />
+              </button>
+            </PathTooltip>
             {graphOperations.map((operation) => {
               const Icon = operation.icon;
               return (
-                <button type="button" className="icon-button compact-icon" title={operation.title} key={operation.label} onClick={() => onOperation(operation.label)}>
-                  <Icon size={GRAPH_TOOLBAR_ICON_SIZE} />
-                </button>
+                <PathTooltip content={operation.title} className="graph-toolbar-tooltip" key={operation.label}>
+                  <button type="button" className="icon-button compact-icon" aria-label={operation.title} onClick={() => onOperation(operation.label)}>
+                    <Icon size={GRAPH_TOOLBAR_ICON_SIZE} />
+                  </button>
+                </PathTooltip>
               );
             })}
-            <button
-              ref={viewMenuButtonRef}
-              type="button"
-              className={`icon-button compact-icon ${viewMenuOpen ? "active" : ""}`}
-              title="更多图表操作"
-              aria-haspopup="menu"
-              aria-expanded={viewMenuOpen}
-              onClick={toggleViewMenu}
-            >
-              <MoreHorizontal size={GRAPH_TOOLBAR_ICON_SIZE} />
-            </button>
+            <PathTooltip content="更多图表操作" className="graph-toolbar-tooltip">
+              <button
+                ref={viewMenuButtonRef}
+                type="button"
+                className={`icon-button compact-icon ${viewMenuOpen ? "active" : ""}`}
+                aria-label="更多图表操作"
+                aria-haspopup="menu"
+                aria-expanded={viewMenuOpen}
+                onClick={toggleViewMenu}
+              >
+                <MoreHorizontal size={GRAPH_TOOLBAR_ICON_SIZE} />
+              </button>
+            </PathTooltip>
             {viewMenuOpen && viewMenuPosition && typeof document !== "undefined"
               ? createPortal(
                   <div className="floating-menu graph-view-menu graph-view-menu-portal" role="menu" style={viewMenuPosition} ref={viewMenuRef}>

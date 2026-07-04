@@ -3317,12 +3317,33 @@ button {
   display: block;
 }
 
+.project-rail-pin-tooltip {
+  display: grid;
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  place-items: center;
+}
+
+.project-rail-pin-tooltip .project-rail-pin-indicator {
+  position: static;
+}
+
 .project-rail-meta {
   display: flex;
   gap: 4px;
   align-items: center;
   min-width: 0;
   overflow: hidden;
+}
+
+.project-rail-branch-tooltip {
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .project-rail-branch {
@@ -5436,6 +5457,94 @@ code,
 .graph-commit-file-row.active,
 .graph-commit-file-row:active {
   transform: none;
+}
+
+.source-control-pane .graph-section-title .graph-title-tooltip {
+  display: flex;
+  flex: 1 1 auto;
+  align-self: stretch;
+  width: 100%;
+  min-width: 0;
+  height: auto;
+  margin: 0;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+}
+
+.source-control-pane .graph-section-title .graph-title-tooltip > .graph-title-label {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-start;
+  align-self: stretch;
+  width: 100%;
+  min-width: 0;
+  border-radius: 0;
+  padding: 0;
+  color: var(--text);
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.source-control-pane .graph-section-title .graph-title-tooltip > .graph-title-label:hover,
+.source-control-pane .graph-section-title .graph-title-tooltip > .graph-title-label:active {
+  background: transparent;
+  transform: none;
+}
+
+.source-control-pane .graph-section-title .graph-title-tooltip > .graph-title-label:hover .graph-title-toggle,
+.source-control-pane .graph-section-title .graph-title-tooltip > .graph-title-label:hover .graph-title-toggle svg {
+  background: transparent;
+  transform: none;
+}
+
+.source-control-pane .graph-section-title .graph-toolbar-tooltip {
+  display: inline-flex;
+  flex: 0 0 26px;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  margin: 0;
+  border-radius: 0;
+  color: inherit;
+  background: transparent;
+}
+
+.source-control-pane .graph-section-title .graph-toolbar-tooltip .compact-icon {
+  flex: 0 0 26px;
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+}
+
+.source-control-pane .scm-commit-button-tooltip,
+.source-control-pane .scm-commit-menu-tooltip {
+  display: inline-flex;
+  min-width: 0;
+  height: 100%;
+}
+
+.source-control-pane .scm-commit-button-tooltip,
+.source-control-pane .scm-commit-button-tooltip .scm-commit-button {
+  width: 100%;
+}
+
+.source-control-pane .scm-commit-menu-tooltip,
+.source-control-pane .scm-commit-menu-tooltip .scm-commit-menu {
+  width: 100%;
+}
+
+.source-control-pane .scm-section-action-tooltip,
+.source-control-pane .scm-row-action-tooltip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
 }
 
 .main-grid {
