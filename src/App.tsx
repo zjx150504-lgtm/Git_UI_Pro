@@ -972,7 +972,7 @@ export function App() {
   const detailStackStyle = {
     gridTemplateRows: consoleOpen
       ? `minmax(0, max(0px, calc(100% - ${consoleHeight}px - 10px))) 10px minmax(0, ${consoleHeight}px)`
-      : "minmax(0, 1fr) 36px"
+      : "minmax(0, 1fr)"
   } as CSSProperties;
 
   return (
@@ -1099,7 +1099,7 @@ export function App() {
                 onHide={() => setConsoleOpen(false)}
               />
               {!consoleOpen ? (
-                <button type="button" className="console-dock-toggle" onClick={() => setConsoleOpen(true)}>
+                <button type="button" className="console-dock-toggle" aria-label="打开控制台" onClick={() => setConsoleOpen(true)}>
                   <Terminal size={15} />
                   控制台
                 </button>

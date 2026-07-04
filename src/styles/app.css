@@ -1976,6 +1976,7 @@ button {
 }
 
 .detail-stack {
+  position: relative;
   display: grid;
   grid-template-rows: minmax(0, 1fr) 36px;
   min-width: 0;
@@ -2227,16 +2228,30 @@ button {
   display: inline-flex;
   gap: 8px;
   align-items: center;
-  min-height: 36px;
-  border-top: 1px solid var(--border);
-  padding: 0 12px;
-  color: var(--text);
-  background: var(--panel);
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 8;
+  min-height: 34px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 78%, transparent);
+  border-radius: 999px;
+  padding: 0 14px 0 12px;
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  box-shadow:
+    0 12px 30px color-mix(in srgb, #000 18%, transparent),
+    0 0 0 1px color-mix(in srgb, var(--text) 4%, transparent) inset;
+  backdrop-filter: blur(14px) saturate(1.12);
   cursor: pointer;
 }
 
 .console-dock-toggle:hover {
-  background: var(--surface-hover);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-strong));
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+}
+
+.console-dock-toggle svg {
+  color: var(--blue);
 }
 
 /* VS Code-style source control layout */
