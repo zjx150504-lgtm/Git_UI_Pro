@@ -56,6 +56,7 @@ type CommitContextMenuState = {
   y: number;
   isHead: boolean;
   isLocalOnly: boolean;
+  canUndoHead: boolean;
 };
 
 const GRAPH_TOOLBAR_ICON_SIZE = 16;
@@ -279,7 +280,8 @@ export function GraphSidebar({
       x: Math.min(event.clientX, window.innerWidth - 246),
       y: Math.min(event.clientY, window.innerHeight - 330),
       isHead,
-      isLocalOnly
+      isLocalOnly,
+      canUndoHead: !isHead || commit.parents.length > 0
     });
   }
 
@@ -536,17 +538,17 @@ export function GraphSidebar({
                 从此提交创建分支
               </button>
               <div className="menu-separator" role="separator" />
-              <button type="button" role="menuitem" disabled={commitContextMenu.isHead} onClick={() => runCommitContextAction("resetSoft", commitContextMenu.commit)}>
+              <button type="button" role="menuitem" disabled={!commitContextMenu.canUndoHead} onClick={() => runCommitContextAction("resetSoft", commitContextMenu.commit)}>
                 <Undo2 size={14} />
-                重置到此提交，保留更改
+                {commitContextMenu.isHead ? "撤销此提交，保留更改" : "重置到此提交，保留更改"}
               </button>
-              <button type="button" role="menuitem" onClick={() => runCommitContextAction("resetMixed", commitContextMenu.commit)}>
+              <button type="button" role="menuitem" disabled={!commitContextMenu.canUndoHead} onClick={() => runCommitContextAction("resetMixed", commitContextMenu.commit)}>
                 <Undo2 size={14} />
-                重置到此提交，取消暂存
+                {commitContextMenu.isHead ? "撤销此提交，取消暂存" : "重置到此提交，取消暂存"}
               </button>
-              <button type="button" role="menuitem" className="danger" onClick={() => runCommitContextAction("resetHard", commitContextMenu.commit)}>
+              <button type="button" role="menuitem" className="danger" disabled={!commitContextMenu.canUndoHead} onClick={() => runCommitContextAction("resetHard", commitContextMenu.commit)}>
                 <AlertTriangle size={14} />
-                重置到此提交，丢弃更改
+                {commitContextMenu.isHead ? "撤销此提交，丢弃更改" : "重置到此提交，丢弃更改"}
               </button>
             </div>,
             document.querySelector(".app-shell") ?? document.body

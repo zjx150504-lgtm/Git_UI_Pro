@@ -49,6 +49,10 @@ type CommitMessageDialogState = {
   subject: string;
   body: string;
 };
+type CommitMessageDraftRequest = {
+  id: number;
+  value: string;
+};
 
 export function App() {
   const [projects, setProjects] = useState<GitProject[]>([]);
@@ -70,6 +74,7 @@ export function App() {
   const [consoleHeight, setConsoleHeight] = useState(DEFAULT_CONSOLE_HEIGHT);
   const [consoleMaximized, setConsoleMaximized] = useState(false);
   const [commitFocusRequest, setCommitFocusRequest] = useState(0);
+  const [commitMessageDraftRequest, setCommitMessageDraftRequest] = useState<CommitMessageDraftRequest | undefined>();
   const [sourcePaneHeight, setSourcePaneHeight] = useState(DEFAULT_SOURCE_PANE_HEIGHT);
   const [changesPanelOpen, setChangesPanelOpen] = useState(true);
   const [graphPanelOpen, setGraphPanelOpen] = useState(true);
@@ -801,6 +806,7 @@ export function App() {
       return;
     }
 
+    const commitToRestore = commits[0];
     const modeText = mode === "soft" ? "保留更改并保持暂存" : "保留更改但取消暂存";
     const publishedWarning = isCommitHistoryPublished(selectedProject) ? "\n\n注意：上次提交可能已经同步到远程，撤销会改写历史。" : "";
     if (!window.confirm(`撤销上次提交，并${modeText}？${publishedWarning}`)) {
@@ -824,6 +830,7 @@ export function App() {
 
     clearWorktreeEditorTabs();
     await loadProjectData(selectedProject);
+    restoreCommitMessageDraft(commitToRestore);
   }
 
   function isCommitLocalOnly(project: GitProject, commit: CommitNode): boolean {
@@ -846,6 +853,20 @@ export function App() {
     }
 
     return commit.hash === commits[0]?.hash;
+  }
+
+  function restoreCommitMessageDraft(commit: CommitNode) {
+    const draft = commitMessageDraft(commit);
+    const value = [draft.subject, draft.body].filter(Boolean).join("\n\n");
+    if (!value.trim()) {
+      return;
+    }
+
+    setChangesPanelOpen(true);
+    setCommitMessageDraftRequest((current) => ({
+      id: (current?.id ?? 0) + 1,
+      value
+    }));
   }
 
   async function handleCommitGraphAction(action: CommitGraphAction, commit: CommitNode) {
@@ -930,8 +951,10 @@ export function App() {
   }
 
   async function runResetToCommit(project: GitProject, commit: CommitNode, mode: GitResetMode) {
-    if (mode === "soft" && isCurrentHeadCommit(project, commit)) {
-      notifyInfo("当前已经在该提交，无需重置；撤销这次提交请使用提交菜单里的撤销上次提交");
+    const undoHead = isCurrentHeadCommit(project, commit);
+    const resetTarget = undoHead ? commit.parents[0] : commit.hash;
+    if (!resetTarget) {
+      notifyInfo("根提交没有父提交，暂不支持从这里撤销");
       return;
     }
 
@@ -940,9 +963,12 @@ export function App() {
         ? "保留更改并保持暂存"
         : mode === "mixed"
           ? "保留更改但取消暂存"
-          : "丢弃目标提交之后的更改";
+          : undoHead
+            ? "丢弃此提交引入的更改"
+            : "丢弃目标提交之后的更改";
     const publishedWarning = isCommitHistoryPublished(project) ? "\n\n注意：当前分支可能已经同步到远程，reset 会改写历史。" : "";
-    if (!window.confirm(`将当前分支重置到 ${commit.shortHash}，并${modeText}？${publishedWarning}\n\n提交：${commit.subject}`)) {
+    const confirmTitle = undoHead ? `撤销提交 ${commit.shortHash}，并${modeText}？` : `将当前分支重置到 ${commit.shortHash}，并${modeText}？`;
+    if (!window.confirm(`${confirmTitle}${publishedWarning}\n\n提交：${commit.subject}`)) {
       return;
     }
 
@@ -953,20 +979,30 @@ export function App() {
     const toastId = notifyLoading("正在重置分支...");
     let result: GitOperationResult;
     try {
-      result = await withTimeout(apiClient.resetToCommit(project, commit.hash, mode), RESET_OPERATION_TIMEOUT_MS, "重置分支超时，请确认仓库未被其它 Git 进程锁定后重试");
+      result = await withTimeout(apiClient.resetToCommit(project, resetTarget, mode), RESET_OPERATION_TIMEOUT_MS, "重置分支超时，请确认仓库未被其它 Git 进程锁定后重试");
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "重置分支失败", undefined, toastId);
       await loadProjectData(project);
       return;
     }
 
-    if (!notifyGitResult(result, "分支重置完成", "重置分支失败，请查看原始 Git 输出。", toastId)) {
+    const successMessage = undoHead
+      ? mode === "soft"
+        ? "已撤销此提交，更改保留为暂存"
+        : mode === "mixed"
+          ? "已撤销此提交，更改保留为未暂存"
+          : "已撤销此提交并丢弃更改"
+      : "分支重置完成";
+    if (!notifyGitResult(result, successMessage, "重置分支失败，请查看原始 Git 输出。", toastId)) {
       await loadProjectData(project);
       return;
     }
 
     clearWorktreeEditorTabs();
     await loadProjectData(project);
+    if (undoHead && mode !== "hard") {
+      restoreCommitMessageDraft(commit);
+    }
   }
 
   async function handleStageFile(file: ChangedFile) {
@@ -1316,6 +1352,7 @@ export function App() {
               onSyncChanges={() => (selectedProject ? runSyncOperation(selectedProject) : Promise.resolve())}
               hasCommits={commits.length > 0}
               focusRequest={commitFocusRequest}
+              messageDraftRequest={commitMessageDraftRequest}
               panelOpen={changesPanelOpen}
               onTogglePanel={() => setChangesPanelOpen((value) => !value)}
             />

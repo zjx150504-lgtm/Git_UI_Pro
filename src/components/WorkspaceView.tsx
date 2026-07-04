@@ -24,8 +24,14 @@ interface WorkspaceViewProps {
   onSyncChanges: () => Promise<void>;
   hasCommits: boolean;
   focusRequest: number;
+  messageDraftRequest?: CommitMessageDraftRequest;
   panelOpen: boolean;
   onTogglePanel: () => void;
+}
+
+interface CommitMessageDraftRequest {
+  id: number;
+  value: string;
 }
 
 const COMMIT_MESSAGE_MIN_HEIGHT = 34;
@@ -50,6 +56,7 @@ export function WorkspaceView({
   onSyncChanges,
   hasCommits,
   focusRequest,
+  messageDraftRequest,
   panelOpen,
   onTogglePanel
 }: WorkspaceViewProps) {
@@ -82,6 +89,20 @@ export function WorkspaceView({
       messageInputRef.current?.focus();
     }
   }, [focusRequest]);
+
+  useEffect(() => {
+    if (!messageDraftRequest) {
+      return;
+    }
+
+    setMessage(messageDraftRequest.value);
+    const frameId = window.requestAnimationFrame(() => {
+      messageInputRef.current?.focus();
+      messageInputRef.current?.setSelectionRange(messageDraftRequest.value.length, messageDraftRequest.value.length);
+    });
+
+    return () => window.cancelAnimationFrame(frameId);
+  }, [messageDraftRequest]);
 
   useEffect(() => {
     const input = messageInputRef.current;
