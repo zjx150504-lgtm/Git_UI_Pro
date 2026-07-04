@@ -75,24 +75,32 @@ export function App() {
     setStatusMessage(message);
   }
 
+  function toastTitle(message: string) {
+    return message.trim().replace(/[。．.…]+$/u, "");
+  }
+
   function notifyInfo(message: string, description?: string, id?: ToastId) {
-    rememberStatus(message);
-    toast.info(message, { description, id });
+    const title = toastTitle(message);
+    rememberStatus(title);
+    toast.info(title, { description, id });
   }
 
   function notifySuccess(message: string, description?: string, id?: ToastId) {
-    rememberStatus(message);
-    toast.success(message, { description, id });
+    const title = toastTitle(message);
+    rememberStatus(title);
+    toast.success(title, { description, id });
   }
 
   function notifyError(message: string, description?: string, id?: ToastId) {
-    rememberStatus(message);
-    toast.error(message, { description, id });
+    const title = toastTitle(message);
+    rememberStatus(title);
+    toast.error(title, { description, id });
   }
 
   function notifyLoading(message: string): ToastId {
-    rememberStatus(message);
-    return toast.loading(message);
+    const title = toastTitle(message);
+    rememberStatus(title);
+    return toast.loading(title);
   }
 
   function notifyGitResult(result: GitOperationResult, successMessage: string, fallbackError: string, id?: ToastId): boolean {
