@@ -4,6 +4,7 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
 import { apiClient } from "../api/client";
+import { PathTooltip } from "./PathTooltip";
 import type { GitProject, TerminalSessionInfo } from "../types/domain";
 
 type ThemeName = "light" | "dark";
@@ -428,36 +429,63 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
         <div className="console-tab-strip" role="tablist" aria-label="终端标签">
           {projectTabs.map((tab) => (
             <div className={`console-tab ${tab.id === activeTab?.id ? "active" : ""}`} role="presentation" key={tab.id}>
-              <button type="button" className="console-tab-main" role="tab" aria-selected={tab.id === activeTab?.id} title={tab.projectPath} onClick={() => handleSelectTab(tab)}>
-                <span>{tab.title}</span>
-              </button>
-              <button type="button" className="console-tab-close" title="关闭终端" onClick={() => handleCloseTab(tab.id)}>
-                <X size={12} />
-              </button>
+              <PathTooltip content={tab.projectPath} className="console-tab-tooltip">
+                <button
+                  type="button"
+                  className="console-tab-main"
+                  role="tab"
+                  aria-selected={tab.id === activeTab?.id}
+                  aria-label={`${tab.title}：${tab.projectPath}`}
+                  onClick={() => handleSelectTab(tab)}
+                >
+                  <span>{tab.title}</span>
+                </button>
+              </PathTooltip>
+              <PathTooltip content="关闭终端" className="console-icon-tooltip">
+                <button type="button" className="console-tab-close" aria-label="关闭终端" onClick={() => handleCloseTab(tab.id)}>
+                  <X size={12} />
+                </button>
+              </PathTooltip>
             </div>
           ))}
-          <button type="button" className="console-tab-add" title="新建终端" onClick={() => createTerminalTab(project)} disabled={!project}>
-            <Plus size={14} />
-          </button>
+          <PathTooltip content="新建终端" className="console-icon-tooltip">
+            <button type="button" className="console-tab-add" aria-label="新建终端" onClick={() => createTerminalTab(project)} disabled={!project}>
+              <Plus size={14} />
+            </button>
+          </PathTooltip>
         </div>
-        <button
-          type="button"
-          className="icon-button console-close"
-          title={maximized ? "恢复控制台高度" : "控制台拉伸到顶部"}
-          onClick={onToggleMaximized}
-          disabled={!visible}
-        >
-          {maximized ? <ChevronsDown size={14} /> : <ChevronsUp size={14} />}
-        </button>
-        <button type="button" className="icon-button console-close" title="清空当前终端" onClick={clearActiveTerminal} disabled={!activeTab}>
-          <Trash2 size={14} />
-        </button>
-        <button type="button" className="icon-button console-close danger-icon" title="关闭当前项目全部终端标签" onClick={handleCloseProjectTabs} disabled={projectTabs.length === 0}>
-          <ListX size={14} />
-        </button>
-        <button type="button" className="icon-button console-close" title="隐藏控制台" onClick={onHide}>
-          <X size={15} />
-        </button>
+        <PathTooltip content={maximized ? "恢复控制台高度" : "控制台拉伸到顶部"} className="console-icon-tooltip">
+          <button
+            type="button"
+            className="icon-button console-close"
+            aria-label={maximized ? "恢复控制台高度" : "控制台拉伸到顶部"}
+            onClick={onToggleMaximized}
+            disabled={!visible}
+          >
+            {maximized ? <ChevronsDown size={14} /> : <ChevronsUp size={14} />}
+          </button>
+        </PathTooltip>
+        <PathTooltip content="清空当前终端" className="console-icon-tooltip">
+          <button type="button" className="icon-button console-close" aria-label="清空当前终端" onClick={clearActiveTerminal} disabled={!activeTab}>
+            <Trash2 size={14} />
+          </button>
+        </PathTooltip>
+        <PathTooltip content="关闭当前项目全部终端标签" className="console-icon-tooltip">
+          <button
+            type="button"
+            className="icon-button console-close danger-icon"
+            aria-label="关闭当前项目全部终端标签"
+            onClick={handleCloseProjectTabs}
+            disabled={projectTabs.length === 0}
+          >
+            <ListX size={14} />
+          </button>
+        </PathTooltip>
+        <PathTooltip content="隐藏控制台" className="console-icon-tooltip">
+          <button type="button" className="icon-button console-close" aria-label="隐藏控制台" onClick={onHide}>
+            <X size={15} />
+          </button>
+        </PathTooltip>
       </div>
       <div className="console-terminal-stack">
         {tabs.map((tab) => (

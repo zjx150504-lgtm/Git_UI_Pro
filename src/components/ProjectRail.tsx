@@ -294,18 +294,16 @@ export function ProjectRail({
       <div className="project-rail-header">
         <strong>项目</strong>
         <div className="project-rail-actions">
-          <button
-            type="button"
-            className="icon-button compact-icon"
-            title="扫描父目录中的 Git 项目"
-            aria-label="扫描父目录中的 Git 项目"
-            onClick={onScanProjects}
-          >
-            <FolderSearch size={15} />
-          </button>
-          <button type="button" className="icon-button compact-icon" title="添加单个本地 Git 项目" aria-label="添加单个本地 Git 项目" onClick={onAddProject}>
-            <FolderPlus size={15} />
-          </button>
+          <PathTooltip content="扫描父目录中的 Git 项目" className="project-action-tooltip">
+            <button type="button" className="icon-button compact-icon" aria-label="扫描父目录中的 Git 项目" onClick={onScanProjects}>
+              <FolderSearch size={15} />
+            </button>
+          </PathTooltip>
+          <PathTooltip content="添加单个本地 Git 项目" className="project-action-tooltip">
+            <button type="button" className="icon-button compact-icon" aria-label="添加单个本地 Git 项目" onClick={onAddProject}>
+              <FolderPlus size={15} />
+            </button>
+          </PathTooltip>
         </div>
       </div>
 

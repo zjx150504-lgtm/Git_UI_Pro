@@ -2057,6 +2057,14 @@ button {
   background: transparent;
 }
 
+.console-tab-tooltip {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+}
+
 .console-tab.active {
   border-color: color-mix(in srgb, var(--border-strong) 86%, transparent);
   color: var(--text);
@@ -2069,6 +2077,7 @@ button {
   min-width: 0;
   height: 100%;
   flex: 0 1 auto;
+  width: 100%;
   padding: 0 5px 0 8px;
   color: inherit;
   background: transparent;
@@ -2092,6 +2101,14 @@ button {
   color: var(--muted);
   background: transparent;
   cursor: pointer;
+}
+
+.console-icon-tooltip {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
 }
 
 .console-tab-close {
@@ -2947,6 +2964,12 @@ button {
   display: flex;
   gap: 4px;
   align-items: center;
+}
+
+.project-action-tooltip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .project-rail-filterbar {
@@ -5046,6 +5069,35 @@ code,
 
 .editor-tab.pinned .editor-tab-name {
   transform: none;
+}
+
+.editor-tab {
+  border: 1px solid transparent;
+  color: var(--muted-strong);
+  background: transparent;
+}
+
+.editor-tab:not(.active):hover {
+  background: var(--surface);
+}
+
+.editor-tab.active {
+  border-color: color-mix(in srgb, var(--border-strong) 82%, transparent);
+  color: var(--text-strong);
+  background: var(--surface);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.editor-tab.active.preview,
+.editor-tab.active.preview .editor-tab-name,
+.editor-tab.active .editor-tab-name {
+  font-style: normal;
+  font-weight: 700;
+  transform: none;
+}
+
+.editor-tab.active small {
+  color: var(--blue);
 }
 
 .editor-tab-close {
