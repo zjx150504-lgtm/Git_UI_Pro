@@ -1,4 +1,4 @@
-import { FolderGit2, FolderPlus, GitBranch, Search, Star, Trash2 } from "lucide-react";
+import { FolderGit2, FolderPlus, FolderSearch, GitBranch, Search, Star, Trash2 } from "lucide-react";
 import { useMemo, useState, type ReactNode } from "react";
 import { PathTooltip } from "./PathTooltip";
 import type { GitProject } from "../types/domain";
@@ -30,10 +30,16 @@ export function ProjectRail({ projects, selectedProjectId, onSelectProject, onAd
       <div className="project-rail-header">
         <strong>项目</strong>
         <div className="project-rail-actions">
-          <button type="button" className="icon-button compact-icon" title="扫描目录" onClick={onScanProjects}>
-            <Search size={15} />
+          <button
+            type="button"
+            className="icon-button compact-icon"
+            title="扫描父目录中的 Git 项目"
+            aria-label="扫描父目录中的 Git 项目"
+            onClick={onScanProjects}
+          >
+            <FolderSearch size={15} />
           </button>
-          <button type="button" className="icon-button compact-icon" title="添加本地 Git 项目" onClick={onAddProject}>
+          <button type="button" className="icon-button compact-icon" title="添加单个本地 Git 项目" aria-label="添加单个本地 Git 项目" onClick={onAddProject}>
             <FolderPlus size={15} />
           </button>
         </div>
