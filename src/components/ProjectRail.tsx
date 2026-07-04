@@ -1,5 +1,15 @@
 import { Check, ChevronDown, Filter, FolderGit2, FolderPlus, FolderSearch, GitBranch, Pin, PinOff, Search, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type DragEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent,
+  type ReactNode
+} from "react";
 import { createPortal } from "react-dom";
 import { PathTooltip } from "./PathTooltip";
 import type { GitProject } from "../types/domain";
@@ -78,6 +88,8 @@ export function ProjectRail({
   const [filterMenuPosition, setFilterMenuPosition] = useState<CSSProperties>({ top: 0, left: 0, width: PROJECT_STATUS_FILTER_MENU_WIDTH });
   const [statusFilters, setStatusFilters] = useState<ProjectStatusFilterId[]>([]);
   const filterMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const projectItemRefs = useRef(new Map<string, HTMLDivElement>());
+  const contextMenuCloseTimerRef = useRef<number | undefined>();
   const keyword = query.trim();
   const filteredProjects = useMemo(() => {
     const statusFilteredProjects = statusFilters.length > 0 ? projects.filter((project) => projectMatchesStatusFilters(project, statusFilters)) : projects;
@@ -100,19 +112,20 @@ export function ProjectRail({
       return;
     }
 
-    const closeContextMenu = () => setContextMenu(null);
+    const closeOnPointerDown = () => closeContextMenu();
     const closeOnKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         closeContextMenu();
       }
     };
 
-    document.addEventListener("pointerdown", closeContextMenu);
+    document.addEventListener("pointerdown", closeOnPointerDown);
     document.addEventListener("keydown", closeOnKeyDown);
     window.addEventListener("blur", closeContextMenu);
     window.addEventListener("resize", closeContextMenu);
     return () => {
-      document.removeEventListener("pointerdown", closeContextMenu);
+      window.clearTimeout(contextMenuCloseTimerRef.current);
+      document.removeEventListener("pointerdown", closeOnPointerDown);
       document.removeEventListener("keydown", closeOnKeyDown);
       window.removeEventListener("blur", closeContextMenu);
       window.removeEventListener("resize", closeContextMenu);
@@ -147,6 +160,22 @@ export function ProjectRail({
     setStatusFilters((current) => (current.includes(filterId) ? current.filter((item) => item !== filterId) : [...current, filterId]));
   }
 
+  function closeContextMenu() {
+    window.clearTimeout(contextMenuCloseTimerRef.current);
+    setContextMenu(null);
+  }
+
+  function scheduleContextMenuClose() {
+    window.clearTimeout(contextMenuCloseTimerRef.current);
+    contextMenuCloseTimerRef.current = window.setTimeout(() => {
+      setContextMenu(null);
+    }, 140);
+  }
+
+  function keepContextMenuOpen() {
+    window.clearTimeout(contextMenuCloseTimerRef.current);
+  }
+
   function updateFilterMenuPosition() {
     const rect = filterMenuButtonRef.current?.getBoundingClientRect();
     if (!rect) {
@@ -164,6 +193,7 @@ export function ProjectRail({
   function openProjectContextMenu(event: MouseEvent<HTMLDivElement>, project: GitProject) {
     event.preventDefault();
     event.stopPropagation();
+    keepContextMenuOpen();
     setContextMenu({
       project,
       x: Math.min(event.clientX, window.innerWidth - PROJECT_CONTEXT_MENU_WIDTH - 8),
@@ -209,6 +239,54 @@ export function ProjectRail({
     setDraggedProjectId(null);
     setDragOverProjectId(null);
     setDragOverPlacement("before");
+  }
+
+  function setProjectItemRef(projectId: string, node: HTMLDivElement | null) {
+    if (node) {
+      projectItemRefs.current.set(projectId, node);
+      return;
+    }
+
+    projectItemRefs.current.delete(projectId);
+  }
+
+  function focusProjectItem(projectId: string) {
+    window.requestAnimationFrame(() => {
+      projectItemRefs.current.get(projectId)?.focus();
+    });
+  }
+
+  function selectProjectByOffset(offset: 1 | -1) {
+    if (filteredProjects.length === 0) {
+      return;
+    }
+
+    const currentIndex = filteredProjects.findIndex((project) => project.id === selectedProjectId);
+    const baseIndex = currentIndex >= 0 ? currentIndex : offset > 0 ? -1 : 0;
+    const nextIndex = (baseIndex + offset + filteredProjects.length) % filteredProjects.length;
+    const nextProject = filteredProjects[nextIndex];
+
+    closeContextMenu();
+    onSelectProject(nextProject.id);
+    focusProjectItem(nextProject.id);
+  }
+
+  function handleProjectListKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) {
+      return;
+    }
+
+    if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+      return;
+    }
+
+    const target = event.target as HTMLElement;
+    if (target.closest("input, textarea, select, button, [contenteditable='true']")) {
+      return;
+    }
+
+    event.preventDefault();
+    selectProjectByOffset(event.key === "ArrowDown" ? 1 : -1);
   }
 
   return (
@@ -306,9 +384,10 @@ export function ProjectRail({
         </div>
       </div>
 
-      <div className="project-rail-list">
+      <div className="project-rail-list" tabIndex={0} onKeyDown={handleProjectListKeyDown}>
         {filteredProjects.map((project) => (
           <div
+            ref={(node) => setProjectItemRef(project.id, node)}
             role="button"
             tabIndex={0}
             draggable={canReorder}
@@ -317,9 +396,17 @@ export function ProjectRail({
               draggedProjectId === project.id ? "dragging" : ""
             } ${dragOverProjectId === project.id ? `drag-over drag-over-${dragOverPlacement}` : ""}`}
             key={project.id}
-            onClick={() => onSelectProject(project.id)}
+            onClick={(event) => {
+              event.currentTarget.focus();
+              onSelectProject(project.id);
+            }}
             onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) {
+                return;
+              }
+
               if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
                 onSelectProject(project.id);
               }
             }}
@@ -378,6 +465,8 @@ export function ProjectRail({
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onPointerDown={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
+          onMouseEnter={keepContextMenuOpen}
+          onMouseLeave={scheduleContextMenuClose}
         >
           <button
             type="button"

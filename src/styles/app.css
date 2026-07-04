@@ -2971,6 +2971,15 @@ button {
   scrollbar-gutter: auto;
 }
 
+.project-rail-list:focus {
+  outline: 0;
+}
+
+.project-rail-list:focus-visible {
+  outline: 1px solid color-mix(in srgb, var(--accent) 42%, transparent);
+  outline-offset: -2px;
+}
+
 .project-rail-item {
   display: grid;
   position: relative;
