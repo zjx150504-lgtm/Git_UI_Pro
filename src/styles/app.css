@@ -2794,7 +2794,8 @@ button {
 
 .project-rail-item {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) 48px;
+  position: relative;
+  grid-template-columns: 22px minmax(0, 1fr);
   gap: 7px;
   align-items: center;
   min-height: 56px;
@@ -2885,11 +2886,10 @@ button {
 
 .project-rail-branch {
   display: inline-flex;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   gap: 4px;
   align-items: center;
-  min-width: 58px;
-  max-width: 96px;
+  max-width: 112px;
   height: 18px;
   border: 1px solid color-mix(in srgb, var(--blue) 24%, transparent);
   border-radius: 4px;
@@ -2908,7 +2908,7 @@ button {
 .project-rail-branch span {
   overflow: hidden;
   min-width: 0;
-  max-width: 72px;
+  max-width: 88px;
   font-size: 10.5px;
   font-weight: 650;
   line-height: 16px;
@@ -2918,8 +2918,10 @@ button {
 
 .project-status {
   display: inline-flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   align-items: center;
+  min-width: 0;
+  max-width: 100px;
   height: 18px;
   border: 1px solid color-mix(in srgb, var(--border-strong) 58%, transparent);
   border-radius: 4px;
@@ -2929,6 +2931,9 @@ button {
   font-size: 10.5px;
   font-weight: 650;
   line-height: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .project-status.dirty {
@@ -2956,6 +2961,10 @@ button {
 }
 
 .project-rail-item-actions {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  z-index: 2;
   display: flex;
   gap: 2px;
   align-items: center;
@@ -2974,6 +2983,7 @@ button {
   background: transparent;
   cursor: pointer;
   opacity: 0;
+  pointer-events: none;
 }
 
 .project-rail-item:hover .pin-project,
@@ -2982,11 +2992,13 @@ button {
 .project-rail-item:hover .remove-project,
 .remove-project:focus-visible {
   opacity: 1;
+  pointer-events: auto;
 }
 
 .pin-project.active {
   color: var(--warning);
   opacity: 1;
+  pointer-events: auto;
 }
 
 .pin-project:hover {
