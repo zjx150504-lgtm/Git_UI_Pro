@@ -27,7 +27,7 @@ type ProjectStatusFilterId = "pinned" | "dirty" | "clean" | "conflict" | "ahead"
 
 const PROJECT_CONTEXT_MENU_WIDTH = 168;
 const PROJECT_CONTEXT_MENU_HEIGHT = 76;
-const PROJECT_STATUS_FILTER_MENU_WIDTH = 190;
+const PROJECT_STATUS_FILTER_MENU_WIDTH = 248;
 const projectStatusFilterGroups: Array<{
   label: string;
   items: Array<{ id: ProjectStatusFilterId; label: string }>;
@@ -260,29 +260,44 @@ export function ProjectRail({
           {filterMenuOpen && typeof document !== "undefined"
             ? createPortal(
                 <div className="floating-menu project-status-filter-menu" role="menu" style={filterMenuPosition} onPointerDown={(event) => event.stopPropagation()}>
-                  <button type="button" className="project-status-filter-reset" role="menuitem" onClick={() => setStatusFilters([])}>
-                    <Check size={14} className={statusFilters.length === 0 ? "visible" : ""} />
-                    全部状态
+                  <div className="project-status-filter-menu-header">
+                    <span>筛选项目</span>
+                    <small>{statusFilters.length === 0 ? "全部状态" : `已选 ${statusFilters.length}`}</small>
+                  </div>
+                  <button
+                    type="button"
+                    className={`project-status-filter-reset ${statusFilters.length === 0 ? "active" : ""}`}
+                    role="menuitem"
+                    onClick={() => setStatusFilters([])}
+                  >
+                    <span className="project-status-filter-option-mark" aria-hidden="true">
+                      <Check size={12} />
+                    </span>
+                    <span className="project-status-filter-option-label">全部状态</span>
                   </button>
                   {projectStatusFilterGroups.map((group) => (
                     <div className="project-status-filter-group" role="group" aria-label={group.label} key={group.label}>
                       <div className="project-status-filter-group-title">{group.label}</div>
-                      {group.items.map((item) => {
-                        const selected = statusFilters.includes(item.id);
-                        return (
-                          <button
-                            type="button"
-                            className={selected ? "active" : ""}
-                            role="menuitemcheckbox"
-                            aria-checked={selected}
-                            key={item.id}
-                            onClick={() => toggleStatusFilter(item.id)}
-                          >
-                            <Check size={14} className={selected ? "visible" : ""} />
-                            {item.label}
-                          </button>
-                        );
-                      })}
+                      <div className="project-status-filter-options">
+                        {group.items.map((item) => {
+                          const selected = statusFilters.includes(item.id);
+                          return (
+                            <button
+                              type="button"
+                              className={`project-status-filter-option tone-${item.id} ${selected ? "active" : ""}`}
+                              role="menuitemcheckbox"
+                              aria-checked={selected}
+                              key={item.id}
+                              onClick={() => toggleStatusFilter(item.id)}
+                            >
+                              <span className="project-status-filter-option-mark" aria-hidden="true">
+                                <Check size={12} />
+                              </span>
+                              <span className="project-status-filter-option-label">{item.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   ))}
                 </div>,
