@@ -164,7 +164,6 @@ export function ProjectRail({
   function openProjectContextMenu(event: MouseEvent<HTMLDivElement>, project: GitProject) {
     event.preventDefault();
     event.stopPropagation();
-    onSelectProject(project.id);
     setContextMenu({
       project,
       x: Math.min(event.clientX, window.innerWidth - PROJECT_CONTEXT_MENU_WIDTH - 8),
