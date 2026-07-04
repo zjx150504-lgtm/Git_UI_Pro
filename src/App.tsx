@@ -35,6 +35,7 @@ const CONSOLE_TOP_SNAP_DISTANCE = 36;
 const SELECTED_PROJECT_REFRESH_INTERVAL_MS = 1600;
 const PROJECT_LIST_STATUS_REFRESH_INTERVAL_MS = 5000;
 const PROJECT_LIST_STATUS_BATCH_SIZE = 4;
+const RESET_OPERATION_TIMEOUT_MS = 45_000;
 
 type ResizeTarget = "sidebar" | "detail" | "sourceSplit" | "console";
 type ToastId = string | number;
@@ -807,7 +808,15 @@ export function App() {
     }
 
     const toastId = notifyLoading("正在撤销上次提交...");
-    const result = await apiClient.resetLastCommit(selectedProject, mode);
+    let result: GitOperationResult;
+    try {
+      result = await withTimeout(apiClient.resetLastCommit(selectedProject, mode), RESET_OPERATION_TIMEOUT_MS, "撤销上次提交超时，请确认仓库未被其它 Git 进程锁定后重试");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "撤销上次提交失败", undefined, toastId);
+      await loadProjectData(selectedProject);
+      return;
+    }
+
     if (!notifyGitResult(result, mode === "soft" ? "已撤销上次提交，更改保留为暂存" : "已撤销上次提交，更改保留为未暂存", "撤销上次提交失败，请查看原始 Git 输出。", toastId)) {
       await loadProjectData(selectedProject);
       return;
@@ -828,6 +837,15 @@ export function App() {
     }
 
     return commitIndex < (project.status.ahead ?? 0);
+  }
+
+  function isCurrentHeadCommit(project: GitProject, commit: CommitNode): boolean {
+    const currentBranch = project.status?.currentBranch;
+    if (currentBranch) {
+      return commit.refs.some((ref) => ref.type === "localBranch" && ref.name === currentBranch);
+    }
+
+    return commit.hash === commits[0]?.hash;
   }
 
   async function handleCommitGraphAction(action: CommitGraphAction, commit: CommitNode) {
@@ -912,6 +930,11 @@ export function App() {
   }
 
   async function runResetToCommit(project: GitProject, commit: CommitNode, mode: GitResetMode) {
+    if (mode === "soft" && isCurrentHeadCommit(project, commit)) {
+      notifyInfo("当前已经在该提交，无需重置；撤销这次提交请使用提交菜单里的撤销上次提交");
+      return;
+    }
+
     const modeText =
       mode === "soft"
         ? "保留更改并保持暂存"
@@ -928,7 +951,15 @@ export function App() {
     }
 
     const toastId = notifyLoading("正在重置分支...");
-    const result = await apiClient.resetToCommit(project, commit.hash, mode);
+    let result: GitOperationResult;
+    try {
+      result = await withTimeout(apiClient.resetToCommit(project, commit.hash, mode), RESET_OPERATION_TIMEOUT_MS, "重置分支超时，请确认仓库未被其它 Git 进程锁定后重试");
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "重置分支失败", undefined, toastId);
+      await loadProjectData(project);
+      return;
+    }
+
     if (!notifyGitResult(result, "分支重置完成", "重置分支失败，请查看原始 Git 输出。", toastId)) {
       await loadProjectData(project);
       return;
@@ -1687,6 +1718,16 @@ function statusSignature(status: GitProject["status"]): string {
     status.hasConflicts ? "1" : "0",
     status.operationState ?? ""
   ].join(":");
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise
+      .then(resolve)
+      .catch(reject)
+      .finally(() => window.clearTimeout(timeoutId));
+  });
 }
 
 function projectInitial(project: GitProject): string {

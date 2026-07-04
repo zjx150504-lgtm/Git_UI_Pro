@@ -90,6 +90,7 @@ export type GitResetMode = "soft" | "mixed" | "hard";
 
 const fieldSeparator = "\x1f";
 const recordSeparator = "\x1e";
+const resetCommandTimeoutMs = 30_000;
 
 const graphColors = ["#51c2a9", "#7aa7ff", "#d69cff", "#f0c36b", "#ef6b73", "#8bd38b"];
 
@@ -105,16 +106,49 @@ const skippedDirectoryNames = new Set([
 ]);
 
 export class GitService {
-  async run(cwd: string, args: string[]): Promise<GitOperationResult> {
+  async run(cwd: string, args: string[], options: { timeoutMs?: number } = {}): Promise<GitOperationResult> {
     return new Promise((resolve) => {
+      const command = `git ${args.join(" ")}`;
+      let settled = false;
       const child = spawn("git", args, {
         cwd,
+        env: {
+          ...process.env,
+          GIT_TERMINAL_PROMPT: "0",
+          GIT_PAGER: "cat"
+        },
         shell: false,
         windowsHide: true
       });
 
       let stdout = "";
       let stderr = "";
+      const finish = (result: GitOperationResult) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        resolve(result);
+      };
+      const timeoutId = options.timeoutMs
+        ? setTimeout(() => {
+            const timeoutText = `Git command timed out after ${Math.round((options.timeoutMs ?? 0) / 1000)}s.`;
+            stderr = stderr ? `${stderr}\n${timeoutText}` : timeoutText;
+            child.kill();
+            finish({
+              ok: false,
+              command,
+              stdout,
+              stderr,
+              exitCode: -1,
+              messageZh: "Git 命令执行超时，请确认仓库未被其它进程锁定后重试"
+            });
+          }, options.timeoutMs)
+        : undefined;
 
       child.stdout.on("data", (chunk) => {
         stdout += chunk.toString();
@@ -125,9 +159,9 @@ export class GitService {
       });
 
       child.on("error", (error) => {
-        resolve({
+        finish({
           ok: false,
-          command: `git ${args.join(" ")}`,
+          command,
           stdout,
           stderr: error.message,
           exitCode: -1,
@@ -137,9 +171,9 @@ export class GitService {
 
       child.on("close", (code) => {
         const exitCode = code ?? -1;
-        resolve({
+        finish({
           ok: exitCode === 0,
-          command: `git ${args.join(" ")}`,
+          command,
           stdout,
           stderr,
           exitCode,
@@ -447,7 +481,7 @@ export class GitService {
       throw new Error("提交 hash 不能为空。");
     }
 
-    return this.run(repositoryPath, ["reset", `--${mode}`, target]);
+    return this.run(repositoryPath, ["reset", `--${mode}`, target], { timeoutMs: resetCommandTimeoutMs });
   }
 
   async revertCommit(repositoryPath: string, hash: string): Promise<GitOperationResult> {

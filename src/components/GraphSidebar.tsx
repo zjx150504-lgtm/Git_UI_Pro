@@ -271,7 +271,8 @@ export function GraphSidebar({
     setHoveredDotHash(commit.hash);
 
     const commitIndex = commits.findIndex((item) => item.hash === commit.hash);
-    const isHead = commitIndex === 0;
+    const currentBranch = project?.status?.currentBranch;
+    const isHead = currentBranch ? commit.refs.some((ref) => ref.type === "localBranch" && ref.name === currentBranch) : commitIndex === 0;
     const isLocalOnly = commitIndex >= 0 && commitIndex < localOnlyCount;
     setCommitContextMenu({
       commit,
@@ -535,7 +536,7 @@ export function GraphSidebar({
                 从此提交创建分支
               </button>
               <div className="menu-separator" role="separator" />
-              <button type="button" role="menuitem" onClick={() => runCommitContextAction("resetSoft", commitContextMenu.commit)}>
+              <button type="button" role="menuitem" disabled={commitContextMenu.isHead} onClick={() => runCommitContextAction("resetSoft", commitContextMenu.commit)}>
                 <Undo2 size={14} />
                 重置到此提交，保留更改
               </button>
