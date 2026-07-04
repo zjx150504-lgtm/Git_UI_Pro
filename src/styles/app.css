@@ -5336,6 +5336,22 @@ code,
   grid-template-rows: minmax(0, 1fr) 10px minmax(0, var(--console-height));
 }
 
+.main-grid {
+  isolation: isolate;
+}
+
+.main-grid > .source-control-pane {
+  position: relative;
+  z-index: 1;
+}
+
+.main-grid > .detail-stack {
+  position: relative;
+  z-index: 0;
+  contain: layout paint;
+  overflow: hidden;
+}
+
 .detail-stack > .editor-detail-panel,
 .detail-stack > .console-panel {
   min-height: 0;

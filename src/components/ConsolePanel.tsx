@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronsDown, ChevronsUp, Plus, Trash2, X, Terminal as TerminalIcon } from "lucide-react";
+import { ChevronsDown, ChevronsUp, ListX, Plus, Trash2, X, Terminal as TerminalIcon } from "lucide-react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -373,6 +373,34 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
     runtime?.terminal.focus();
   }
 
+  function handleCloseProjectTabs() {
+    if (!project) {
+      return;
+    }
+
+    const closingTabs = tabsRef.current.filter((tab) => tab.projectId === project.id);
+    if (closingTabs.length === 0) {
+      return;
+    }
+
+    const confirmed = window.confirm(`关闭当前项目的 ${closingTabs.length} 个终端标签？正在运行的终端进程会被结束。`);
+    if (!confirmed) {
+      return;
+    }
+
+    const closingIds = new Set(closingTabs.map((tab) => tab.id));
+    for (const tabId of closingIds) {
+      disposeTerminalRuntime(tabId);
+    }
+
+    activeByProjectRef.current.delete(project.id);
+    setTabs((current) => renumberTerminalTabs(current.filter((tab) => !closingIds.has(tab.id))));
+
+    if (activeTabIdRef.current && closingIds.has(activeTabIdRef.current)) {
+      setActiveTabId(null);
+    }
+  }
+
   function disposeTerminalRuntime(tabId: string) {
     const runtime = runtimeByTabRef.current.get(tabId);
     if (!runtime) {
@@ -423,6 +451,9 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
         </button>
         <button type="button" className="icon-button console-close" title="清空当前终端" onClick={clearActiveTerminal} disabled={!activeTab}>
           <Trash2 size={14} />
+        </button>
+        <button type="button" className="icon-button console-close danger-icon" title="关闭当前项目全部终端标签" onClick={handleCloseProjectTabs} disabled={projectTabs.length === 0}>
+          <ListX size={14} />
         </button>
         <button type="button" className="icon-button console-close" title="隐藏控制台" onClick={onHide}>
           <X size={15} />
