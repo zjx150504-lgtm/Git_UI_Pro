@@ -14,11 +14,13 @@ interface TooltipPosition {
 }
 
 const TOOLTIP_HORIZONTAL_OFFSET = 36;
+const TOOLTIP_SHOW_DELAY_MS = 1000;
 const PATH_TOOLTIP_OPEN_EVENT = "git-ui-pro:path-tooltip-open";
 let pathTooltipIdSeed = 0;
 
 export function PathTooltip({ path, className, children }: PathTooltipProps) {
   const anchorRef = useRef<HTMLSpanElement>(null);
+  const showTimerRef = useRef<number | undefined>();
   const closeTimerRef = useRef<number | undefined>();
   const tooltipIdRef = useRef(`path-tooltip-${++pathTooltipIdSeed}`);
   const [visible, setVisible] = useState(false);
@@ -28,6 +30,11 @@ export function PathTooltip({ path, className, children }: PathTooltipProps) {
   function clearCloseTimer() {
     window.clearTimeout(closeTimerRef.current);
     closeTimerRef.current = undefined;
+  }
+
+  function clearShowTimer() {
+    window.clearTimeout(showTimerRef.current);
+    showTimerRef.current = undefined;
   }
 
   function updatePosition() {
@@ -44,18 +51,30 @@ export function PathTooltip({ path, className, children }: PathTooltipProps) {
     setPosition({ left, top, maxWidth });
   }
 
-  function showTooltip() {
+  function showTooltipNow() {
     if (!path) {
       return;
     }
 
+    clearShowTimer();
     clearCloseTimer();
     updatePosition();
     window.dispatchEvent(new CustomEvent(PATH_TOOLTIP_OPEN_EVENT, { detail: { id: tooltipIdRef.current } }));
     setVisible(true);
   }
 
+  function scheduleShowTooltip() {
+    if (!path) {
+      return;
+    }
+
+    clearShowTimer();
+    clearCloseTimer();
+    showTimerRef.current = window.setTimeout(showTooltipNow, TOOLTIP_SHOW_DELAY_MS);
+  }
+
   function scheduleHideTooltip() {
+    clearShowTimer();
     clearCloseTimer();
     closeTimerRef.current = window.setTimeout(() => {
       setVisible(false);
@@ -63,12 +82,14 @@ export function PathTooltip({ path, className, children }: PathTooltipProps) {
   }
 
   function hideTooltip() {
+    clearShowTimer();
     clearCloseTimer();
     setVisible(false);
   }
 
   useEffect(
     () => () => {
+      clearShowTimer();
       clearCloseTimer();
     },
     []
@@ -82,6 +103,7 @@ export function PathTooltip({ path, className, children }: PathTooltipProps) {
       }
 
       clearCloseTimer();
+      clearShowTimer();
       setVisible(false);
     };
 
@@ -106,7 +128,7 @@ export function PathTooltip({ path, className, children }: PathTooltipProps) {
   const portalRoot = typeof document === "undefined" ? null : document.querySelector(".app-shell") ?? document.body;
 
   return (
-    <span ref={anchorRef} className={classes} onMouseEnter={showTooltip} onMouseLeave={scheduleHideTooltip} onFocus={showTooltip} onBlur={scheduleHideTooltip}>
+    <span ref={anchorRef} className={classes} onMouseEnter={scheduleShowTooltip} onMouseLeave={scheduleHideTooltip} onFocus={scheduleShowTooltip} onBlur={scheduleHideTooltip}>
       {children}
       {visible && position && portalRoot
         ? createPortal(
@@ -114,7 +136,7 @@ export function PathTooltip({ path, className, children }: PathTooltipProps) {
               className="path-tooltip-popover"
               role="tooltip"
               style={{ left: position.left, top: position.top, maxWidth: position.maxWidth }}
-              onMouseEnter={showTooltip}
+              onMouseEnter={showTooltipNow}
               onMouseLeave={hideTooltip}
               onMouseDown={(event) => event.stopPropagation()}
               onClick={(event) => event.stopPropagation()}

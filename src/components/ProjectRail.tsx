@@ -1,4 +1,4 @@
-import { FolderGit2, FolderPlus, FolderSearch, GitBranch, Pin, PinOff, Search, Trash2 } from "lucide-react";
+import { Check, ChevronDown, Filter, FolderGit2, FolderPlus, FolderSearch, GitBranch, Pin, PinOff, Search, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState, type DragEvent, type MouseEvent, type ReactNode } from "react";
 import { PathTooltip } from "./PathTooltip";
 import type { GitProject } from "../types/domain";
@@ -22,8 +22,38 @@ type ProjectContextMenuState = {
   y: number;
 };
 
+type ProjectStatusFilterId = "pinned" | "dirty" | "clean" | "conflict" | "ahead" | "behind" | "diverged" | "unloaded";
+
 const PROJECT_CONTEXT_MENU_WIDTH = 168;
 const PROJECT_CONTEXT_MENU_HEIGHT = 76;
+const projectStatusFilterGroups: Array<{
+  label: string;
+  items: Array<{ id: ProjectStatusFilterId; label: string }>;
+}> = [
+  {
+    label: "工作区",
+    items: [
+      { id: "dirty", label: "有更改" },
+      { id: "clean", label: "干净" },
+      { id: "conflict", label: "有冲突" }
+    ]
+  },
+  {
+    label: "同步",
+    items: [
+      { id: "ahead", label: "领先远程" },
+      { id: "behind", label: "落后远程" },
+      { id: "diverged", label: "领先且落后" }
+    ]
+  },
+  {
+    label: "项目",
+    items: [
+      { id: "pinned", label: "已置顶" },
+      { id: "unloaded", label: "未加载状态" }
+    ]
+  }
+];
 
 export function ProjectRail({
   projects,
@@ -42,20 +72,24 @@ export function ProjectRail({
   const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null);
   const [dragOverPlacement, setDragOverPlacement] = useState<"before" | "after">("before");
   const [contextMenu, setContextMenu] = useState<ProjectContextMenuState | null>(null);
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [statusFilters, setStatusFilters] = useState<ProjectStatusFilterId[]>([]);
   const keyword = query.trim();
   const filteredProjects = useMemo(() => {
+    const statusFilteredProjects = statusFilters.length > 0 ? projects.filter((project) => projectMatchesStatusFilters(project, statusFilters)) : projects;
     if (!keyword) {
-      return projects;
+      return statusFilteredProjects;
     }
 
-    return projects
+    return statusFilteredProjects
       .map((project, index) => ({ project, index, score: fuzzyProjectScore(project, keyword) }))
       .filter((item) => item.score > 0)
       .sort((a, b) => b.score - a.score || Number(b.project.favorite) - Number(a.project.favorite) || a.index - b.index)
       .map((item) => item.project);
-  }, [projects, keyword]);
-  const canReorder = keyword.length === 0;
+  }, [projects, keyword, statusFilters]);
+  const canReorder = keyword.length === 0 && statusFilters.length === 0;
   const visibleProjectIds = filteredProjects.map((project) => project.id);
+  const statusFilterSummary = statusFilters.length === 0 ? "全部状态" : `${statusFilters.length} 项状态`;
 
   useEffect(() => {
     if (!contextMenu) {
@@ -80,6 +114,34 @@ export function ProjectRail({
       window.removeEventListener("resize", closeContextMenu);
     };
   }, [contextMenu]);
+
+  useEffect(() => {
+    if (!filterMenuOpen) {
+      return;
+    }
+
+    const closeFilterMenu = () => setFilterMenuOpen(false);
+    const closeOnKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeFilterMenu();
+      }
+    };
+
+    document.addEventListener("pointerdown", closeFilterMenu);
+    document.addEventListener("keydown", closeOnKeyDown);
+    window.addEventListener("blur", closeFilterMenu);
+    window.addEventListener("resize", closeFilterMenu);
+    return () => {
+      document.removeEventListener("pointerdown", closeFilterMenu);
+      document.removeEventListener("keydown", closeOnKeyDown);
+      window.removeEventListener("blur", closeFilterMenu);
+      window.removeEventListener("resize", closeFilterMenu);
+    };
+  }, [filterMenuOpen]);
+
+  function toggleStatusFilter(filterId: ProjectStatusFilterId) {
+    setStatusFilters((current) => (current.includes(filterId) ? current.filter((item) => item !== filterId) : [...current, filterId]));
+  }
 
   function openProjectContextMenu(event: MouseEvent<HTMLDivElement>, project: GitProject) {
     event.preventDefault();
@@ -152,10 +214,58 @@ export function ProjectRail({
         </div>
       </div>
 
-      <label className="project-rail-search">
-        <Search size={14} />
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目" />
-      </label>
+      <div className="project-rail-filterbar">
+        <label className="project-rail-search">
+          <Search size={14} />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索项目" />
+        </label>
+        <div className="project-status-filter">
+          <button
+            type="button"
+            className={`project-status-filter-button ${statusFilters.length > 0 ? "active" : ""}`}
+            aria-expanded={filterMenuOpen}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              setContextMenu(null);
+              setFilterMenuOpen((value) => !value);
+            }}
+          >
+            <Filter size={14} />
+            <span>{statusFilterSummary}</span>
+            <ChevronDown size={14} />
+          </button>
+          {filterMenuOpen ? (
+            <div className="floating-menu project-status-filter-menu" role="menu" onPointerDown={(event) => event.stopPropagation()}>
+              <button type="button" className="project-status-filter-reset" role="menuitem" onClick={() => setStatusFilters([])}>
+                <Check size={14} className={statusFilters.length === 0 ? "visible" : ""} />
+                全部状态
+              </button>
+              {projectStatusFilterGroups.map((group) => (
+                <div className="project-status-filter-group" role="group" aria-label={group.label} key={group.label}>
+                  <div className="project-status-filter-group-title">{group.label}</div>
+                  {group.items.map((item) => {
+                    const selected = statusFilters.includes(item.id);
+                    return (
+                      <button
+                        type="button"
+                        className={selected ? "active" : ""}
+                        role="menuitemcheckbox"
+                        aria-checked={selected}
+                        key={item.id}
+                        onClick={() => toggleStatusFilter(item.id)}
+                      >
+                        <Check size={14} className={selected ? "visible" : ""} />
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
 
       <div className="project-rail-list">
         {filteredProjects.map((project) => (
@@ -269,6 +379,37 @@ function moveProjectId(projectIds: string[], sourceId: string, targetId: string,
 
   nextProjectIds.splice(placement === "after" ? targetIndex + 1 : targetIndex, 0, sourceId);
   return nextProjectIds;
+}
+
+function projectMatchesStatusFilters(project: GitProject, filters: ProjectStatusFilterId[]): boolean {
+  if (filters.length === 0) {
+    return true;
+  }
+
+  const status = project.status;
+  const changedCount = status ? status.stagedCount + status.unstagedCount + status.untrackedCount : 0;
+  return filters.some((filter) => {
+    switch (filter) {
+      case "pinned":
+        return project.favorite;
+      case "dirty":
+        return changedCount > 0;
+      case "clean":
+        return Boolean(status) && changedCount === 0 && !status?.hasConflicts;
+      case "conflict":
+        return Boolean(status?.hasConflicts);
+      case "ahead":
+        return Boolean(status && status.ahead > 0);
+      case "behind":
+        return Boolean(status && status.behind > 0);
+      case "diverged":
+        return Boolean(status && status.ahead > 0 && status.behind > 0);
+      case "unloaded":
+        return !status;
+      default:
+        return false;
+    }
+  });
 }
 
 function fuzzyProjectScore(project: GitProject, query: string): number {
