@@ -136,13 +136,7 @@ export class ConfigStore {
       updatedAt: new Date().toISOString()
     };
     const remainingProjects = config.projects.filter((project) => project.id !== projectId);
-    config.projects = favorite
-      ? [updatedProject, ...remainingProjects]
-      : [
-          ...config.projects.slice(0, projectIndex),
-          updatedProject,
-          ...config.projects.slice(projectIndex + 1)
-        ];
+    config.projects = favorite ? [updatedProject, ...remainingProjects] : placeProjectAfterPinned(remainingProjects, updatedProject);
 
     await this.write(config);
     return updatedProject;
@@ -156,3 +150,11 @@ export class ConfigStore {
   }
 }
 
+function placeProjectAfterPinned(projects: GitProject[], project: GitProject): GitProject[] {
+  const firstUnpinnedIndex = projects.findIndex((item) => !item.favorite);
+  if (firstUnpinnedIndex < 0) {
+    return [...projects, project];
+  }
+
+  return [...projects.slice(0, firstUnpinnedIndex), project, ...projects.slice(firstUnpinnedIndex)];
+}

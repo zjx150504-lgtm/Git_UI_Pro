@@ -481,9 +481,10 @@ export function App() {
     const previousProjects = projects;
     const nextFavorite = !project.favorite;
     const updatedProject = { ...project, favorite: nextFavorite };
+    const remainingProjects = projects.filter((item) => item.id !== projectId);
     const nextProjects = nextFavorite
-      ? [updatedProject, ...projects.filter((item) => item.id !== projectId)]
-      : projects.map((item) => (item.id === projectId ? updatedProject : item));
+      ? [updatedProject, ...remainingProjects]
+      : placeProjectAfterPinned(remainingProjects, updatedProject);
 
     setProjects(nextProjects);
     try {
@@ -1174,6 +1175,15 @@ function reorderProjectsByIds(projects: GitProject[], projectIds: string[]): Git
     .filter((project): project is GitProject => Boolean(project));
   const reorderedIds = new Set(reorderedProjects.map((project) => project.id));
   return [...reorderedProjects, ...projects.filter((project) => !reorderedIds.has(project.id))];
+}
+
+function placeProjectAfterPinned(projects: GitProject[], project: GitProject): GitProject[] {
+  const firstUnpinnedIndex = projects.findIndex((item) => !item.favorite);
+  if (firstUnpinnedIndex < 0) {
+    return [...projects, project];
+  }
+
+  return [...projects.slice(0, firstUnpinnedIndex), project, ...projects.slice(firstUnpinnedIndex)];
 }
 
 function chooseBranch(branches: BranchInfo[], promptTitle: string): BranchInfo | undefined {
