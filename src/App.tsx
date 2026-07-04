@@ -25,11 +25,12 @@ const emptyWorktree: WorktreeState = {
 };
 
 const DEFAULT_SOURCE_PANE_HEIGHT = 320;
+const DEFAULT_CONSOLE_HEIGHT = 240;
 const SELECTED_PROJECT_REFRESH_INTERVAL_MS = 1600;
 const PROJECT_LIST_STATUS_REFRESH_INTERVAL_MS = 5000;
 const PROJECT_LIST_STATUS_BATCH_SIZE = 4;
 
-type ResizeTarget = "sidebar" | "detail" | "sourceSplit";
+type ResizeTarget = "sidebar" | "detail" | "sourceSplit" | "console";
 type ToastId = string | number;
 type ProjectStatusRefresh = { projectId: string; status: GitProject["status"] };
 type BranchDialogState =
@@ -53,6 +54,7 @@ export function App() {
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
+  const [consoleHeight, setConsoleHeight] = useState(DEFAULT_CONSOLE_HEIGHT);
   const [commitFocusRequest, setCommitFocusRequest] = useState(0);
   const [sourcePaneHeight, setSourcePaneHeight] = useState(DEFAULT_SOURCE_PANE_HEIGHT);
   const [changesPanelOpen, setChangesPanelOpen] = useState(true);
@@ -860,6 +862,7 @@ export function App() {
     const startSidebarWidth = sidebarWidth;
     const startDetailWidth = detailWidth;
     const startSourcePaneHeight = sourcePaneHeight;
+    const startConsoleHeight = consoleHeight;
 
     const onMove = (moveEvent: globalThis.MouseEvent) => {
       if (target === "sidebar") {
@@ -872,6 +875,10 @@ export function App() {
 
       if (target === "sourceSplit") {
         setSourcePaneHeight(clamp(startSourcePaneHeight + moveEvent.clientY - startY, 220, 620));
+      }
+
+      if (target === "console") {
+        setConsoleHeight(clamp(startConsoleHeight + startY - moveEvent.clientY, 160, 560));
       }
     };
 
@@ -887,7 +894,8 @@ export function App() {
   const layoutStyle = {
     "--sidebar-width": leftCollapsed ? "52px" : `${sidebarWidth}px`,
     "--detail-width": rightCollapsed ? "0px" : `${detailWidth}px`,
-    "--scm-pane-height": `${sourcePaneHeight}px`
+    "--scm-pane-height": `${sourcePaneHeight}px`,
+    "--console-height": `${consoleHeight}px`
   } as CSSProperties;
 
   return (
@@ -1001,14 +1009,14 @@ export function App() {
                 onCloseTab={handleCloseWorktreeTab}
                 onPinTab={handlePinWorktreeTab}
               />
-              {consoleOpen ? (
-                <ConsolePanel project={selectedProject} onClose={() => setConsoleOpen(false)} />
-              ) : (
+              <div className="console-resize" hidden={!consoleOpen} onMouseDown={(event) => beginResize("console", event)} />
+              <ConsolePanel project={selectedProject} theme={resolvedTheme} visible={consoleOpen} onHide={() => setConsoleOpen(false)} />
+              {!consoleOpen ? (
                 <button type="button" className="console-dock-toggle" onClick={() => setConsoleOpen(true)}>
                   <Terminal size={15} />
                   控制台
                 </button>
-              )}
+              ) : null}
             </section>
           ) : null}
         </section>

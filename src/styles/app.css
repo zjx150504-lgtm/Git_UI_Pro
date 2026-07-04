@@ -1970,63 +1970,213 @@ button {
 }
 
 .detail-stack.console-open {
-  grid-template-rows: minmax(0, 1fr) 220px;
+  grid-template-rows: minmax(0, 1fr) 10px var(--console-height);
 }
 
 .detail-stack > .detail-panel {
   border-left: 0;
 }
 
+.console-resize {
+  position: relative;
+  height: 10px;
+  background: transparent;
+  cursor: row-resize;
+}
+
+.console-resize[hidden] {
+  display: none;
+}
+
+.console-resize::before {
+  content: "";
+  position: absolute;
+  right: 0;
+  left: 0;
+  top: 4px;
+  height: 1px;
+  background: color-mix(in srgb, var(--border) 68%, transparent);
+}
+
+.console-resize:hover::before {
+  background: color-mix(in srgb, var(--accent) 72%, transparent);
+}
+
 .console-panel {
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: 34px minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
-  border-top: 1px solid var(--border);
   background: var(--sunken);
+}
+
+.console-panel.hidden {
+  display: none;
 }
 
 .console-title {
   gap: 8px;
+  min-width: 0;
   min-height: 34px;
   border-bottom: 1px solid var(--border);
-  padding: 0 10px;
+  padding: 0 8px;
   color: var(--text);
 }
 
-.console-title span {
-  overflow: hidden;
-  margin-left: 6px;
-  color: var(--muted);
+.console-title-label {
+  flex: 0 0 auto;
+  color: var(--text);
   font-size: 12px;
+  font-weight: 650;
+}
+
+.console-tab-strip {
+  display: flex;
+  flex: 1 1 auto;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.console-tab-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.console-tab {
+  display: inline-flex;
+  flex: 0 1 150px;
+  align-items: center;
+  min-width: 88px;
+  max-width: 170px;
+  height: 24px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--muted-strong);
+  background: transparent;
+}
+
+.console-tab.active {
+  border-color: color-mix(in srgb, var(--border-strong) 86%, transparent);
+  color: var(--text);
+  background: var(--surface);
+}
+
+.console-tab-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  padding: 0 4px 0 8px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.console-tab-main span {
+  overflow: hidden;
+  font-size: 12px;
+  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.console-title small {
+.console-tab-main small {
   flex: 0 0 auto;
   color: var(--muted);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.console-tab.active .console-tab-main small {
+  color: var(--blue);
+}
+
+.console-tab-close,
+.console-tab-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.console-tab-close {
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  margin-right: 1px;
+}
+
+.console-tab-add {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+
+.console-tab-close:hover,
+.console-tab-add:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.console-tab-add:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.console-context {
+  overflow: hidden;
+  flex: 0 1 180px;
+  color: var(--muted);
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .console-title .console-close {
   flex: 0 0 auto;
   margin-left: 0;
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  background: transparent;
 }
 
-.console-title span + .console-close {
-  margin-left: auto;
+.console-title .console-close:hover {
+  background: var(--surface);
+}
+
+.console-terminal-stack {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--sunken);
 }
 
 .console-terminal {
+  position: absolute;
+  inset: 0;
+  display: none;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   padding: 8px 10px;
   color: var(--text);
   font-family: "Cascadia Code", Consolas, monospace;
   font-size: 12px;
   line-height: 18px;
+}
+
+.console-terminal.active {
+  display: block;
 }
 
 .console-terminal .xterm {
@@ -2039,6 +2189,22 @@ button {
 
 .console-terminal .xterm-screen {
   outline: 0;
+}
+
+.console-empty-state {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 10px;
+  padding: 18px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.console-empty-state p {
+  margin: 0;
 }
 
 .console-dock-toggle {
