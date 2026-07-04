@@ -81,6 +81,13 @@ export interface CommitInput {
   pushAfterCommit?: boolean;
 }
 
+export interface CommitMessageInput {
+  subject: string;
+  body?: string;
+}
+
+export type GitResetMode = "soft" | "mixed" | "hard";
+
 const fieldSeparator = "\x1f";
 const recordSeparator = "\x1e";
 
@@ -391,7 +398,7 @@ export class GitService {
       .sort(compareBranches);
   }
 
-  async createBranch(repositoryPath: string, branchName: string, checkout: boolean): Promise<GitOperationResult> {
+  async createBranch(repositoryPath: string, branchName: string, checkout: boolean, startPoint?: string): Promise<GitOperationResult> {
     const name = branchName.trim();
     if (!name) {
       throw new Error("分支名不能为空。");
@@ -405,14 +412,60 @@ export class GitService {
       };
     }
 
+    const normalizedStartPoint = startPoint?.trim();
     if (!checkout) {
-      return this.run(repositoryPath, ["branch", name]);
+      return this.run(repositoryPath, ["branch", name, ...(normalizedStartPoint ? [normalizedStartPoint] : [])]);
     }
 
     return this.runWithFallbacks(repositoryPath, [
-      ["switch", "-c", name],
-      ["checkout", "-b", name]
+      ["switch", "-c", name, ...(normalizedStartPoint ? [normalizedStartPoint] : [])],
+      ["checkout", "-b", name, ...(normalizedStartPoint ? [normalizedStartPoint] : [])]
     ]);
+  }
+
+  async amendLastCommitMessage(repositoryPath: string, input: CommitMessageInput): Promise<GitOperationResult> {
+    const subject = input.subject.trim();
+    if (!subject) {
+      throw new Error("提交标题不能为空。");
+    }
+
+    const args = ["commit", "--amend", "-m", subject];
+    if (input.body?.trim()) {
+      args.push("-m", input.body.trim());
+    }
+
+    return this.run(repositoryPath, args);
+  }
+
+  async resetLastCommit(repositoryPath: string, mode: Exclude<GitResetMode, "hard">): Promise<GitOperationResult> {
+    return this.resetToCommit(repositoryPath, "HEAD~1", mode);
+  }
+
+  async resetToCommit(repositoryPath: string, hash: string, mode: GitResetMode): Promise<GitOperationResult> {
+    const target = hash.trim();
+    if (!target) {
+      throw new Error("提交 hash 不能为空。");
+    }
+
+    return this.run(repositoryPath, ["reset", `--${mode}`, target]);
+  }
+
+  async revertCommit(repositoryPath: string, hash: string): Promise<GitOperationResult> {
+    const target = hash.trim();
+    if (!target) {
+      throw new Error("提交 hash 不能为空。");
+    }
+
+    return this.run(repositoryPath, ["revert", "--no-edit", target]);
+  }
+
+  async cherryPickCommit(repositoryPath: string, hash: string): Promise<GitOperationResult> {
+    const target = hash.trim();
+    if (!target) {
+      throw new Error("提交 hash 不能为空。");
+    }
+
+    return this.run(repositoryPath, ["cherry-pick", target]);
   }
 
   async switchBranch(repositoryPath: string, branch: BranchInfo): Promise<GitOperationResult> {

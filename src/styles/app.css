@@ -1268,6 +1268,29 @@ button {
   background: var(--surface);
 }
 
+.floating-menu button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.floating-menu button:disabled:hover {
+  background: transparent;
+}
+
+.floating-menu button.danger {
+  color: var(--danger);
+}
+
+.floating-menu button.danger:hover {
+  background: color-mix(in srgb, var(--danger) 11%, var(--surface));
+}
+
+.menu-separator {
+  height: 1px;
+  margin: 5px 3px;
+  background: color-mix(in srgb, var(--border) 78%, transparent);
+}
+
 .branch-menu {
   top: 40px;
   left: 0;
@@ -4163,6 +4186,7 @@ button {
 
 .branch-create-form input[type="text"],
 .branch-create-form input:not([type]),
+.commit-message-form textarea,
 .branch-search input {
   width: 100%;
   min-height: 32px;
@@ -4174,9 +4198,35 @@ button {
   background: var(--sunken);
 }
 
+.commit-message-form textarea {
+  min-height: 118px;
+  padding: 8px 9px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
 .branch-create-form input:focus,
+.commit-message-form textarea:focus,
 .branch-search input:focus {
   border-color: color-mix(in srgb, var(--blue) 72%, var(--border-strong));
+}
+
+.branch-start-point {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 24px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.branch-start-point code {
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--blue);
+  background: var(--surface);
+  font-family: var(--mono-font);
+  font-size: 11px;
 }
 
 .branch-checkbox-row {
@@ -4436,6 +4486,25 @@ button {
 
 .graph-view-menu button:hover {
   background: var(--surface);
+}
+
+.graph-commit-menu {
+  position: fixed;
+  z-index: 320;
+  min-width: 236px;
+}
+
+.graph-commit-menu button {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 32px;
+  font-size: 13px;
+}
+
+.graph-commit-menu button svg {
+  color: currentColor;
 }
 
 .source-control-pane .graph-search-row {

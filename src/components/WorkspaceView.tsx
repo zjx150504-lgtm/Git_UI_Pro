@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, ChevronRight, Plus, RefreshCw, Trash2, Undo2 } from "lucide-react";
 import { PathTooltip } from "./PathTooltip";
-import type { ChangedFile, CommitInput, GitProject, WorktreeState } from "../types/domain";
+import type { ChangedFile, CommitInput, GitProject, GitResetMode, WorktreeState } from "../types/domain";
 import { absoluteFilePath } from "../utils/filePath";
 
 interface WorkspaceViewProps {
@@ -19,7 +19,10 @@ interface WorkspaceViewProps {
   selectedFilePath?: string;
   selectedFileStaged?: boolean;
   onCommit: (input: CommitInput) => Promise<boolean>;
+  onAmendLastMessage: () => void;
+  onUndoLastCommit: (mode: Exclude<GitResetMode, "hard">) => void;
   onSyncChanges: () => Promise<void>;
+  hasCommits: boolean;
   focusRequest: number;
   panelOpen: boolean;
   onTogglePanel: () => void;
@@ -42,7 +45,10 @@ export function WorkspaceView({
   selectedFilePath,
   selectedFileStaged,
   onCommit,
+  onAmendLastMessage,
+  onUndoLastCommit,
   onSyncChanges,
+  hasCommits,
   focusRequest,
   panelOpen,
   onTogglePanel
@@ -213,7 +219,7 @@ export function WorkspaceView({
                       <button type="button" disabled={commitDisabled || commitBusy} onClick={() => void submitCommit()}>
                         提交
                       </button>
-                      <button type="button" disabled={commitBusy} onClick={() => void submitCommit({ amend: true })}>
+                      <button type="button" disabled={commitBusy || !hasCommits} onClick={() => void submitCommit({ amend: true })}>
                         提交(修改)
                       </button>
                       <button type="button" disabled={commitDisabled || commitBusy} onClick={() => void submitCommit({ pushAfterCommit: true })}>
@@ -221,6 +227,37 @@ export function WorkspaceView({
                       </button>
                       <button type="button" disabled={commitDisabled || commitBusy} onClick={() => void submitCommit({ syncAfterCommit: true })}>
                         提交和同步
+                      </button>
+                      <div className="menu-separator" role="separator" />
+                      <button
+                        type="button"
+                        disabled={commitBusy || !hasCommits}
+                        onClick={() => {
+                          setCommitMenuOpen(false);
+                          onAmendLastMessage();
+                        }}
+                      >
+                        修改上次提交信息
+                      </button>
+                      <button
+                        type="button"
+                        disabled={commitBusy || !hasCommits}
+                        onClick={() => {
+                          setCommitMenuOpen(false);
+                          onUndoLastCommit("soft");
+                        }}
+                      >
+                        撤销上次提交，保留更改
+                      </button>
+                      <button
+                        type="button"
+                        disabled={commitBusy || !hasCommits}
+                        onClick={() => {
+                          setCommitMenuOpen(false);
+                          onUndoLastCommit("mixed");
+                        }}
+                      >
+                        撤销上次提交，取消暂存
                       </button>
                     </div>,
                     document.querySelector(".app-shell") ?? document.body

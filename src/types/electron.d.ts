@@ -1,11 +1,13 @@
 import type {
   BranchInfo,
   ChangedFile,
+  CommitMessageInput,
   CommitInput,
   CommitNode,
   DiffLine,
   GitOperationResult,
   GitProject,
+  GitResetMode,
   GitStatusSummary,
   TerminalDataEvent,
   TerminalExitEvent,
@@ -53,9 +55,14 @@ export interface GitUIBridge {
   pull: (repositoryPath: string) => Promise<GitOperationResult>;
   push: (repositoryPath: string) => Promise<GitOperationResult>;
   getBranches: (repositoryPath: string) => Promise<BranchInfo[]>;
-  createBranch: (repositoryPath: string, branchName: string, checkout: boolean) => Promise<GitOperationResult>;
+  createBranch: (repositoryPath: string, branchName: string, checkout: boolean, startPoint?: string) => Promise<GitOperationResult>;
   switchBranch: (repositoryPath: string, branch: BranchInfo) => Promise<GitOperationResult>;
   deleteBranch: (repositoryPath: string, branchName: string) => Promise<GitOperationResult>;
+  amendLastCommitMessage: (repositoryPath: string, input: CommitMessageInput) => Promise<GitOperationResult>;
+  resetLastCommit: (repositoryPath: string, mode: Exclude<GitResetMode, "hard">) => Promise<GitOperationResult>;
+  resetToCommit: (repositoryPath: string, hash: string, mode: GitResetMode) => Promise<GitOperationResult>;
+  revertCommit: (repositoryPath: string, hash: string) => Promise<GitOperationResult>;
+  cherryPickCommit: (repositoryPath: string, hash: string) => Promise<GitOperationResult>;
 }
 
 declare global {

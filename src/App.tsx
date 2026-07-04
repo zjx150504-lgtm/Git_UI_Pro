@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
-import { Check, FolderGit2, GitBranch, Moon, PanelLeftClose, PanelLeftOpen, Plus, Sun, Terminal, X } from "lucide-react";
+import { Check, FolderGit2, GitBranch, MessageSquareText, Moon, PanelLeftClose, PanelLeftOpen, Plus, Sun, Terminal, X } from "lucide-react";
 import { Toaster, toast } from "sonner";
 import { apiClient } from "./api/client";
 import { AppChrome } from "./components/AppChrome";
@@ -13,10 +13,13 @@ import { WorkspaceView } from "./components/WorkspaceView";
 import type {
   BranchInfo,
   ChangedFile,
+  CommitGraphAction,
   CommitInput,
+  CommitMessageInput,
   CommitNode,
   GitOperationResult,
   GitProject,
+  GitResetMode,
   WorktreeState
 } from "./types/domain";
 
@@ -37,8 +40,14 @@ type ResizeTarget = "sidebar" | "detail" | "sourceSplit" | "console";
 type ToastId = string | number;
 type ProjectStatusRefresh = { projectId: string; status: GitProject["status"] };
 type BranchDialogState =
-  | { mode: "create"; project: GitProject; branchName: string; checkout: boolean }
+  | { mode: "create"; project: GitProject; branchName: string; checkout: boolean; startPoint?: string; startLabel?: string }
   | { mode: "switch"; project: GitProject; branches: BranchInfo[]; query: string };
+type CommitMessageDialogState = {
+  project: GitProject;
+  commit: CommitNode;
+  subject: string;
+  body: string;
+};
 
 export function App() {
   const [projects, setProjects] = useState<GitProject[]>([]);
@@ -65,6 +74,8 @@ export function App() {
   const [graphPanelOpen, setGraphPanelOpen] = useState(true);
   const [branchDialog, setBranchDialog] = useState<BranchDialogState | null>(null);
   const [branchDialogBusy, setBranchDialogBusy] = useState(false);
+  const [commitMessageDialog, setCommitMessageDialog] = useState<CommitMessageDialogState | null>(null);
+  const [commitMessageDialogBusy, setCommitMessageDialogBusy] = useState(false);
   const projectsRef = useRef<GitProject[]>([]);
   const autoRefreshBusyRef = useRef(false);
   const projectListRefreshBusyRef = useRef(false);
@@ -644,7 +655,7 @@ export function App() {
     setBranchDialogBusy(true);
     const toastId = notifyLoading(`正在创建分支 ${branchName}...`);
     try {
-      const result = await apiClient.createBranch(branchDialog.project, branchName, branchDialog.checkout);
+      const result = await apiClient.createBranch(branchDialog.project, branchName, branchDialog.checkout, branchDialog.startPoint);
       if (!notifyGitResult(
         result,
         branchDialog.checkout ? `已创建并切换到分支：${branchName}` : `已创建分支：${branchName}`,
@@ -721,6 +732,209 @@ export function App() {
       return;
     }
 
+    await loadProjectData(project);
+  }
+
+  function openAmendLastCommitDialog() {
+    if (!selectedProject) {
+      notifyInfo("请先选择一个 Git 项目");
+      return;
+    }
+
+    const commit = commits[0];
+    if (!commit) {
+      notifyInfo("当前仓库还没有可修改的提交");
+      return;
+    }
+
+    setCommitMessageDialog({
+      project: selectedProject,
+      commit,
+      ...commitMessageDraft(commit)
+    });
+  }
+
+  async function submitAmendCommitMessage() {
+    if (!commitMessageDialog) {
+      return;
+    }
+
+    const input: CommitMessageInput = {
+      subject: commitMessageDialog.subject.trim(),
+      body: commitMessageDialog.body.trim() || undefined
+    };
+    if (!input.subject) {
+      notifyInfo("提交标题不能为空");
+      return;
+    }
+
+    const project = commitMessageDialog.project;
+    if (isCommitHistoryPublished(project) && !window.confirm("上次提交可能已经同步到远程，修改提交信息会改写历史。是否继续？")) {
+      return;
+    }
+
+    setCommitMessageDialogBusy(true);
+    const toastId = notifyLoading("正在修改提交信息...");
+    try {
+      const result = await apiClient.amendLastCommitMessage(project, input);
+      if (!notifyGitResult(result, "已修改提交信息", "修改提交信息失败，请查看原始 Git 输出。", toastId)) {
+        return;
+      }
+
+      setCommitMessageDialog(null);
+      clearWorktreeEditorTabs();
+      await loadProjectData(project);
+    } finally {
+      setCommitMessageDialogBusy(false);
+    }
+  }
+
+  async function handleUndoLastCommit(mode: Exclude<GitResetMode, "hard">) {
+    if (!selectedProject) {
+      notifyInfo("请先选择一个 Git 项目");
+      return;
+    }
+
+    if (commits.length === 0) {
+      notifyInfo("当前仓库还没有可撤销的提交");
+      return;
+    }
+
+    const modeText = mode === "soft" ? "保留更改并保持暂存" : "保留更改但取消暂存";
+    const publishedWarning = isCommitHistoryPublished(selectedProject) ? "\n\n注意：上次提交可能已经同步到远程，撤销会改写历史。" : "";
+    if (!window.confirm(`撤销上次提交，并${modeText}？${publishedWarning}`)) {
+      return;
+    }
+
+    const toastId = notifyLoading("正在撤销上次提交...");
+    const result = await apiClient.resetLastCommit(selectedProject, mode);
+    if (!notifyGitResult(result, mode === "soft" ? "已撤销上次提交，更改保留为暂存" : "已撤销上次提交，更改保留为未暂存", "撤销上次提交失败，请查看原始 Git 输出。", toastId)) {
+      await loadProjectData(selectedProject);
+      return;
+    }
+
+    clearWorktreeEditorTabs();
+    await loadProjectData(selectedProject);
+  }
+
+  function isCommitLocalOnly(project: GitProject, commit: CommitNode): boolean {
+    const commitIndex = commits.findIndex((item) => item.hash === commit.hash);
+    if (commitIndex < 0) {
+      return false;
+    }
+
+    if (!project.status?.upstream) {
+      return true;
+    }
+
+    return commitIndex < (project.status.ahead ?? 0);
+  }
+
+  async function handleCommitGraphAction(action: CommitGraphAction, commit: CommitNode) {
+    if (!selectedProject) {
+      notifyInfo("请先选择一个 Git 项目");
+      return;
+    }
+
+    if (action === "copyHash") {
+      await navigator.clipboard.writeText(commit.hash);
+      notifySuccess("已复制提交 hash");
+      return;
+    }
+
+    if (action === "copyMessage") {
+      await navigator.clipboard.writeText([commit.subject, commit.body].filter(Boolean).join("\n\n"));
+      notifySuccess("已复制提交信息");
+      return;
+    }
+
+    if (action === "amendMessage") {
+      if (commit.hash !== commits[0]?.hash) {
+        notifyInfo("当前仅支持直接修改最新提交的信息");
+        return;
+      }
+
+      if (!isCommitLocalOnly(selectedProject, commit)) {
+        notifyInfo("该提交已同步到远程，建议使用还原提交或先确认团队协作风险");
+        return;
+      }
+
+      setCommitMessageDialog({
+        project: selectedProject,
+        commit,
+        ...commitMessageDraft(commit)
+      });
+      return;
+    }
+
+    if (action === "createBranch") {
+      setBranchDialog({
+        mode: "create",
+        project: selectedProject,
+        branchName: `branch/${commit.shortHash}`,
+        checkout: true,
+        startPoint: commit.hash,
+        startLabel: commit.shortHash
+      });
+      return;
+    }
+
+    if (action === "revert") {
+      await runCommitMutation(selectedProject, commit, "revert", "还原此提交会新建一个反向提交，不会改写历史。是否继续？");
+      return;
+    }
+
+    if (action === "cherryPick") {
+      const dirtyWarning = hasWorktreeChanges(selectedProject) ? "\n\n当前工作区存在未提交改动，Cherry-pick 可能失败或产生冲突。" : "";
+      await runCommitMutation(selectedProject, commit, "cherryPick", `把此提交应用到当前分支？${dirtyWarning}`);
+      return;
+    }
+
+    const resetMode = action === "resetSoft" ? "soft" : action === "resetMixed" ? "mixed" : "hard";
+    await runResetToCommit(selectedProject, commit, resetMode);
+  }
+
+  async function runCommitMutation(project: GitProject, commit: CommitNode, action: "revert" | "cherryPick", confirmText: string) {
+    if (!window.confirm(`${confirmText}\n\n提交：${commit.shortHash} ${commit.subject}`)) {
+      return;
+    }
+
+    const label = action === "revert" ? "还原提交" : "Cherry-pick";
+    const toastId = notifyLoading(`正在${label}...`);
+    const result = action === "revert" ? await apiClient.revertCommit(project, commit.hash) : await apiClient.cherryPickCommit(project, commit.hash);
+    if (!notifyGitResult(result, `${label}完成`, `${label}失败，请查看原始 Git 输出。`, toastId)) {
+      await loadProjectData(project);
+      return;
+    }
+
+    clearWorktreeEditorTabs();
+    await loadProjectData(project);
+  }
+
+  async function runResetToCommit(project: GitProject, commit: CommitNode, mode: GitResetMode) {
+    const modeText =
+      mode === "soft"
+        ? "保留更改并保持暂存"
+        : mode === "mixed"
+          ? "保留更改但取消暂存"
+          : "丢弃目标提交之后的更改";
+    const publishedWarning = isCommitHistoryPublished(project) ? "\n\n注意：当前分支可能已经同步到远程，reset 会改写历史。" : "";
+    if (!window.confirm(`将当前分支重置到 ${commit.shortHash}，并${modeText}？${publishedWarning}\n\n提交：${commit.subject}`)) {
+      return;
+    }
+
+    if (mode === "hard" && !window.confirm("reset --hard 会丢弃目标提交之后的改动和当前工作区未提交内容，该操作不可从工作区恢复。确认继续？")) {
+      return;
+    }
+
+    const toastId = notifyLoading("正在重置分支...");
+    const result = await apiClient.resetToCommit(project, commit.hash, mode);
+    if (!notifyGitResult(result, "分支重置完成", "重置分支失败，请查看原始 Git 输出。", toastId)) {
+      await loadProjectData(project);
+      return;
+    }
+
+    clearWorktreeEditorTabs();
     await loadProjectData(project);
   }
 
@@ -1066,7 +1280,10 @@ export function App() {
               selectedFilePath={activeWorktreeTab?.file.path}
               selectedFileStaged={activeWorktreeTab?.file.staged}
               onCommit={handleCommit}
+              onAmendLastMessage={openAmendLastCommitDialog}
+              onUndoLastCommit={(mode) => void handleUndoLastCommit(mode)}
               onSyncChanges={() => (selectedProject ? runSyncOperation(selectedProject) : Promise.resolve())}
+              hasCommits={commits.length > 0}
               focusRequest={commitFocusRequest}
               panelOpen={changesPanelOpen}
               onTogglePanel={() => setChangesPanelOpen((value) => !value)}
@@ -1082,6 +1299,7 @@ export function App() {
               selectedCommitFileHash={activeWorktreeTab?.sourceType === "commit" ? activeWorktreeTab.commitHash : undefined}
               selectedCommitFilePath={activeWorktreeTab?.sourceType === "commit" ? activeWorktreeTab.file.path : undefined}
               onOperation={handleOperation}
+              onCommitAction={(action, commit) => void handleCommitGraphAction(action, commit)}
               panelOpen={graphPanelOpen}
               onTogglePanel={() => setGraphPanelOpen((value) => !value)}
             />
@@ -1138,6 +1356,16 @@ export function App() {
             onSwitchQueryChange={(query) => setBranchDialog((current) => (current?.mode === "switch" ? { ...current, query } : current))}
             onCreate={submitCreateBranch}
             onSwitch={submitSwitchBranch}
+          />
+        ) : null}
+        {commitMessageDialog ? (
+          <CommitMessageDialog
+            state={commitMessageDialog}
+            busy={commitMessageDialogBusy}
+            onClose={() => setCommitMessageDialog(null)}
+            onSubjectChange={(subject) => setCommitMessageDialog((current) => (current ? { ...current, subject } : current))}
+            onBodyChange={(body) => setCommitMessageDialog((current) => (current ? { ...current, body } : current))}
+            onSubmit={submitAmendCommitMessage}
           />
         ) : null}
       </main>
@@ -1205,6 +1433,11 @@ function BranchDialog({
               <span>分支名</span>
               <input value={state.branchName} autoFocus onChange={(event) => onCreateNameChange(event.target.value)} placeholder="feature/new-branch" disabled={busy} />
             </label>
+            {state.startLabel ? (
+              <div className="branch-start-point">
+                基于提交 <code>{state.startLabel}</code>
+              </div>
+            ) : null}
             <label className="branch-checkbox-row">
               <input type="checkbox" checked={state.checkout} onChange={(event) => onCheckoutChange(event.target.checked)} disabled={busy} />
               创建后切换到该分支
@@ -1239,6 +1472,78 @@ function BranchDialog({
             </div>
           </div>
         )}
+      </section>
+    </div>
+  );
+}
+
+function CommitMessageDialog({
+  state,
+  busy,
+  onClose,
+  onSubjectChange,
+  onBodyChange,
+  onSubmit
+}: {
+  state: CommitMessageDialogState;
+  busy: boolean;
+  onClose: () => void;
+  onSubjectChange: (value: string) => void;
+  onBodyChange: (value: string) => void;
+  onSubmit: () => void;
+}) {
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="branch-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="branch-dialog commit-message-dialog" role="dialog" aria-modal="true" aria-label="修改提交信息" onMouseDown={(event) => event.stopPropagation()}>
+        <header className="branch-dialog-header">
+          <span className="branch-dialog-title">
+            <MessageSquareText size={15} />
+            修改提交信息
+          </span>
+          <button type="button" className="icon-button compact-icon" title="关闭" onClick={onClose}>
+            <X size={14} />
+          </button>
+        </header>
+
+        <form
+          className="branch-create-form commit-message-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit();
+          }}
+        >
+          <div className="branch-start-point">
+            目标提交 <code>{state.commit.shortHash}</code>
+          </div>
+          <label>
+            <span>标题</span>
+            <input value={state.subject} autoFocus onChange={(event) => onSubjectChange(event.target.value)} placeholder="type(scope): 中文摘要" disabled={busy} />
+          </label>
+          <label>
+            <span>正文</span>
+            <textarea value={state.body} onChange={(event) => onBodyChange(event.target.value)} placeholder="可选，留空则只修改标题" disabled={busy} />
+          </label>
+          <div className="branch-dialog-actions">
+            <button type="button" className="text-button" onClick={onClose} disabled={busy}>
+              取消
+            </button>
+            <button type="submit" className="primary-action branch-primary-action" disabled={busy || !state.subject.trim()}>
+              <Check size={14} />
+              保存
+            </button>
+          </div>
+        </form>
       </section>
     </div>
   );
@@ -1325,6 +1630,17 @@ function chooseBranch(branches: BranchInfo[], promptTitle: string): BranchInfo |
   }
 
   return matchedBranch;
+}
+
+function commitMessageDraft(commit: CommitNode): Pick<CommitMessageDialogState, "subject" | "body"> {
+  return {
+    subject: commit.subject === "(无提交信息)" ? "" : commit.subject,
+    body: commit.body ?? ""
+  };
+}
+
+function isCommitHistoryPublished(project: GitProject): boolean {
+  return Boolean(project.status?.upstream) && (project.status?.ahead ?? 0) === 0;
 }
 
 function hasWorktreeChanges(project: GitProject): boolean {

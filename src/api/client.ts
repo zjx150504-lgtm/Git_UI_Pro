@@ -2,11 +2,13 @@ import { mockCommits, mockDiffLines, mockProjects } from "../data/mockData";
 import type {
   BranchInfo,
   ChangedFile,
+  CommitMessageInput,
   CommitInput,
   CommitNode,
   DiffLine,
   GitOperationResult,
   GitProject,
+  GitResetMode,
   GitStatusSummary,
   TerminalDataEvent,
   TerminalExitEvent,
@@ -341,13 +343,14 @@ export const apiClient = {
     ];
   },
 
-  async createBranch(project: GitProject, branchName: string, checkout: boolean): Promise<GitOperationResult> {
+  async createBranch(project: GitProject, branchName: string, checkout: boolean, startPoint?: string): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.createBranch(project.path, branchName, checkout);
+      return window.gitUI.createBranch(project.path, branchName, checkout, startPoint);
     }
 
     await wait(mockDelay);
-    return okResult(checkout ? `git switch -c ${branchName}` : `git branch ${branchName}`);
+    const startArg = startPoint ? ` ${startPoint}` : "";
+    return okResult(checkout ? `git switch -c ${branchName}${startArg}` : `git branch ${branchName}${startArg}`);
   },
 
   async switchBranch(project: GitProject, branch: BranchInfo): Promise<GitOperationResult> {
@@ -366,6 +369,51 @@ export const apiClient = {
 
     await wait(mockDelay);
     return okResult(`git branch -d ${branchName}`);
+  },
+
+  async amendLastCommitMessage(project: GitProject, input: CommitMessageInput): Promise<GitOperationResult> {
+    if (window.gitUI) {
+      return window.gitUI.amendLastCommitMessage(project.path, input);
+    }
+
+    await wait(mockDelay);
+    return okResult(`git commit --amend -m ${input.subject}`);
+  },
+
+  async resetLastCommit(project: GitProject, mode: Exclude<GitResetMode, "hard">): Promise<GitOperationResult> {
+    if (window.gitUI) {
+      return window.gitUI.resetLastCommit(project.path, mode);
+    }
+
+    await wait(mockDelay);
+    return okResult(`git reset --${mode} HEAD~1`);
+  },
+
+  async resetToCommit(project: GitProject, hash: string, mode: GitResetMode): Promise<GitOperationResult> {
+    if (window.gitUI) {
+      return window.gitUI.resetToCommit(project.path, hash, mode);
+    }
+
+    await wait(mockDelay);
+    return okResult(`git reset --${mode} ${hash}`);
+  },
+
+  async revertCommit(project: GitProject, hash: string): Promise<GitOperationResult> {
+    if (window.gitUI) {
+      return window.gitUI.revertCommit(project.path, hash);
+    }
+
+    await wait(mockDelay);
+    return okResult(`git revert --no-edit ${hash}`);
+  },
+
+  async cherryPickCommit(project: GitProject, hash: string): Promise<GitOperationResult> {
+    if (window.gitUI) {
+      return window.gitUI.cherryPickCommit(project.path, hash);
+    }
+
+    await wait(mockDelay);
+    return okResult(`git cherry-pick ${hash}`);
   }
 };
 

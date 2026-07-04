@@ -54,8 +54,16 @@ contextBridge.exposeInMainWorld("gitUI", {
   pull: (repositoryPath: string) => ipcRenderer.invoke("git:pull", repositoryPath),
   push: (repositoryPath: string) => ipcRenderer.invoke("git:push", repositoryPath),
   getBranches: (repositoryPath: string) => ipcRenderer.invoke("git:getBranches", repositoryPath),
-  createBranch: (repositoryPath: string, branchName: string, checkout: boolean) => ipcRenderer.invoke("git:createBranch", repositoryPath, branchName, checkout),
+  createBranch: (repositoryPath: string, branchName: string, checkout: boolean, startPoint?: string) =>
+    ipcRenderer.invoke("git:createBranch", repositoryPath, branchName, checkout, startPoint),
   switchBranch: (repositoryPath: string, branch: { name: string; fullName: string; type: string; current: boolean; upstream?: string; headHash: string }) =>
     ipcRenderer.invoke("git:switchBranch", repositoryPath, branch),
-  deleteBranch: (repositoryPath: string, branchName: string) => ipcRenderer.invoke("git:deleteBranch", repositoryPath, branchName)
+  deleteBranch: (repositoryPath: string, branchName: string) => ipcRenderer.invoke("git:deleteBranch", repositoryPath, branchName),
+  amendLastCommitMessage: (repositoryPath: string, input: { subject: string; body?: string }) =>
+    ipcRenderer.invoke("git:amendLastCommitMessage", repositoryPath, input),
+  resetLastCommit: (repositoryPath: string, mode: "soft" | "mixed") => ipcRenderer.invoke("git:resetLastCommit", repositoryPath, mode),
+  resetToCommit: (repositoryPath: string, hash: string, mode: "soft" | "mixed" | "hard") =>
+    ipcRenderer.invoke("git:resetToCommit", repositoryPath, hash, mode),
+  revertCommit: (repositoryPath: string, hash: string) => ipcRenderer.invoke("git:revertCommit", repositoryPath, hash),
+  cherryPickCommit: (repositoryPath: string, hash: string) => ipcRenderer.invoke("git:cherryPickCommit", repositoryPath, hash)
 });

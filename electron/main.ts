@@ -124,11 +124,20 @@ function registerIpc(): void {
   ipcMain.handle("git:pull", (_event, repositoryPath: string) => gitService.pull(repositoryPath));
   ipcMain.handle("git:push", (_event, repositoryPath: string) => gitService.push(repositoryPath));
   ipcMain.handle("git:getBranches", (_event, repositoryPath: string) => gitService.getBranches(repositoryPath));
-  ipcMain.handle("git:createBranch", (_event, repositoryPath: string, branchName: string, checkout: boolean) =>
-    gitService.createBranch(repositoryPath, branchName, checkout)
+  ipcMain.handle("git:createBranch", (_event, repositoryPath: string, branchName: string, checkout: boolean, startPoint?: string) =>
+    gitService.createBranch(repositoryPath, branchName, checkout, startPoint)
   );
   ipcMain.handle("git:switchBranch", (_event, repositoryPath: string, branch) => gitService.switchBranch(repositoryPath, branch));
   ipcMain.handle("git:deleteBranch", (_event, repositoryPath: string, branchName: string) => gitService.deleteBranch(repositoryPath, branchName));
+  ipcMain.handle("git:amendLastCommitMessage", (_event, repositoryPath: string, input: { subject: string; body?: string }) =>
+    gitService.amendLastCommitMessage(repositoryPath, input)
+  );
+  ipcMain.handle("git:resetLastCommit", (_event, repositoryPath: string, mode: "soft" | "mixed") => gitService.resetLastCommit(repositoryPath, mode));
+  ipcMain.handle("git:resetToCommit", (_event, repositoryPath: string, hash: string, mode: "soft" | "mixed" | "hard") =>
+    gitService.resetToCommit(repositoryPath, hash, mode)
+  );
+  ipcMain.handle("git:revertCommit", (_event, repositoryPath: string, hash: string) => gitService.revertCommit(repositoryPath, hash));
+  ipcMain.handle("git:cherryPickCommit", (_event, repositoryPath: string, hash: string) => gitService.cherryPickCommit(repositoryPath, hash));
 }
 
 function applyNativeTheme(themeSource: AppThemeSource): void {

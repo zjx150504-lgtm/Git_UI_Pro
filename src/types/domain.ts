@@ -80,6 +80,23 @@ export interface CommitInput {
   pushAfterCommit?: boolean;
 }
 
+export interface CommitMessageInput {
+  subject: string;
+  body?: string;
+}
+
+export type GitResetMode = "soft" | "mixed" | "hard";
+export type CommitGraphAction =
+  | "copyHash"
+  | "copyMessage"
+  | "amendMessage"
+  | "revert"
+  | "cherryPick"
+  | "createBranch"
+  | "resetSoft"
+  | "resetMixed"
+  | "resetHard";
+
 export interface GitOperationResult {
   ok: boolean;
   command: string;

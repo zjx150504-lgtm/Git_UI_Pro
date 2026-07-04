@@ -1,9 +1,28 @@
-import { Check, ChevronDown, ChevronRight, Cloud, CloudDownload, CloudUpload, GitBranch, MoreHorizontal, Plus, RefreshCw, Search } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  Cloud,
+  CloudDownload,
+  CloudUpload,
+  Copy,
+  GitBranch,
+  GitBranchPlus,
+  GitCommitHorizontal,
+  MessageSquareText,
+  MoreHorizontal,
+  Plus,
+  RefreshCw,
+  RotateCcw,
+  Search,
+  Undo2
+} from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
 import { apiClient } from "../api/client";
 import { PathTooltip } from "./PathTooltip";
-import type { ChangedFile, CommitNode, GitProject } from "../types/domain";
+import type { ChangedFile, CommitGraphAction, CommitNode, GitProject } from "../types/domain";
 import { absoluteFilePath } from "../utils/filePath";
 
 interface GraphSidebarProps {
@@ -16,6 +35,7 @@ interface GraphSidebarProps {
   selectedCommitFileHash?: string;
   selectedCommitFilePath?: string;
   onOperation: (operation: string) => void;
+  onCommitAction: (action: CommitGraphAction, commit: CommitNode) => void;
   panelOpen: boolean;
   onTogglePanel: () => void;
 }
@@ -30,6 +50,13 @@ const graphOperations = [
 
 type GraphTone = "local" | "remote" | "synced" | "plain";
 type GraphFileViewMode = "list" | "tree";
+type CommitContextMenuState = {
+  commit: CommitNode;
+  x: number;
+  y: number;
+  isHead: boolean;
+  isLocalOnly: boolean;
+};
 
 const GRAPH_TOOLBAR_ICON_SIZE = 16;
 
@@ -43,6 +70,7 @@ export function GraphSidebar({
   selectedCommitFileHash,
   selectedCommitFilePath,
   onOperation,
+  onCommitAction,
   panelOpen,
   onTogglePanel
 }: GraphSidebarProps) {
@@ -51,6 +79,7 @@ export function GraphSidebar({
   const [fileViewMode, setFileViewMode] = useState<GraphFileViewMode>("list");
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [viewMenuPosition, setViewMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [commitContextMenu, setCommitContextMenu] = useState<CommitContextMenuState | null>(null);
   const [expandedHash, setExpandedHash] = useState<string | null>(null);
   const [commitDetailsByHash, setCommitDetailsByHash] = useState<Record<string, CommitNode>>({});
   const [loadingDetailsHash, setLoadingDetailsHash] = useState<string | null>(null);
@@ -63,6 +92,7 @@ export function GraphSidebar({
   const searchRowRef = useRef<HTMLDivElement>(null);
   const viewMenuButtonRef = useRef<HTMLButtonElement>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
+  const commitContextMenuRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<number | undefined>();
   const closeTimerRef = useRef<number | undefined>();
   const filteredCommits = useMemo(() => {
@@ -75,6 +105,7 @@ export function GraphSidebar({
   }, [commits, commitQuery]);
   const rowTones = useMemo(() => buildGraphTones(filteredCommits), [filteredCommits]);
   const syncProject = project && ((project.status?.ahead ?? 0) > 0 || (project.status?.behind ?? 0) > 0) ? project : undefined;
+  const localOnlyCount = project?.status?.upstream ? project.status.ahead : commits.length;
 
   useEffect(
     () => () => {
@@ -134,6 +165,33 @@ export function GraphSidebar({
       document.removeEventListener("keydown", onKeyDown);
     };
   }, [viewMenuOpen]);
+
+  useEffect(() => {
+    if (!commitContextMenu) {
+      return;
+    }
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (commitContextMenuRef.current?.contains(target)) {
+        return;
+      }
+
+      setCommitContextMenu(null);
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setCommitContextMenu(null);
+      }
+    };
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [commitContextMenu]);
 
   useEffect(() => {
     setExpandedHash(null);
@@ -202,6 +260,31 @@ export function GraphSidebar({
 
     setSearchOpen(false);
     setViewMenuOpen((value) => !value);
+  }
+
+  function openCommitContextMenu(event: ReactMouseEvent, commit: CommitNode) {
+    event.preventDefault();
+    event.stopPropagation();
+    window.clearTimeout(hoverTimerRef.current);
+    window.clearTimeout(closeTimerRef.current);
+    setHoveredCommit(undefined);
+    setHoveredDotHash(commit.hash);
+
+    const commitIndex = commits.findIndex((item) => item.hash === commit.hash);
+    const isHead = commitIndex === 0;
+    const isLocalOnly = commitIndex >= 0 && commitIndex < localOnlyCount;
+    setCommitContextMenu({
+      commit,
+      x: Math.min(event.clientX, window.innerWidth - 246),
+      y: Math.min(event.clientY, window.innerHeight - 330),
+      isHead,
+      isLocalOnly
+    });
+  }
+
+  function runCommitContextAction(action: CommitGraphAction, commit: CommitNode) {
+    setCommitContextMenu(null);
+    onCommitAction(action, commit);
   }
 
   async function handleCommitClick(commit: CommitNode) {
@@ -398,6 +481,7 @@ export function GraphSidebar({
                   isFirst={index === 0}
                   isLast={index === filteredCommits.length - 1}
                   onSelect={() => void handleCommitClick(commit)}
+                  onContextMenu={(event) => openCommitContextMenu(event, commit)}
                   onSelectFile={(file) => onSelectCommitFile(commit, file)}
                   onPinFile={(file) => onPinCommitFile(commit, file)}
                   onHoverStart={(row) => scheduleHover(commit, row)}
@@ -411,6 +495,62 @@ export function GraphSidebar({
       {hoveredCommit ? (
         <CommitHoverCard commit={hoveredCommit} x={hoverPosition.x} y={hoverPosition.y} onMouseEnter={keepHoverOpen} onMouseLeave={scheduleCloseHover} />
       ) : null}
+      {commitContextMenu && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="floating-menu graph-commit-menu"
+              role="menu"
+              style={{ left: commitContextMenu.x, top: commitContextMenu.y }}
+              ref={commitContextMenuRef}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <button type="button" role="menuitem" onClick={() => runCommitContextAction("copyHash", commitContextMenu.commit)}>
+                <Copy size={14} />
+                复制提交 hash
+              </button>
+              <button type="button" role="menuitem" onClick={() => runCommitContextAction("copyMessage", commitContextMenu.commit)}>
+                <GitCommitHorizontal size={14} />
+                复制提交信息
+              </button>
+              <div className="menu-separator" role="separator" />
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!commitContextMenu.isHead || !commitContextMenu.isLocalOnly}
+                onClick={() => runCommitContextAction("amendMessage", commitContextMenu.commit)}
+              >
+                <MessageSquareText size={14} />
+                修改此提交信息
+              </button>
+              <button type="button" role="menuitem" onClick={() => runCommitContextAction("revert", commitContextMenu.commit)}>
+                <RotateCcw size={14} />
+                还原此提交
+              </button>
+              <button type="button" role="menuitem" onClick={() => runCommitContextAction("cherryPick", commitContextMenu.commit)}>
+                <GitCommitHorizontal size={14} />
+                Cherry-pick 此提交
+              </button>
+              <button type="button" role="menuitem" onClick={() => runCommitContextAction("createBranch", commitContextMenu.commit)}>
+                <GitBranchPlus size={14} />
+                从此提交创建分支
+              </button>
+              <div className="menu-separator" role="separator" />
+              <button type="button" role="menuitem" onClick={() => runCommitContextAction("resetSoft", commitContextMenu.commit)}>
+                <Undo2 size={14} />
+                重置到此提交，保留更改
+              </button>
+              <button type="button" role="menuitem" onClick={() => runCommitContextAction("resetMixed", commitContextMenu.commit)}>
+                <Undo2 size={14} />
+                重置到此提交，取消暂存
+              </button>
+              <button type="button" role="menuitem" className="danger" onClick={() => runCommitContextAction("resetHard", commitContextMenu.commit)}>
+                <AlertTriangle size={14} />
+                重置到此提交，丢弃更改
+              </button>
+            </div>,
+            document.querySelector(".app-shell") ?? document.body
+          )
+        : null}
     </section>
   );
 }
@@ -429,6 +569,7 @@ function GraphCommitRow({
   isFirst,
   isLast,
   onSelect,
+  onContextMenu,
   onSelectFile,
   onPinFile,
   onHoverStart,
@@ -447,6 +588,7 @@ function GraphCommitRow({
   isFirst: boolean;
   isLast: boolean;
   onSelect: () => void;
+  onContextMenu: (event: ReactMouseEvent) => void;
   onSelectFile: (file: ChangedFile) => void;
   onPinFile: (file: ChangedFile) => void;
   onHoverStart: (row: HTMLElement) => void;
@@ -461,6 +603,7 @@ function GraphCommitRow({
         className={`graph-commit-row graph-tone-${tone} ${selected ? "active" : ""}`}
         aria-expanded={expanded}
         onClick={onSelect}
+        onContextMenu={onContextMenu}
         onMouseEnter={(event) => onHoverStart(event.currentTarget)}
         onMouseLeave={onHoverEnd}
         onFocus={(event) => onHoverStart(event.currentTarget)}
