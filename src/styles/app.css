@@ -2876,6 +2876,19 @@ button {
   white-space: nowrap;
 }
 
+.project-rail-pin-indicator {
+  display: inline-grid;
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  color: var(--warning);
+}
+
+.project-rail-pin-indicator svg {
+  display: block;
+}
+
 .project-rail-meta {
   display: flex;
   gap: 4px;
@@ -2960,55 +2973,24 @@ button {
   background: color-mix(in srgb, var(--success) 8%, transparent);
 }
 
-.project-rail-item-actions {
-  position: absolute;
-  top: 5px;
-  right: 5px;
-  z-index: 2;
+.project-context-menu {
+  position: fixed;
+  z-index: 120;
+  min-width: 168px;
+}
+
+.project-context-menu button {
   display: flex;
-  gap: 2px;
+  gap: 8px;
   align-items: center;
-  justify-content: flex-end;
-  min-width: 0;
 }
 
-.pin-project,
-.remove-project {
-  display: grid;
-  width: 22px;
-  height: 22px;
-  place-items: center;
-  border-radius: 4px;
-  color: var(--muted);
-  background: transparent;
-  cursor: pointer;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.project-rail-item:hover .pin-project,
-.project-rail-item.pinned .pin-project,
-.pin-project:focus-visible,
-.project-rail-item:hover .remove-project,
-.remove-project:focus-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.pin-project.active {
-  color: var(--warning);
-  opacity: 1;
-  pointer-events: auto;
-}
-
-.pin-project:hover {
-  color: var(--warning);
-  background: var(--surface-hover);
-}
-
-.remove-project:hover {
+.project-context-menu button.danger {
   color: var(--danger);
-  background: var(--surface-hover);
+}
+
+.project-context-menu button.danger:hover {
+  background: color-mix(in srgb, var(--danger) 11%, var(--surface));
 }
 
 .source-control-pane {
@@ -4383,7 +4365,6 @@ button {
 .branch-list-item,
 .editor-tab,
 .file-row-button,
-.pin-project,
 .project-rail-item,
 .project-item,
 .graph-commit-row,
@@ -4460,7 +4441,6 @@ button {
 
 .scm-row-actions,
 .scm-file-actions,
-.pin-project,
 .remove-project {
   transition:
     opacity var(--motion-base) var(--motion-ease);

@@ -1,5 +1,5 @@
-import { FolderGit2, FolderPlus, FolderSearch, GitBranch, Search, Star, Trash2 } from "lucide-react";
-import { useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { FolderGit2, FolderPlus, FolderSearch, GitBranch, Pin, PinOff, Search, Trash2 } from "lucide-react";
+import { useEffect, useMemo, useState, type DragEvent, type MouseEvent, type ReactNode } from "react";
 import { PathTooltip } from "./PathTooltip";
 import type { GitProject } from "../types/domain";
 
@@ -15,6 +15,15 @@ interface ProjectRailProps {
   onSwitchBranch: (project: GitProject) => void;
   footer?: ReactNode;
 }
+
+type ProjectContextMenuState = {
+  project: GitProject;
+  x: number;
+  y: number;
+};
+
+const PROJECT_CONTEXT_MENU_WIDTH = 168;
+const PROJECT_CONTEXT_MENU_HEIGHT = 76;
 
 export function ProjectRail({
   projects,
@@ -32,6 +41,7 @@ export function ProjectRail({
   const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
   const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null);
   const [dragOverPlacement, setDragOverPlacement] = useState<"before" | "after">("before");
+  const [contextMenu, setContextMenu] = useState<ProjectContextMenuState | null>(null);
   const keyword = query.trim();
   const filteredProjects = useMemo(() => {
     if (!keyword) {
@@ -46,6 +56,41 @@ export function ProjectRail({
   }, [projects, keyword]);
   const canReorder = keyword.length === 0;
   const visibleProjectIds = filteredProjects.map((project) => project.id);
+
+  useEffect(() => {
+    if (!contextMenu) {
+      return;
+    }
+
+    const closeContextMenu = () => setContextMenu(null);
+    const closeOnKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeContextMenu();
+      }
+    };
+
+    document.addEventListener("pointerdown", closeContextMenu);
+    document.addEventListener("keydown", closeOnKeyDown);
+    window.addEventListener("blur", closeContextMenu);
+    window.addEventListener("resize", closeContextMenu);
+    return () => {
+      document.removeEventListener("pointerdown", closeContextMenu);
+      document.removeEventListener("keydown", closeOnKeyDown);
+      window.removeEventListener("blur", closeContextMenu);
+      window.removeEventListener("resize", closeContextMenu);
+    };
+  }, [contextMenu]);
+
+  function openProjectContextMenu(event: MouseEvent<HTMLDivElement>, project: GitProject) {
+    event.preventDefault();
+    event.stopPropagation();
+    onSelectProject(project.id);
+    setContextMenu({
+      project,
+      x: Math.min(event.clientX, window.innerWidth - PROJECT_CONTEXT_MENU_WIDTH - 8),
+      y: Math.min(event.clientY, window.innerHeight - PROJECT_CONTEXT_MENU_HEIGHT - 8)
+    });
+  }
 
   function handleDragStart(event: DragEvent<HTMLDivElement>, projectId: string) {
     if (!canReorder) {
@@ -138,6 +183,7 @@ export function ProjectRail({
             }}
             onDrop={(event) => handleDrop(event, project.id)}
             onDragEnd={clearDragState}
+            onContextMenu={(event) => openProjectContextMenu(event, project)}
           >
             <span className="project-rail-icon">
               <FolderGit2 size={16} />
@@ -145,6 +191,11 @@ export function ProjectRail({
             <span className="project-rail-main">
               <PathTooltip path={project.path} className="project-rail-name">
                 <span className="project-rail-name-text">{project.name}</span>
+                {project.favorite ? (
+                  <span className="project-rail-pin-indicator" title="已置顶">
+                    <Pin size={12} />
+                  </span>
+                ) : null}
               </PathTooltip>
               <span className="project-rail-meta">
                 <button
@@ -167,38 +218,43 @@ export function ProjectRail({
                 ))}
               </span>
             </span>
-            <span className="project-rail-item-actions">
-              <button
-                type="button"
-                draggable={false}
-                className={`pin-project ${project.favorite ? "active" : ""}`}
-                title={project.favorite ? "取消置顶" : "置顶项目"}
-                aria-label={project.favorite ? "取消置顶" : "置顶项目"}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleProjectPinned(project.id);
-                }}
-              >
-                <Star size={13} fill={project.favorite ? "currentColor" : "none"} />
-              </button>
-              <button
-                type="button"
-                draggable={false}
-                className="remove-project"
-                title="移除项目记录"
-                aria-label="移除项目记录"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onRemoveProject(project.id);
-                }}
-              >
-                <Trash2 size={13} />
-              </button>
-            </span>
           </div>
         ))}
         {filteredProjects.length === 0 ? <div className="empty-inline project-rail-empty">没有匹配项目。</div> : null}
       </div>
+      {contextMenu ? (
+        <div
+          className="floating-menu project-context-menu"
+          role="menu"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onPointerDown={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              onToggleProjectPinned(contextMenu.project.id);
+              setContextMenu(null);
+            }}
+          >
+            {contextMenu.project.favorite ? <PinOff size={14} /> : <Pin size={14} />}
+            {contextMenu.project.favorite ? "取消置顶" : "置顶项目"}
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className="danger"
+            onClick={() => {
+              onRemoveProject(contextMenu.project.id);
+              setContextMenu(null);
+            }}
+          >
+            <Trash2 size={14} />
+            移除项目记录
+          </button>
+        </div>
+      ) : null}
       {footer ? <div className="project-rail-footer">{footer}</div> : null}
     </aside>
   );
