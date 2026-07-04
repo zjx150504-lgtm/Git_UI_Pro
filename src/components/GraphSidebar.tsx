@@ -621,6 +621,8 @@ function GraphCommitFileTreeEntry({
   onSelectFile: (file: ChangedFile) => void;
   onPinFile: (file: ChangedFile) => void;
 }) {
+  const [collapsed, setCollapsed] = useState(false);
+
   if (entry.type === "file") {
     return (
       <GraphCommitFileRow
@@ -637,22 +639,30 @@ function GraphCommitFileTreeEntry({
 
   return (
     <>
-      <div className="graph-commit-folder-row" style={graphFileIndentStyle(level)}>
+      <button
+        type="button"
+        className="graph-commit-folder-row"
+        style={graphFileIndentStyle(level)}
+        aria-expanded={!collapsed}
+        onClick={() => setCollapsed((value) => !value)}
+      >
         <span aria-hidden="true" />
-        <ChevronDown size={13} />
+        {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
         <span className="graph-commit-folder-name">{entry.name}</span>
-      </div>
-      {entry.children.map((child) => (
-        <GraphCommitFileTreeEntry
-          entry={child}
-          level={level + 1}
-          repositoryPath={repositoryPath}
-          selectedFilePath={selectedFilePath}
-          onSelectFile={onSelectFile}
-          onPinFile={onPinFile}
-          key={child.type === "directory" ? `dir-${child.path}` : `file-${child.file.path}-${child.file.status}`}
-        />
-      ))}
+      </button>
+      {collapsed
+        ? null
+        : entry.children.map((child) => (
+            <GraphCommitFileTreeEntry
+              entry={child}
+              level={level + 1}
+              repositoryPath={repositoryPath}
+              selectedFilePath={selectedFilePath}
+              onSelectFile={onSelectFile}
+              onPinFile={onPinFile}
+              key={child.type === "directory" ? `dir-${child.path}` : `file-${child.file.path}-${child.file.status}`}
+            />
+          ))}
     </>
   );
 }

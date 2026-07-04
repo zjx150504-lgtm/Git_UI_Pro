@@ -3964,8 +3964,7 @@ button {
   scrollbar-color: transparent transparent;
 }
 
-.source-control-pane .graph-commit-list:hover,
-.source-control-pane .graph-commit-list:focus-within {
+.source-control-pane .graph-commit-list:hover {
   scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
@@ -3974,8 +3973,7 @@ button {
   background: transparent;
 }
 
-.source-control-pane .graph-commit-list:hover::-webkit-scrollbar-thumb,
-.source-control-pane .graph-commit-list:focus-within::-webkit-scrollbar-thumb {
+.source-control-pane .graph-commit-list:hover::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
 }
 
@@ -4132,7 +4130,7 @@ button {
 }
 
 .graph-commit-file-dir {
-  color: var(--muted);
+  color: var(--muted-strong);
   font-size: 11px;
 }
 
@@ -4231,14 +4229,23 @@ button {
   grid-template-columns: calc(24px + var(--graph-file-indent, 0px)) 20px minmax(0, 1fr);
   gap: 6px;
   align-items: center;
+  width: 100%;
   min-height: 24px;
+  border-radius: 3px;
   padding: 0 3px;
-  color: var(--muted);
+  color: var(--muted-strong);
+  background: transparent;
   font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.graph-commit-folder-row:hover {
+  background: var(--surface);
 }
 
 .graph-commit-folder-row svg {
-  color: var(--muted-strong);
+  color: var(--text);
 }
 
 .graph-commit-folder-name {
@@ -4873,26 +4880,26 @@ code,
 }
 
 .source-control-pane .graph-commit-row {
-  min-height: 26px;
+  min-height: 28px;
 }
 
 .compact-graph-cell {
-  height: 26px;
+  height: 28px;
 }
 
 .source-control-pane .graph-commit-subject {
   font-size: 13px;
-  line-height: 1.12;
+  line-height: 16px;
 }
 
 .graph-commit-text {
   gap: 5px;
-  align-items: center;
+  align-items: baseline;
 }
 
 .graph-commit-author {
   font-size: 12px;
-  line-height: 1.1;
+  line-height: 16px;
 }
 
 .compact-graph-cell .graph-node {
