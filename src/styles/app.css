@@ -2046,10 +2046,10 @@ button {
 
 .console-tab {
   display: inline-flex;
-  flex: 0 1 150px;
+  flex: 0 0 104px;
   align-items: center;
-  min-width: 88px;
-  max-width: 170px;
+  min-width: 86px;
+  max-width: 118px;
   height: 24px;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -2064,9 +2064,7 @@ button {
 }
 
 .console-tab-main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
-  gap: 6px;
+  display: flex;
   align-items: center;
   min-width: 0;
   height: 100%;
@@ -2083,17 +2081,6 @@ button {
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.console-tab-main small {
-  flex: 0 0 auto;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.console-tab.active .console-tab-main small {
-  color: var(--blue);
 }
 
 .console-tab-close,

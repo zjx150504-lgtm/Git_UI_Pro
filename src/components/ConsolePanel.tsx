@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Plus, Trash2, X, Terminal as TerminalIcon } from "lucide-react";
+import { ChevronsDown, ChevronsUp, Plus, Trash2, X, Terminal as TerminalIcon } from "lucide-react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -13,6 +13,8 @@ interface ConsolePanelProps {
   project?: GitProject;
   theme: ThemeName;
   visible: boolean;
+  maximized: boolean;
+  onToggleMaximized: () => void;
   onHide: () => void;
 }
 
@@ -38,7 +40,7 @@ interface TerminalRuntime {
   sessionId?: string;
 }
 
-export function ConsolePanel({ project, theme, visible, onHide }: ConsolePanelProps) {
+export function ConsolePanel({ project, theme, visible, maximized, onToggleMaximized, onHide }: ConsolePanelProps) {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -155,7 +157,6 @@ export function ConsolePanel({ project, theme, visible, onHide }: ConsolePanelPr
     }
 
     const tabId = `terminal-tab-${Date.now()}-${++terminalSeedRef.current}`;
-    const tabNumber = tabsRef.current.filter((tab) => tab.projectId === targetProject.id).length + 1;
     const terminal = createTerminal(panelRef.current ?? document.documentElement, themeRef.current);
     const fitAddon = new FitAddon();
     terminal.loadAddon(fitAddon);
@@ -182,12 +183,12 @@ export function ConsolePanel({ project, theme, visible, onHide }: ConsolePanelPr
       projectId: targetProject.id,
       projectName: targetProject.name,
       projectPath: targetProject.path,
-      title: `终端 ${tabNumber}`,
+      title: "终端",
       status: "starting",
       statusText: "启动中"
     };
 
-    setTabs((current) => [...current, nextTab]);
+    setTabs((current) => renumberTerminalTabs([...current, nextTab]));
     setActiveTabId(tabId);
     activeByProjectRef.current.set(targetProject.id, tabId);
 
@@ -203,15 +204,17 @@ export function ConsolePanel({ project, theme, visible, onHide }: ConsolePanelPr
         runtime.sessionId = session.sessionId;
         tabBySessionRef.current.set(session.sessionId, tabId);
         setTabs((current) =>
-          current.map((tab) =>
-            tab.id === tabId
-              ? {
-                  ...tab,
-                  session,
-                  status: "running",
-                  statusText: session.shell
-                }
-              : tab
+          renumberTerminalTabs(
+            current.map((tab) =>
+              tab.id === tabId
+                ? {
+                    ...tab,
+                    session,
+                    status: "running",
+                    statusText: session.shell
+                  }
+                : tab
+            )
           )
         );
         fitAndResizeTab(tabId);
@@ -223,14 +226,16 @@ export function ConsolePanel({ project, theme, visible, onHide }: ConsolePanelPr
         const runtime = runtimeByTabRef.current.get(tabId);
         runtime?.terminal.writeln(`启动控制台失败：${error instanceof Error ? error.message : "未知错误"}`);
         setTabs((current) =>
-          current.map((tab) =>
-            tab.id === tabId
-              ? {
-                  ...tab,
-                  status: "error",
-                  statusText: "启动失败"
-                }
-              : tab
+          renumberTerminalTabs(
+            current.map((tab) =>
+              tab.id === tabId
+                ? {
+                    ...tab,
+                    status: "error",
+                    statusText: "启动失败"
+                  }
+                : tab
+            )
           )
         );
       });
@@ -300,7 +305,7 @@ export function ConsolePanel({ project, theme, visible, onHide }: ConsolePanelPr
       null;
 
     disposeTerminalRuntime(tabId);
-    setTabs((current) => current.filter((tab) => tab.id !== tabId));
+    setTabs((current) => renumberTerminalTabs(current.filter((tab) => tab.id !== tabId)));
 
     if (nextActiveTab) {
       activeByProjectRef.current.set(closingTab.projectId, nextActiveTab.id);
@@ -353,7 +358,6 @@ export function ConsolePanel({ project, theme, visible, onHide }: ConsolePanelPr
             <div className={`console-tab ${tab.id === activeTab?.id ? "active" : ""}`} role="presentation" key={tab.id}>
               <button type="button" className="console-tab-main" role="tab" aria-selected={tab.id === activeTab?.id} title={tab.projectPath} onClick={() => handleSelectTab(tab)}>
                 <span>{tab.title}</span>
-                <small>{tab.statusText}</small>
               </button>
               <button type="button" className="console-tab-close" title="关闭终端" onClick={() => handleCloseTab(tab.id)}>
                 <X size={12} />
@@ -367,6 +371,15 @@ export function ConsolePanel({ project, theme, visible, onHide }: ConsolePanelPr
         <span className="console-context" title={activePath}>
           {activePath}
         </span>
+        <button
+          type="button"
+          className="icon-button console-close"
+          title={maximized ? "恢复控制台高度" : "控制台拉伸到顶部"}
+          onClick={onToggleMaximized}
+          disabled={!visible}
+        >
+          {maximized ? <ChevronsDown size={14} /> : <ChevronsUp size={14} />}
+        </button>
         <button type="button" className="icon-button console-close" title="清空当前终端" onClick={clearActiveTerminal} disabled={!activeTab}>
           <Trash2 size={14} />
         </button>
@@ -433,4 +446,14 @@ function cssVar(style: CSSStyleDeclaration, name: string, fallback: string): str
 
 function isVisible(element: HTMLElement): boolean {
   return element.getClientRects().length > 0 && element.clientWidth > 0 && element.clientHeight > 0;
+}
+
+function renumberTerminalTabs(tabs: TerminalTab[]): TerminalTab[] {
+  const projectCounts = new Map<string, number>();
+  return tabs.map((tab) => {
+    const nextNumber = (projectCounts.get(tab.projectId) ?? 0) + 1;
+    projectCounts.set(tab.projectId, nextNumber);
+    const nextTitle = `终端 ${nextNumber}`;
+    return tab.title === nextTitle ? tab : { ...tab, title: nextTitle };
+  });
 }

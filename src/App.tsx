@@ -26,6 +26,8 @@ const emptyWorktree: WorktreeState = {
 
 const DEFAULT_SOURCE_PANE_HEIGHT = 320;
 const DEFAULT_CONSOLE_HEIGHT = 240;
+const MIN_CONSOLE_HEIGHT = 80;
+const CONSOLE_TOP_SNAP_DISTANCE = 36;
 const SELECTED_PROJECT_REFRESH_INTERVAL_MS = 1600;
 const PROJECT_LIST_STATUS_REFRESH_INTERVAL_MS = 5000;
 const PROJECT_LIST_STATUS_BATCH_SIZE = 4;
@@ -55,6 +57,7 @@ export function App() {
   const [rightCollapsed, setRightCollapsed] = useState(false);
   const [consoleOpen, setConsoleOpen] = useState(false);
   const [consoleHeight, setConsoleHeight] = useState(DEFAULT_CONSOLE_HEIGHT);
+  const [consoleMaximized, setConsoleMaximized] = useState(false);
   const [commitFocusRequest, setCommitFocusRequest] = useState(0);
   const [sourcePaneHeight, setSourcePaneHeight] = useState(DEFAULT_SOURCE_PANE_HEIGHT);
   const [changesPanelOpen, setChangesPanelOpen] = useState(true);
@@ -64,6 +67,8 @@ export function App() {
   const projectsRef = useRef<GitProject[]>([]);
   const autoRefreshBusyRef = useRef(false);
   const projectListRefreshBusyRef = useRef(false);
+  const detailStackRef = useRef<HTMLElement | null>(null);
+  const restoreConsoleHeightRef = useRef(DEFAULT_CONSOLE_HEIGHT);
 
   function rememberStatus(message: string) {
     setStatusMessage(message);
@@ -122,6 +127,16 @@ export function App() {
   useEffect(() => {
     projectsRef.current = projects;
   }, [projects]);
+
+  useEffect(() => {
+    if (!consoleOpen || !consoleMaximized) {
+      return;
+    }
+
+    const syncConsoleHeight = () => setConsoleHeight(getMaxConsoleHeight());
+    window.addEventListener("resize", syncConsoleHeight);
+    return () => window.removeEventListener("resize", syncConsoleHeight);
+  }, [consoleOpen, consoleMaximized]);
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? projects[0],
@@ -841,6 +856,28 @@ export function App() {
     void window.gitUI?.runAppCommand(command);
   }
 
+  function getMaxConsoleHeight(): number {
+    const stackHeight = detailStackRef.current?.clientHeight ?? window.innerHeight;
+    return Math.max(MIN_CONSOLE_HEIGHT, stackHeight - 10);
+  }
+
+  function toggleConsoleMaximized() {
+    if (!consoleOpen) {
+      setConsoleOpen(true);
+    }
+
+    if (consoleMaximized) {
+      const restoredHeight = clamp(restoreConsoleHeightRef.current, MIN_CONSOLE_HEIGHT, Math.max(MIN_CONSOLE_HEIGHT, getMaxConsoleHeight() - 1));
+      setConsoleHeight(restoredHeight);
+      setConsoleMaximized(false);
+      return;
+    }
+
+    restoreConsoleHeightRef.current = clamp(consoleHeight, MIN_CONSOLE_HEIGHT, Math.max(MIN_CONSOLE_HEIGHT, getMaxConsoleHeight() - 1));
+    setConsoleHeight(getMaxConsoleHeight());
+    setConsoleMaximized(true);
+  }
+
   function renderSidebarControls(collapsed: boolean) {
     return (
       <div className={`sidebar-bottom-controls ${collapsed ? "collapsed" : ""}`} aria-label="左侧栏控制">
@@ -878,7 +915,17 @@ export function App() {
       }
 
       if (target === "console") {
-        setConsoleHeight(clamp(startConsoleHeight + startY - moveEvent.clientY, 160, 560));
+        const maxConsoleHeight = getMaxConsoleHeight();
+        let nextConsoleHeight = clamp(startConsoleHeight + startY - moveEvent.clientY, MIN_CONSOLE_HEIGHT, maxConsoleHeight);
+        if (maxConsoleHeight - nextConsoleHeight <= CONSOLE_TOP_SNAP_DISTANCE) {
+          nextConsoleHeight = maxConsoleHeight;
+        }
+
+        setConsoleHeight(nextConsoleHeight);
+        setConsoleMaximized(nextConsoleHeight >= maxConsoleHeight - 1);
+        if (nextConsoleHeight < maxConsoleHeight - 1) {
+          restoreConsoleHeightRef.current = nextConsoleHeight;
+        }
       }
     };
 
@@ -1000,7 +1047,7 @@ export function App() {
           </div>
           {!rightCollapsed ? <div className="resize-handle detail-resize" onMouseDown={(event) => beginResize("detail", event)} /> : null}
           {!rightCollapsed ? (
-            <section className={`detail-stack ${consoleOpen ? "console-open" : ""}`} aria-label="文件查看和控制台">
+            <section className={`detail-stack ${consoleOpen ? "console-open" : ""}`} aria-label="文件查看和控制台" ref={detailStackRef}>
               <WorktreeDetailPanel
                 tabs={worktreeTabs}
                 activeTabId={activeWorktreeTabId}
@@ -1010,7 +1057,14 @@ export function App() {
                 onPinTab={handlePinWorktreeTab}
               />
               <div className="console-resize" hidden={!consoleOpen} onMouseDown={(event) => beginResize("console", event)} />
-              <ConsolePanel project={selectedProject} theme={resolvedTheme} visible={consoleOpen} onHide={() => setConsoleOpen(false)} />
+              <ConsolePanel
+                project={selectedProject}
+                theme={resolvedTheme}
+                visible={consoleOpen}
+                maximized={consoleMaximized}
+                onToggleMaximized={toggleConsoleMaximized}
+                onHide={() => setConsoleOpen(false)}
+              />
               {!consoleOpen ? (
                 <button type="button" className="console-dock-toggle" onClick={() => setConsoleOpen(true)}>
                   <Terminal size={15} />
