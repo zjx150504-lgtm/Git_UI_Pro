@@ -4690,6 +4690,7 @@ code,
 
 .source-control-pane .scm-panel-toggle,
 .source-control-pane .scm-panel-toggle:hover {
+  border-bottom: 0;
   background: transparent;
 }
 
@@ -4755,6 +4756,48 @@ code,
   background: color-mix(in srgb, var(--accent) 72%, transparent);
 }
 
+.app-shell {
+  grid-template-columns: var(--sidebar-width) 10px minmax(0, 1fr);
+}
+
+.app-shell.left-collapsed {
+  grid-template-columns: var(--sidebar-width) 10px minmax(0, 1fr);
+}
+
+.project-rail,
+.collapsed-sidebar {
+  border-right: 0;
+}
+
+.sidebar-resize {
+  position: relative;
+  background: var(--panel);
+  cursor: col-resize;
+}
+
+.sidebar-resize:hover,
+.sidebar-resize:active {
+  background: var(--panel);
+}
+
+.sidebar-resize::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: color-mix(in srgb, var(--border) 68%, transparent);
+}
+
+.sidebar-resize:hover::before {
+  background: color-mix(in srgb, var(--accent) 72%, transparent);
+}
+
+.sidebar-resize.collapsed {
+  background: var(--panel);
+}
+
 .main-grid {
   grid-template-columns: var(--detail-width) 10px minmax(0, 1fr);
 }
@@ -4786,11 +4829,11 @@ code,
 
 @media (max-width: 900px) {
   .app-shell {
-    grid-template-columns: clamp(180px, 36vw, var(--sidebar-width)) 2px minmax(0, 1fr);
+    grid-template-columns: clamp(180px, 36vw, var(--sidebar-width)) 10px minmax(0, 1fr);
   }
 
   .app-shell.left-collapsed {
-    grid-template-columns: 52px 2px minmax(0, 1fr);
+    grid-template-columns: 52px 10px minmax(0, 1fr);
   }
 
   .main-grid,
@@ -4827,6 +4870,29 @@ code,
 .source-control-pane .graph-commit-row:active,
 .source-control-pane .graph-commit-row.active {
   transform: none;
+}
+
+.source-control-pane .graph-commit-row {
+  min-height: 26px;
+}
+
+.compact-graph-cell {
+  height: 26px;
+}
+
+.source-control-pane .graph-commit-subject {
+  font-size: 13px;
+  line-height: 1.12;
+}
+
+.graph-commit-text {
+  gap: 5px;
+  align-items: center;
+}
+
+.graph-commit-author {
+  font-size: 12px;
+  line-height: 1.1;
 }
 
 .compact-graph-cell .graph-node {
