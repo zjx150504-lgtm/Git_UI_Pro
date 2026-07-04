@@ -4081,15 +4081,17 @@ button {
   max-width: min(400px, calc(100vw - 24px));
   border-radius: 4px;
   font-size: 12px;
+  animation: none;
+  transform: none;
 }
 
 .commit-hover-card::before {
   content: "";
   position: absolute;
-  left: -7px;
+  left: -5px;
   top: var(--commit-hover-arrow-top, 16px);
-  width: 12px;
-  height: 12px;
+  width: 8px;
+  height: 8px;
   border-bottom: 1px solid var(--border-strong);
   border-left: 1px solid var(--border-strong);
   background: var(--panel);

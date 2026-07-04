@@ -62,7 +62,9 @@ type CommitContextMenuState = {
 const GRAPH_TOOLBAR_ICON_SIZE = 16;
 const COMMIT_HOVER_CARD_WIDTH = 400;
 const COMMIT_HOVER_VIEWPORT_GAP = 12;
+const COMMIT_HOVER_SPLIT_GAP = 14;
 const COMMIT_HOVER_TOP_OFFSET = 20;
+const COMMIT_HOVER_ARROW_SIZE = 8;
 
 export function GraphSidebar({
   project,
@@ -228,10 +230,24 @@ export function GraphSidebar({
     setHoveredDotHash(commit.hash);
     window.clearTimeout(closeTimerRef.current);
     window.clearTimeout(hoverTimerRef.current);
-    const rect = row.getBoundingClientRect();
-    setHoverPosition({ x: rect.right + 8, y: rect.top + rect.height / 2 });
-    hoverTimerRef.current = window.setTimeout(() => {
+    const rowRect = row.getBoundingClientRect();
+    const sourcePaneRect = row.closest(".source-control-pane")?.getBoundingClientRect();
+    const nextPosition = {
+      x: (sourcePaneRect?.right ?? rowRect.right) + COMMIT_HOVER_SPLIT_GAP,
+      y: rowRect.top + rowRect.height / 2
+    };
+    const showHover = () => {
+      setHoverPosition(nextPosition);
       setHoveredCommit(commit);
+    };
+
+    if (hoveredCommit) {
+      showHover();
+      return;
+    }
+
+    hoverTimerRef.current = window.setTimeout(() => {
+      showHover();
     }, 450);
   }
 
@@ -1070,7 +1086,8 @@ function commitHoverCardStyle(x: number, targetY: number, cardHeight?: number): 
   const preferredTop = targetY - COMMIT_HOVER_TOP_OFFSET;
   const maxTop = measuredHeight > 0 ? window.innerHeight - measuredHeight - COMMIT_HOVER_VIEWPORT_GAP : window.innerHeight - COMMIT_HOVER_VIEWPORT_GAP;
   const top = Math.max(COMMIT_HOVER_VIEWPORT_GAP, Math.min(preferredTop, maxTop));
-  const arrowTop = Math.max(16, Math.min(targetY - top, Math.max(16, measuredHeight - 16)));
+  const arrowInset = 12;
+  const arrowTop = Math.max(arrowInset, Math.min(targetY - top - COMMIT_HOVER_ARROW_SIZE / 2, Math.max(arrowInset, measuredHeight - arrowInset)));
 
   return {
     left,
