@@ -60,9 +60,10 @@ export class ConfigStore {
     try {
       const raw = await readFile(this.configPath, "utf8");
       const config = { ...defaultConfig, ...JSON.parse(raw) } as AppConfig;
+      const projects = orderProjectsWithPinnedFirst(config.projects.map((project) => ({ ...project, favorite: Boolean(project.favorite) })));
       return {
         ...config,
-        projects: config.projects.map((project) => ({ ...project, favorite: Boolean(project.favorite) })),
+        projects,
         groups: config.groups ?? defaultConfig.groups,
         recentProjectIds: config.recentProjectIds ?? defaultConfig.recentProjectIds,
         ui: { ...defaultConfig.ui, ...config.ui }
@@ -119,7 +120,7 @@ export class ConfigStore {
     const orderedIds = new Set(orderedProjects.map((project) => project.id));
     const remainingProjects = config.projects.filter((project) => !orderedIds.has(project.id));
 
-    config.projects = [...orderedProjects, ...remainingProjects];
+    config.projects = orderProjectsWithPinnedFirst([...orderedProjects, ...remainingProjects]);
     await this.write(config);
   }
 
@@ -157,4 +158,10 @@ function placeProjectAfterPinned(projects: GitProject[], project: GitProject): G
   }
 
   return [...projects.slice(0, firstUnpinnedIndex), project, ...projects.slice(firstUnpinnedIndex)];
+}
+
+function orderProjectsWithPinnedFirst(projects: GitProject[]): GitProject[] {
+  const pinnedProjects = projects.filter((project) => project.favorite);
+  const regularProjects = projects.filter((project) => !project.favorite);
+  return [...pinnedProjects, ...regularProjects];
 }

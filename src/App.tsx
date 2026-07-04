@@ -203,10 +203,11 @@ export function App() {
   async function loadInitialData() {
     try {
       const [projectList, versionResult] = await Promise.all([apiClient.getProjects(), apiClient.getGitVersion()]);
-      setProjects(projectList);
-      setSelectedProjectId(projectList[0]?.id ?? null);
+      const orderedProjects = orderProjectsWithPinnedFirst(projectList);
+      setProjects(orderedProjects);
+      setSelectedProjectId(orderedProjects[0]?.id ?? null);
       setGitVersion(formatGitVersion(versionResult));
-      void refreshProjectListStatuses(projectList);
+      void refreshProjectListStatuses(orderedProjects);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "初始化失败");
     }
@@ -1165,7 +1166,7 @@ function mergeProjects(incoming: GitProject[], current: GitProject[]): GitProjec
     map.set(project.path.toLowerCase(), project);
   }
 
-  return Array.from(map.values());
+  return orderProjectsWithPinnedFirst(Array.from(map.values()));
 }
 
 function reorderProjectsByIds(projects: GitProject[], projectIds: string[]): GitProject[] {
@@ -1174,7 +1175,13 @@ function reorderProjectsByIds(projects: GitProject[], projectIds: string[]): Git
     .map((projectId) => projectById.get(projectId))
     .filter((project): project is GitProject => Boolean(project));
   const reorderedIds = new Set(reorderedProjects.map((project) => project.id));
-  return [...reorderedProjects, ...projects.filter((project) => !reorderedIds.has(project.id))];
+  return orderProjectsWithPinnedFirst([...reorderedProjects, ...projects.filter((project) => !reorderedIds.has(project.id))]);
+}
+
+function orderProjectsWithPinnedFirst(projects: GitProject[]): GitProject[] {
+  const pinnedProjects = projects.filter((project) => project.favorite);
+  const regularProjects = projects.filter((project) => !project.favorite);
+  return [...pinnedProjects, ...regularProjects];
 }
 
 function placeProjectAfterPinned(projects: GitProject[], project: GitProject): GitProject[] {
