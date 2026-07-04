@@ -3051,6 +3051,10 @@ button {
   min-width: 0;
 }
 
+.project-rail-item.pinned .project-rail-main {
+  padding-right: 20px;
+}
+
 .project-rail-name {
   max-width: 100%;
   gap: 5px;
@@ -3066,12 +3070,15 @@ button {
 }
 
 .project-rail-pin-indicator {
-  display: inline-grid;
-  flex: 0 0 auto;
+  display: grid;
+  position: absolute;
+  top: 6px;
+  right: 6px;
   width: 16px;
   height: 16px;
   place-items: center;
   color: var(--warning);
+  pointer-events: none;
 }
 
 .project-rail-pin-indicator svg {

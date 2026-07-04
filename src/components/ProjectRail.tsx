@@ -427,11 +427,6 @@ export function ProjectRail({
             <span className="project-rail-main">
               <PathTooltip path={project.path} className="project-rail-name">
                 <span className="project-rail-name-text">{project.name}</span>
-                {project.favorite ? (
-                  <span className="project-rail-pin-indicator" title="已置顶">
-                    <Pin size={12} />
-                  </span>
-                ) : null}
               </PathTooltip>
               <span className="project-rail-meta">
                 <button
@@ -454,6 +449,11 @@ export function ProjectRail({
                 ))}
               </span>
             </span>
+            {project.favorite ? (
+              <span className="project-rail-pin-indicator" title="已置顶" aria-label="已置顶">
+                <Pin size={12} />
+              </span>
+            ) : null}
           </div>
         ))}
         {filteredProjects.length === 0 ? <div className="empty-inline project-rail-empty">没有匹配项目。</div> : null}
