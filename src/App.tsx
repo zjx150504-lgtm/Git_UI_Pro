@@ -129,13 +129,31 @@ export function App() {
   }, [projects]);
 
   useEffect(() => {
-    if (!consoleOpen || !consoleMaximized) {
+    if (!consoleOpen) {
       return;
     }
 
-    const syncConsoleHeight = () => setConsoleHeight(getMaxConsoleHeight());
+    const syncConsoleHeight = () => {
+      const maxConsoleHeight = getMaxConsoleHeight();
+      setConsoleHeight((currentHeight) => {
+        const nextHeight = consoleMaximized ? maxConsoleHeight : clamp(currentHeight, MIN_CONSOLE_HEIGHT, maxConsoleHeight);
+        if (nextHeight < maxConsoleHeight - 1) {
+          restoreConsoleHeightRef.current = nextHeight;
+        }
+        return nextHeight;
+      });
+    };
+
+    syncConsoleHeight();
+    const resizeObserver = new ResizeObserver(syncConsoleHeight);
+    if (detailStackRef.current) {
+      resizeObserver.observe(detailStackRef.current);
+    }
     window.addEventListener("resize", syncConsoleHeight);
-    return () => window.removeEventListener("resize", syncConsoleHeight);
+    return () => {
+      resizeObserver.disconnect();
+      window.removeEventListener("resize", syncConsoleHeight);
+    };
   }, [consoleOpen, consoleMaximized]);
 
   const selectedProject = useMemo(
@@ -944,6 +962,11 @@ export function App() {
     "--scm-pane-height": `${sourcePaneHeight}px`,
     "--console-height": `${consoleHeight}px`
   } as CSSProperties;
+  const detailStackStyle = {
+    gridTemplateRows: consoleOpen
+      ? `minmax(0, max(0px, calc(100% - ${consoleHeight}px - 10px))) 10px minmax(0, ${consoleHeight}px)`
+      : "minmax(0, 1fr) 36px"
+  } as CSSProperties;
 
   return (
     <div
@@ -1047,7 +1070,7 @@ export function App() {
           </div>
           {!rightCollapsed ? <div className="resize-handle detail-resize" onMouseDown={(event) => beginResize("detail", event)} /> : null}
           {!rightCollapsed ? (
-            <section className={`detail-stack ${consoleOpen ? "console-open" : ""}`} aria-label="文件查看和控制台" ref={detailStackRef}>
+            <section className={`detail-stack ${consoleOpen ? "console-open" : ""}`} aria-label="文件查看和控制台" ref={detailStackRef} style={detailStackStyle}>
               <WorktreeDetailPanel
                 tabs={worktreeTabs}
                 activeTabId={activeWorktreeTabId}

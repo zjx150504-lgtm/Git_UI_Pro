@@ -5332,35 +5332,43 @@ code,
   transform: none;
 }
 
-.detail-stack.console-open {
-  grid-template-rows: minmax(0, 1fr) 10px minmax(0, var(--console-height));
-}
-
 .main-grid {
   isolation: isolate;
 }
 
-.main-grid > .source-control-pane {
-  position: relative;
-  z-index: 1;
+.main-grid > .detail-stack {
+  overflow: hidden;
 }
 
-.main-grid > .detail-stack {
-  position: relative;
-  z-index: 0;
-  contain: layout paint;
-  overflow: hidden;
+.detail-stack {
+  transition:
+    background-color var(--motion-base) var(--motion-ease),
+    border-color var(--motion-base) var(--motion-ease);
+}
+
+.detail-stack.console-open {
+  grid-template-rows: minmax(0, max(0px, calc(100% - var(--console-height) - 10px))) 10px minmax(0, var(--console-height));
 }
 
 .detail-stack > .editor-detail-panel,
 .detail-stack > .console-panel {
   min-height: 0;
+  max-height: 100%;
+}
+
+.detail-stack > .editor-detail-panel {
+  grid-row: 1;
+  overflow: hidden;
+}
+
+.detail-stack > .console-resize {
+  grid-row: 2;
 }
 
 .detail-stack > .console-panel {
-  position: relative;
-  z-index: 0;
+  grid-row: 3;
   align-self: stretch;
+  height: 100%;
   margin: 0;
   border-radius: 6px;
   overflow: hidden;
