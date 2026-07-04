@@ -25,9 +25,13 @@ const emptyWorktree: WorktreeState = {
 };
 
 const DEFAULT_SOURCE_PANE_HEIGHT = 320;
+const SELECTED_PROJECT_REFRESH_INTERVAL_MS = 1600;
+const PROJECT_LIST_STATUS_REFRESH_INTERVAL_MS = 5000;
+const PROJECT_LIST_STATUS_BATCH_SIZE = 4;
 
 type ResizeTarget = "sidebar" | "detail" | "sourceSplit";
 type ToastId = string | number;
+type ProjectStatusRefresh = { projectId: string; status: GitProject["status"] };
 type BranchDialogState =
   | { mode: "create"; project: GitProject; branchName: string; checkout: boolean }
   | { mode: "switch"; project: GitProject; branches: BranchInfo[]; query: string };
@@ -55,7 +59,9 @@ export function App() {
   const [graphPanelOpen, setGraphPanelOpen] = useState(true);
   const [branchDialog, setBranchDialog] = useState<BranchDialogState | null>(null);
   const [branchDialogBusy, setBranchDialogBusy] = useState(false);
+  const projectsRef = useRef<GitProject[]>([]);
   const autoRefreshBusyRef = useRef(false);
+  const projectListRefreshBusyRef = useRef(false);
 
   function rememberStatus(message: string) {
     setStatusMessage(message);
@@ -111,6 +117,10 @@ export function App() {
     void window.gitUI?.setNativeTheme(themeMode);
   }, [themeMode]);
 
+  useEffect(() => {
+    projectsRef.current = projects;
+  }, [projects]);
+
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? projects[0],
     [projects, selectedProjectId]
@@ -151,7 +161,7 @@ export function App() {
 
     const intervalId = window.setInterval(() => {
       void refresh();
-    }, 1600);
+    }, SELECTED_PROJECT_REFRESH_INTERVAL_MS);
     const onFocus = () => void refresh();
     const onVisibilityChange = () => {
       if (!document.hidden) {
@@ -169,12 +179,34 @@ export function App() {
     };
   }, [selectedProject?.id, selectedProject?.path]);
 
+  useEffect(() => {
+    let disposed = false;
+    const refresh = () => {
+      if (document.hidden) {
+        return;
+      }
+
+      void refreshProjectListStatuses(undefined, () => disposed);
+    };
+
+    const intervalId = window.setInterval(refresh, PROJECT_LIST_STATUS_REFRESH_INTERVAL_MS);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, []);
+
   async function loadInitialData() {
     try {
       const [projectList, versionResult] = await Promise.all([apiClient.getProjects(), apiClient.getGitVersion()]);
       setProjects(projectList);
       setSelectedProjectId(projectList[0]?.id ?? null);
       setGitVersion(formatGitVersion(versionResult));
+      void refreshProjectListStatuses(projectList);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "初始化失败");
     }
@@ -237,6 +269,49 @@ export function App() {
       setWorktree((current) => (worktreeSignature(current) === worktreeSignature(worktreeState) ? current : worktreeState));
     } catch {
       // Background refresh should not replace the user's current status message.
+    }
+  }
+
+  async function refreshProjectListStatuses(projectSnapshot = projectsRef.current, isDisposed: () => boolean = () => false) {
+    if (isDisposed() || projectListRefreshBusyRef.current || projectSnapshot.length === 0) {
+      return;
+    }
+
+    projectListRefreshBusyRef.current = true;
+    const statusUpdates = new Map<string, GitProject["status"]>();
+    try {
+      for (let index = 0; index < projectSnapshot.length && !isDisposed(); index += PROJECT_LIST_STATUS_BATCH_SIZE) {
+        const batch = projectSnapshot.slice(index, index + PROJECT_LIST_STATUS_BATCH_SIZE);
+        const results = await Promise.allSettled(
+          batch.map(async (project): Promise<ProjectStatusRefresh> => ({
+            projectId: project.id,
+            status: await apiClient.getProjectStatus(project)
+          }))
+        );
+
+        for (const result of results) {
+          if (result.status === "fulfilled" && result.value.status) {
+            statusUpdates.set(result.value.projectId, result.value.status);
+          }
+        }
+      }
+
+      if (isDisposed() || statusUpdates.size === 0) {
+        return;
+      }
+
+      setProjects((current) =>
+        current.map((project) => {
+          const nextStatus = statusUpdates.get(project.id);
+          if (!nextStatus || statusSignature(project.status) === statusSignature(nextStatus)) {
+            return project;
+          }
+
+          return { ...project, status: nextStatus };
+        })
+      );
+    } finally {
+      projectListRefreshBusyRef.current = false;
     }
   }
 
@@ -358,6 +433,7 @@ export function App() {
       setProjects((current) => [project, ...current.filter((item) => item.id !== project.id)]);
       setSelectedProjectId(project.id);
       notifySuccess("已添加项目", project.name);
+      void refreshProjectListStatuses([project]);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "添加项目失败");
     }
@@ -374,6 +450,7 @@ export function App() {
       setProjects((current) => mergeProjects(scannedProjects, current));
       setSelectedProjectId(scannedProjects[0].id);
       notifySuccess(`已扫描到 ${scannedProjects.length} 个 Git 项目`);
+      void refreshProjectListStatuses(scannedProjects);
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "扫描目录失败");
     }
