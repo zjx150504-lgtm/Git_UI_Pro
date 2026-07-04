@@ -5,6 +5,7 @@ import { apiClient } from "./api/client";
 import { AppChrome } from "./components/AppChrome";
 import { ConsolePanel } from "./components/ConsolePanel";
 import { GraphSidebar } from "./components/GraphSidebar";
+import { PathTooltip } from "./components/PathTooltip";
 import { ProjectRail } from "./components/ProjectRail";
 import { TopBar, type ThemeMode } from "./components/TopBar";
 import { WorktreeDetailPanel, type WorktreeEditorTab } from "./components/WorktreeDetailPanel";
@@ -897,14 +898,20 @@ export function App() {
   }
 
   function renderSidebarControls(collapsed: boolean) {
+    const sidebarToggleLabel = collapsed ? "展开项目栏" : "收起项目栏";
+    const themeToggleLabel = resolvedTheme === "dark" ? "切换浅色主题" : "切换深色主题";
     return (
       <div className={`sidebar-bottom-controls ${collapsed ? "collapsed" : ""}`} aria-label="左侧栏控制">
-        <button type="button" className="icon-button compact-icon" title={collapsed ? "展开项目栏" : "收起项目栏"} onClick={() => setLeftCollapsed(!collapsed)}>
-          {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-        </button>
-        <button type="button" className="icon-button compact-icon" title={resolvedTheme === "dark" ? "切换浅色主题" : "切换深色主题"} onClick={toggleThemeMode}>
-          {resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-        </button>
+        <PathTooltip content={sidebarToggleLabel} className="sidebar-control-tooltip">
+          <button type="button" className="icon-button compact-icon" aria-label={sidebarToggleLabel} onClick={() => setLeftCollapsed(!collapsed)}>
+            {collapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+          </button>
+        </PathTooltip>
+        <PathTooltip content={themeToggleLabel} className="sidebar-control-tooltip">
+          <button type="button" className="icon-button compact-icon" aria-label={themeToggleLabel} onClick={toggleThemeMode}>
+            {resolvedTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+        </PathTooltip>
       </div>
     );
   }
@@ -957,7 +964,7 @@ export function App() {
   }
 
   const layoutStyle = {
-    "--sidebar-width": leftCollapsed ? "52px" : `${sidebarWidth}px`,
+    "--sidebar-width": leftCollapsed ? "64px" : `${sidebarWidth}px`,
     "--detail-width": rightCollapsed ? "0px" : `${detailWidth}px`,
     "--scm-pane-height": `${sourcePaneHeight}px`,
     "--console-height": `${consoleHeight}px`
@@ -980,20 +987,23 @@ export function App() {
         <aside className="collapsed-sidebar">
           <div className="collapsed-project-list" aria-label="项目列表">
             {projects.map((project) => (
-              <button
-                type="button"
-                className={`collapsed-project-item ${project.id === selectedProject?.id ? "active" : ""}`}
-                title={project.name}
-                onClick={() => setSelectedProjectId(project.id)}
-                key={project.id}
-              >
-                {projectInitial(project)}
-              </button>
+              <PathTooltip content={project.name} className="collapsed-project-tooltip" key={project.id}>
+                <button
+                  type="button"
+                  className={`collapsed-project-item ${project.id === selectedProject?.id ? "active" : ""}`}
+                  aria-label={project.name}
+                  onClick={() => setSelectedProjectId(project.id)}
+                >
+                  {projectInitial(project)}
+                </button>
+              </PathTooltip>
             ))}
             {projects.length === 0 ? (
-              <span className="collapsed-project-empty" title="暂无项目">
-                <FolderGit2 size={18} />
-              </span>
+              <PathTooltip content="暂无项目" className="collapsed-project-tooltip">
+                <span className="collapsed-project-empty" aria-label="暂无项目">
+                  <FolderGit2 size={18} />
+                </span>
+              </PathTooltip>
             ) : null}
           </div>
           {renderSidebarControls(true)}

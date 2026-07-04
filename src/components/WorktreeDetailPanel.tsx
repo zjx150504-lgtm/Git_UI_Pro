@@ -84,9 +84,11 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
             </div>
           ))}
         </div>
-        <button type="button" className="icon-button compact-icon" title="复制绝对路径" onClick={() => void navigator.clipboard.writeText(activeAbsolutePath)}>
-          <Copy size={15} />
-        </button>
+        <PathTooltip content="复制绝对路径" className="editor-action-tooltip">
+          <button type="button" className="icon-button compact-icon" aria-label="复制绝对路径" onClick={() => void navigator.clipboard.writeText(activeAbsolutePath)}>
+            <Copy size={15} />
+          </button>
+        </PathTooltip>
       </div>
 
       <div className="editor-breadcrumb">

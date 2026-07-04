@@ -1,4 +1,5 @@
 import { GitBranch } from "lucide-react";
+import { PathTooltip } from "./PathTooltip";
 import type { GitProject } from "../types/domain";
 
 export type ThemeMode = "system" | "light" | "dark";
@@ -24,10 +25,12 @@ export function TopBar({
       </div>
 
       <div className="layout-controls" aria-label="布局控制">
-        <span className="git-version-badge" title={gitVersion}>
-          <GitBranch size={13} />
-          <span>{gitVersionLabel}</span>
-        </span>
+        <PathTooltip content={gitVersion} className="git-version-tooltip">
+          <span className="git-version-badge" aria-label={gitVersion}>
+            <GitBranch size={13} />
+            <span>{gitVersionLabel}</span>
+          </span>
+        </PathTooltip>
       </div>
     </header>
   );
