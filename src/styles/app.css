@@ -1960,25 +1960,37 @@ button {
   background: var(--surface);
 }
 
-.console-panel {
-  position: absolute;
-  right: 18px;
-  bottom: 18px;
-  left: 18px;
-  z-index: 30;
-  height: 190px;
+.detail-stack {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 36px;
+  min-width: 0;
+  min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  background: var(--panel);
+}
+
+.detail-stack.console-open {
+  grid-template-rows: minmax(0, 1fr) 220px;
+}
+
+.detail-stack > .detail-panel {
+  border-left: 0;
+}
+
+.console-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  min-height: 0;
+  overflow: hidden;
+  border-top: 1px solid var(--border);
   background: var(--sunken);
-  box-shadow: 0 20px 50px rgb(0 0 0 / 22%);
 }
 
 .console-title {
   gap: 8px;
-  height: 34px;
-  padding: 0 14px;
+  min-height: 34px;
   border-bottom: 1px solid var(--border);
+  padding: 0 10px;
   color: var(--text);
 }
 
@@ -1991,57 +2003,57 @@ button {
   white-space: nowrap;
 }
 
-.console-close {
+.console-title small {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.console-title .console-close {
+  flex: 0 0 auto;
+  margin-left: 0;
+}
+
+.console-title span + .console-close {
   margin-left: auto;
 }
 
-.console-body {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+.console-terminal {
   min-width: 0;
-  height: 156px;
-  padding: 14px;
-  color: var(--muted-strong);
+  min-height: 0;
+  overflow: auto;
+  padding: 8px 10px;
+  color: var(--text);
   font-family: "Cascadia Code", Consolas, monospace;
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 18px;
 }
 
-.prompt {
-  color: var(--accent);
+.console-terminal .xterm {
+  height: 100%;
 }
 
-.cwd {
-  overflow: hidden;
-  max-width: 45%;
-  color: var(--blue);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.console-terminal .xterm-viewport {
+  background: transparent !important;
 }
 
-.cursor {
-  color: var(--warning);
+.console-terminal .xterm-screen {
+  outline: 0;
 }
 
-.console-launcher {
-  position: absolute;
-  right: 18px;
-  bottom: 18px;
-  z-index: 20;
+.console-dock-toggle {
   display: inline-flex;
   gap: 8px;
   align-items: center;
-  min-height: 38px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0 13px;
+  min-height: 36px;
+  border-top: 1px solid var(--border);
+  padding: 0 12px;
   color: var(--text);
   background: var(--panel);
-  box-shadow: 0 12px 30px rgb(0 0 0 / 14%);
   cursor: pointer;
 }
 
-.console-launcher:hover {
+.console-dock-toggle:hover {
   background: var(--surface-hover);
 }
 
@@ -4532,6 +4544,7 @@ button {
 .app-shell,
 .main-grid,
 .workspace-shell,
+.detail-stack,
 .project-rail,
 .collapsed-sidebar,
 .detail-panel {
@@ -4623,8 +4636,7 @@ button {
 .scm-panel-body,
 .scm-file-list,
 .branch-list,
-.editor-detail-panel:not(.empty),
-.console-panel {
+.editor-detail-panel:not(.empty) {
   animation: content-in var(--motion-base) var(--motion-ease-out);
 }
 
@@ -5086,6 +5098,7 @@ code,
   }
 
   .detail-resize,
+  .main-grid > .detail-stack,
   .main-grid > .editor-detail-panel,
   .main-grid > .editor-detail-panel.empty {
     display: none;

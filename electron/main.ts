@@ -1,17 +1,24 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, type WebContents } from "electron";
 import path from "node:path";
+import * as pty from "@homebridge/node-pty-prebuilt-multiarch";
 import { ConfigStore } from "./configStore";
 import { GitService } from "./gitService";
 
 let mainWindow: BrowserWindow | null = null;
 let configStore: ConfigStore;
 const gitService = new GitService();
+const terminalSessions = new Map<string, TerminalSession>();
+let terminalSessionSeed = 0;
 
 const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
 type AppThemeSource = "system" | "light" | "dark";
 type WindowState = {
   isMaximized: boolean;
   isFullScreen: boolean;
+};
+type TerminalSession = {
+  process: pty.IPty;
+  webContents: WebContents;
 };
 
 async function createWindow(): Promise<void> {
@@ -50,6 +57,10 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("window:getState", () => getWindowState());
+  ipcMain.handle("terminal:start", (event, repositoryPath: string) => startTerminalSession(event.sender, repositoryPath));
+  ipcMain.handle("terminal:write", (_event, sessionId: string, data: string) => writeTerminalSession(sessionId, data));
+  ipcMain.handle("terminal:resize", (_event, sessionId: string, cols: number, rows: number) => resizeTerminalSession(sessionId, cols, rows));
+  ipcMain.handle("terminal:dispose", (_event, sessionId: string) => disposeTerminalSession(sessionId));
 
   ipcMain.handle("git:getVersion", () => gitService.getVersion());
 
@@ -235,10 +246,98 @@ app.whenReady().then(async () => {
 });
 
 app.on("window-all-closed", () => {
+  disposeAllTerminalSessions();
   if (process.platform !== "darwin") {
     app.quit();
   }
 });
+
+function startTerminalSession(webContents: WebContents, repositoryPath: string): { sessionId: string; shell: string; cwd: string } {
+  const cwd = path.resolve(repositoryPath);
+  const shell = terminalShell();
+  const sessionId = `terminal-${Date.now()}-${++terminalSessionSeed}`;
+  const terminal = pty.spawn(shell.command, shell.args, {
+    cols: 80,
+    rows: 24,
+    cwd,
+    env: process.env,
+    name: process.platform === "win32" ? "xterm-256color" : "xterm-color"
+  });
+
+  terminalSessions.set(sessionId, { process: terminal, webContents });
+  terminal.onData((data) => sendTerminalData(sessionId, data));
+  terminal.onExit(({ exitCode, signal }) => {
+    terminalSessions.delete(sessionId);
+    if (!webContents.isDestroyed()) {
+      webContents.send("terminal:exit", { sessionId, exitCode, signal });
+    }
+  });
+
+  return { sessionId, shell: shell.label, cwd };
+}
+
+function writeTerminalSession(sessionId: string, data: string): boolean {
+  const session = terminalSessions.get(sessionId);
+  if (!session) {
+    return false;
+  }
+
+  session.process.write(data);
+  return true;
+}
+
+function resizeTerminalSession(sessionId: string, cols: number, rows: number): boolean {
+  const session = terminalSessions.get(sessionId);
+  if (!session) {
+    return false;
+  }
+
+  session.process.resize(Math.max(2, Math.floor(cols)), Math.max(1, Math.floor(rows)));
+  return true;
+}
+
+function disposeTerminalSession(sessionId: string): boolean {
+  const session = terminalSessions.get(sessionId);
+  if (!session) {
+    return false;
+  }
+
+  terminalSessions.delete(sessionId);
+  session.process.kill();
+  return true;
+}
+
+function disposeAllTerminalSessions(): void {
+  for (const sessionId of terminalSessions.keys()) {
+    disposeTerminalSession(sessionId);
+  }
+}
+
+function sendTerminalData(sessionId: string, data: string): void {
+  const session = terminalSessions.get(sessionId);
+  if (!session || session.webContents.isDestroyed()) {
+    return;
+  }
+
+  session.webContents.send("terminal:data", { sessionId, stream: "stdout", data });
+}
+
+function terminalShell(): { command: string; args: string[]; label: string } {
+  if (process.platform === "win32") {
+    return {
+      command: "powershell.exe",
+      args: ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-NoExit"],
+      label: "PowerShell"
+    };
+  }
+
+  const shell = process.env.SHELL || "/bin/sh";
+  return {
+    command: shell,
+    args: [],
+    label: path.basename(shell)
+  };
+}
 
 function configureApplicationMenu(): void {
   Menu.setApplicationMenu(null);

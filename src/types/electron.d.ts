@@ -1,4 +1,17 @@
-import type { BranchInfo, ChangedFile, CommitInput, CommitNode, DiffLine, GitOperationResult, GitProject, GitStatusSummary, WorktreeState } from "./domain";
+import type {
+  BranchInfo,
+  ChangedFile,
+  CommitInput,
+  CommitNode,
+  DiffLine,
+  GitOperationResult,
+  GitProject,
+  GitStatusSummary,
+  TerminalDataEvent,
+  TerminalExitEvent,
+  TerminalSessionInfo,
+  WorktreeState
+} from "./domain";
 
 export interface WindowState {
   isMaximized: boolean;
@@ -11,6 +24,12 @@ export interface GitUIBridge {
   getWindowState: () => Promise<WindowState>;
   onWindowStateChange: (callback: (state: WindowState) => void) => () => void;
   getGitVersion: () => Promise<GitOperationResult>;
+  startTerminal: (repositoryPath: string) => Promise<TerminalSessionInfo>;
+  writeTerminal: (sessionId: string, data: string) => Promise<boolean>;
+  resizeTerminal: (sessionId: string, cols: number, rows: number) => Promise<boolean>;
+  disposeTerminal: (sessionId: string) => Promise<boolean>;
+  onTerminalData: (callback: (event: TerminalDataEvent) => void) => () => void;
+  onTerminalExit: (callback: (event: TerminalExitEvent) => void) => () => void;
   chooseDirectory: () => Promise<string | null>;
   getProjects: () => Promise<GitProject[]>;
   addProject: (directoryPath: string) => Promise<GitProject>;

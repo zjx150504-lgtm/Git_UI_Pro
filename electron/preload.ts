@@ -15,6 +15,20 @@ contextBridge.exposeInMainWorld("gitUI", {
     return () => ipcRenderer.removeListener("window:state", listener);
   },
   getGitVersion: () => ipcRenderer.invoke("git:getVersion"),
+  startTerminal: (repositoryPath: string) => ipcRenderer.invoke("terminal:start", repositoryPath),
+  writeTerminal: (sessionId: string, data: string) => ipcRenderer.invoke("terminal:write", sessionId, data),
+  resizeTerminal: (sessionId: string, cols: number, rows: number) => ipcRenderer.invoke("terminal:resize", sessionId, cols, rows),
+  disposeTerminal: (sessionId: string) => ipcRenderer.invoke("terminal:dispose", sessionId),
+  onTerminalData: (callback: (event: { sessionId: string; stream: "stdout" | "stderr"; data: string }) => void) => {
+    const listener = (_event: IpcRendererEvent, payload: { sessionId: string; stream: "stdout" | "stderr"; data: string }) => callback(payload);
+    ipcRenderer.on("terminal:data", listener);
+    return () => ipcRenderer.removeListener("terminal:data", listener);
+  },
+  onTerminalExit: (callback: (event: { sessionId: string; exitCode: number | null; signal: string | null }) => void) => {
+    const listener = (_event: IpcRendererEvent, payload: { sessionId: string; exitCode: number | null; signal: string | null }) => callback(payload);
+    ipcRenderer.on("terminal:exit", listener);
+    return () => ipcRenderer.removeListener("terminal:exit", listener);
+  },
   chooseDirectory: () => ipcRenderer.invoke("dialog:chooseDirectory"),
   getProjects: () => ipcRenderer.invoke("projects:list"),
   addProject: (directoryPath: string) => ipcRenderer.invoke("projects:add", directoryPath),

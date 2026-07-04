@@ -89,4 +89,22 @@ export interface GitOperationResult {
   messageZh?: string;
 }
 
+export interface TerminalSessionInfo {
+  sessionId: string;
+  shell: string;
+  cwd: string;
+}
+
+export interface TerminalDataEvent {
+  sessionId: string;
+  stream: "stdout" | "stderr";
+  data: string;
+}
+
+export interface TerminalExitEvent {
+  sessionId: string;
+  exitCode: number | null;
+  signal: string | null;
+}
+
 export type MainView = "history" | "workspace";

@@ -992,24 +992,27 @@ export function App() {
           </div>
           {!rightCollapsed ? <div className="resize-handle detail-resize" onMouseDown={(event) => beginResize("detail", event)} /> : null}
           {!rightCollapsed ? (
-            <WorktreeDetailPanel
-              tabs={worktreeTabs}
-              activeTabId={activeWorktreeTabId}
-              repositoryPath={selectedProject?.path}
-              onSelectTab={handleSelectWorktreeTab}
-              onCloseTab={handleCloseWorktreeTab}
-              onPinTab={handlePinWorktreeTab}
-            />
+            <section className={`detail-stack ${consoleOpen ? "console-open" : ""}`} aria-label="文件查看和控制台">
+              <WorktreeDetailPanel
+                tabs={worktreeTabs}
+                activeTabId={activeWorktreeTabId}
+                repositoryPath={selectedProject?.path}
+                onSelectTab={handleSelectWorktreeTab}
+                onCloseTab={handleCloseWorktreeTab}
+                onPinTab={handlePinWorktreeTab}
+              />
+              {consoleOpen ? (
+                <ConsolePanel project={selectedProject} onClose={() => setConsoleOpen(false)} />
+              ) : (
+                <button type="button" className="console-dock-toggle" onClick={() => setConsoleOpen(true)}>
+                  <Terminal size={15} />
+                  控制台
+                </button>
+              )}
+            </section>
           ) : null}
         </section>
 
-        {!consoleOpen ? (
-          <button type="button" className="console-launcher" onClick={() => setConsoleOpen(true)}>
-            <Terminal size={16} />
-            控制台
-          </button>
-        ) : null}
-        {consoleOpen ? <ConsolePanel project={selectedProject} onClose={() => setConsoleOpen(false)} /> : null}
         <div className="sr-only" aria-live="polite">
           {statusMessage}
         </div>

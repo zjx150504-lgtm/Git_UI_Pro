@@ -8,6 +8,9 @@ import type {
   GitOperationResult,
   GitProject,
   GitStatusSummary,
+  TerminalDataEvent,
+  TerminalExitEvent,
+  TerminalSessionInfo,
   WorktreeState
 } from "../types/domain";
 
@@ -26,6 +29,64 @@ export const apiClient = {
       stderr: "",
       exitCode: 0
     };
+  },
+
+  async startTerminal(project: GitProject): Promise<TerminalSessionInfo> {
+    if (window.gitUI) {
+      return window.gitUI.startTerminal(project.path);
+    }
+
+    await wait(mockDelay);
+    return { sessionId: `mock-terminal-${Date.now()}`, shell: "Mock Shell", cwd: project.path };
+  },
+
+  async writeTerminal(sessionId: string, data: string): Promise<boolean> {
+    if (window.gitUI) {
+      return window.gitUI.writeTerminal(sessionId, data);
+    }
+
+    void sessionId;
+    void data;
+    await wait(40);
+    return true;
+  },
+
+  async resizeTerminal(sessionId: string, cols: number, rows: number): Promise<boolean> {
+    if (window.gitUI) {
+      return window.gitUI.resizeTerminal(sessionId, cols, rows);
+    }
+
+    void sessionId;
+    void cols;
+    void rows;
+    return true;
+  },
+
+  async disposeTerminal(sessionId: string): Promise<boolean> {
+    if (window.gitUI) {
+      return window.gitUI.disposeTerminal(sessionId);
+    }
+
+    void sessionId;
+    return true;
+  },
+
+  onTerminalData(callback: (event: TerminalDataEvent) => void): () => void {
+    if (window.gitUI) {
+      return window.gitUI.onTerminalData(callback);
+    }
+
+    void callback;
+    return () => undefined;
+  },
+
+  onTerminalExit(callback: (event: TerminalExitEvent) => void): () => void {
+    if (window.gitUI) {
+      return window.gitUI.onTerminalExit(callback);
+    }
+
+    void callback;
+    return () => undefined;
   },
 
   async getProjects(): Promise<GitProject[]> {
