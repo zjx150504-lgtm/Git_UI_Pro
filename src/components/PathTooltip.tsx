@@ -15,9 +15,15 @@ interface TooltipPosition {
 
 export function PathTooltip({ path, className, children }: PathTooltipProps) {
   const anchorRef = useRef<HTMLSpanElement>(null);
+  const closeTimerRef = useRef<number | undefined>();
   const [visible, setVisible] = useState(false);
   const [position, setPosition] = useState<TooltipPosition | null>(null);
   const classes = ["path-tooltip-anchor", className].filter(Boolean).join(" ");
+
+  function clearCloseTimer() {
+    window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = undefined;
+  }
 
   function updatePosition() {
     const anchor = anchorRef.current;
@@ -37,9 +43,29 @@ export function PathTooltip({ path, className, children }: PathTooltipProps) {
       return;
     }
 
+    clearCloseTimer();
     updatePosition();
     setVisible(true);
   }
+
+  function scheduleHideTooltip() {
+    clearCloseTimer();
+    closeTimerRef.current = window.setTimeout(() => {
+      setVisible(false);
+    }, 220);
+  }
+
+  function hideTooltip() {
+    clearCloseTimer();
+    setVisible(false);
+  }
+
+  useEffect(
+    () => () => {
+      clearCloseTimer();
+    },
+    []
+  );
 
   useEffect(() => {
     if (!visible) {
@@ -58,11 +84,19 @@ export function PathTooltip({ path, className, children }: PathTooltipProps) {
   const portalRoot = typeof document === "undefined" ? null : document.querySelector(".app-shell") ?? document.body;
 
   return (
-    <span ref={anchorRef} className={classes} onMouseEnter={showTooltip} onMouseLeave={() => setVisible(false)} onFocus={showTooltip} onBlur={() => setVisible(false)}>
+    <span ref={anchorRef} className={classes} onMouseEnter={showTooltip} onMouseLeave={scheduleHideTooltip} onFocus={showTooltip} onBlur={scheduleHideTooltip}>
       {children}
       {visible && position && portalRoot
         ? createPortal(
-            <span className="path-tooltip-popover" role="tooltip" style={{ left: position.left, top: position.top, maxWidth: position.maxWidth }}>
+            <span
+              className="path-tooltip-popover"
+              role="tooltip"
+              style={{ left: position.left, top: position.top, maxWidth: position.maxWidth }}
+              onMouseEnter={showTooltip}
+              onMouseLeave={hideTooltip}
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+            >
               {path}
             </span>,
             portalRoot

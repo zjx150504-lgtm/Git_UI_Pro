@@ -137,7 +137,10 @@ button {
   font-weight: 500;
   line-height: 1.45;
   overflow-wrap: anywhere;
-  pointer-events: none;
+  cursor: text;
+  pointer-events: auto;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .app-shell {
