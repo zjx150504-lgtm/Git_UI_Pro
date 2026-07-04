@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, type WebContents } from "electron";
 import path from "node:path";
+import { existsSync } from "node:fs";
 import * as pty from "@homebridge/node-pty-prebuilt-multiarch";
 import { ConfigStore } from "./configStore";
 import { GitService } from "./gitService";
@@ -324,10 +325,20 @@ function sendTerminalData(sessionId: string, data: string): void {
 
 function terminalShell(): { command: string; args: string[]; label: string } {
   if (process.platform === "win32") {
+    const systemRoot = process.env.SystemRoot ?? "C:\\Windows";
+    const windowsPowerShell = path.join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+    if (existsSync(windowsPowerShell)) {
+      return {
+        command: windowsPowerShell,
+        args: ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-NoExit"],
+        label: "PowerShell"
+      };
+    }
+
     return {
-      command: "powershell.exe",
-      args: ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-NoExit"],
-      label: "PowerShell"
+      command: process.env.ComSpec || path.join(systemRoot, "System32", "cmd.exe"),
+      args: ["/K"],
+      label: "Command Prompt"
     };
   }
 

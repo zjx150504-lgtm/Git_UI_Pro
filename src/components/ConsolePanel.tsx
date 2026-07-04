@@ -9,6 +9,8 @@ import type { GitProject, TerminalSessionInfo } from "../types/domain";
 type ThemeName = "light" | "dark";
 type TerminalStatus = "starting" | "running" | "exited" | "error";
 
+const TERMINAL_RESIZE_DEBOUNCE_MS = 140;
+
 interface ConsolePanelProps {
   project?: GitProject;
   theme: ThemeName;
@@ -37,6 +39,9 @@ interface TerminalRuntime {
   opened: boolean;
   resizeObserver?: ResizeObserver;
   resizeFrame: number;
+  resizeTimer: number;
+  lastResizeCols?: number;
+  lastResizeRows?: number;
   sessionId?: string;
 }
 
@@ -117,6 +122,8 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
       const host = panelRef.current ?? document.documentElement;
       for (const runtime of runtimeByTabRef.current.values()) {
         runtime.terminal.options.theme = terminalTheme(host, themeRef.current);
+        runtime.terminal.options.minimumContrastRatio = terminalContrastRatio(themeRef.current);
+        runtime.terminal.refresh(0, Math.max(0, runtime.terminal.rows - 1));
       }
     });
   }, [theme]);
@@ -173,7 +180,8 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
       fitAddon,
       inputSubscription,
       opened: false,
-      resizeFrame: 0
+      resizeFrame: 0,
+      resizeTimer: 0
     });
 
     terminal.writeln("正在启动控制台...");
@@ -217,7 +225,7 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
             )
           )
         );
-        fitAndResizeTab(tabId);
+        fitAndResizeTab(tabId, { immediateBackendResize: true });
         if (activeTabIdRef.current === tabId && visible) {
           runtime.terminal.focus();
         }
@@ -263,7 +271,7 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
     fitAndResizeTab(tabId);
   }
 
-  function fitAndResizeTab(tabId: string) {
+  function fitAndResizeTab(tabId: string, options: { immediateBackendResize?: boolean } = {}) {
     const runtime = runtimeByTabRef.current.get(tabId);
     if (!runtime?.host || !isVisible(runtime.host)) {
       return;
@@ -277,13 +285,50 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
 
       try {
         runtime.fitAddon.fit();
-        if (runtime.sessionId) {
-          void apiClient.resizeTerminal(runtime.sessionId, runtime.terminal.cols, runtime.terminal.rows);
-        }
+        scheduleBackendResize(tabId, Boolean(options.immediateBackendResize));
       } catch {
         // Hidden terminals can report zero dimensions during layout transitions.
       }
     });
+  }
+
+  function scheduleBackendResize(tabId: string, immediate: boolean) {
+    const runtime = runtimeByTabRef.current.get(tabId);
+    if (!runtime?.sessionId) {
+      return;
+    }
+
+    const cols = runtime.terminal.cols;
+    const rows = runtime.terminal.rows;
+    if (runtime.lastResizeCols === cols && runtime.lastResizeRows === rows) {
+      return;
+    }
+
+    window.clearTimeout(runtime.resizeTimer);
+
+    const commitResize = () => {
+      const latestRuntime = runtimeByTabRef.current.get(tabId);
+      if (!latestRuntime?.sessionId) {
+        return;
+      }
+
+      const nextCols = latestRuntime.terminal.cols;
+      const nextRows = latestRuntime.terminal.rows;
+      if (latestRuntime.lastResizeCols === nextCols && latestRuntime.lastResizeRows === nextRows) {
+        return;
+      }
+
+      latestRuntime.lastResizeCols = nextCols;
+      latestRuntime.lastResizeRows = nextRows;
+      void apiClient.resizeTerminal(latestRuntime.sessionId, nextCols, nextRows);
+    };
+
+    if (immediate) {
+      commitResize();
+      return;
+    }
+
+    runtime.resizeTimer = window.setTimeout(commitResize, TERMINAL_RESIZE_DEBOUNCE_MS);
   }
 
   function handleSelectTab(tab: TerminalTab) {
@@ -335,6 +380,7 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
     }
 
     window.cancelAnimationFrame(runtime.resizeFrame);
+    window.clearTimeout(runtime.resizeTimer);
     runtime.resizeObserver?.disconnect();
     runtime.inputSubscription.dispose();
     if (runtime.sessionId) {
@@ -345,8 +391,6 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
     runtime.terminal.dispose();
     runtimeByTabRef.current.delete(tabId);
   }
-
-  const activePath = activeTab?.session?.cwd ?? activeTab?.projectPath ?? project?.path ?? "未选择目录";
 
   return (
     <section className={`console-panel ${visible ? "" : "hidden"}`} aria-label="控制台" ref={panelRef}>
@@ -368,9 +412,6 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
             <Plus size={14} />
           </button>
         </div>
-        <span className="console-context" title={activePath}>
-          {activePath}
-        </span>
         <button
           type="button"
           className="icon-button console-close"
@@ -417,6 +458,7 @@ function createTerminal(host: HTMLElement, theme: ThemeName): Terminal {
     fontFamily: '"Cascadia Code", Consolas, "Courier New", monospace',
     fontSize: 12,
     lineHeight: 1.25,
+    minimumContrastRatio: terminalContrastRatio(theme),
     scrollback: 5000,
     theme: terminalTheme(host, theme)
   });
@@ -424,20 +466,36 @@ function createTerminal(host: HTMLElement, theme: ThemeName): Terminal {
 
 function terminalTheme(host: HTMLElement, theme: ThemeName) {
   const style = getComputedStyle(host);
+  const isDark = theme === "dark";
   return {
-    background: cssVar(style, "--sunken", theme === "dark" ? "#0d1116" : "#f8fafc"),
-    foreground: cssVar(style, "--text", theme === "dark" ? "#e7edf2" : "#1b2530"),
-    cursor: cssVar(style, "--accent", theme === "dark" ? "#51c2a9" : "#148f7a"),
-    selectionBackground: theme === "dark" ? "rgba(143, 183, 255, 0.30)" : "rgba(36, 95, 189, 0.22)",
-    black: theme === "dark" ? "#15191f" : "#d9e1ea",
-    red: cssVar(style, "--danger", theme === "dark" ? "#ef6b73" : "#b23b48"),
-    green: cssVar(style, "--success", theme === "dark" ? "#7bd88f" : "#187a3f"),
-    yellow: cssVar(style, "--warning", theme === "dark" ? "#f0c36b" : "#9a6412"),
-    blue: cssVar(style, "--blue", theme === "dark" ? "#8fb7ff" : "#245fbd"),
-    magenta: theme === "dark" ? "#c084fc" : "#7c3aed",
-    cyan: cssVar(style, "--accent", theme === "dark" ? "#51c2a9" : "#148f7a"),
-    white: cssVar(style, "--text-strong", theme === "dark" ? "#f3f7fa" : "#0f1720")
+    background: cssVar(style, "--sunken", isDark ? "#0d1116" : "#f8fafc"),
+    foreground: cssVar(style, "--text", isDark ? "#e7edf2" : "#1b2530"),
+    cursor: cssVar(style, "--accent", isDark ? "#51c2a9" : "#148f7a"),
+    cursorAccent: cssVar(style, "--sunken", isDark ? "#0d1116" : "#f8fafc"),
+    selectionBackground: isDark ? "rgba(143, 183, 255, 0.30)" : "rgba(36, 95, 189, 0.20)",
+    selectionForeground: cssVar(style, "--text-strong", isDark ? "#f3f7fa" : "#0f1720"),
+    selectionInactiveBackground: isDark ? "rgba(143, 183, 255, 0.16)" : "rgba(36, 95, 189, 0.12)",
+    black: isDark ? "#15191f" : "#eef2f6",
+    red: isDark ? "#ef6b73" : "#b42335",
+    green: isDark ? "#7bd88f" : "#137333",
+    yellow: isDark ? "#f0c36b" : "#8a5a00",
+    blue: isDark ? "#8fb7ff" : "#1557b0",
+    magenta: isDark ? "#c084fc" : "#6d28d9",
+    cyan: isDark ? "#51c2a9" : "#08756f",
+    white: isDark ? "#dfe7ef" : "#ffffff",
+    brightBlack: isDark ? "#6b7582" : "#6b7280",
+    brightRed: isDark ? "#ff8a94" : "#d12f45",
+    brightGreen: isDark ? "#9af2ad" : "#18884a",
+    brightYellow: isDark ? "#ffd27a" : "#a16207",
+    brightBlue: isDark ? "#adc9ff" : "#2563eb",
+    brightMagenta: isDark ? "#d8b4fe" : "#8b5cf6",
+    brightCyan: isDark ? "#78decb" : "#0f8f86",
+    brightWhite: isDark ? "#f8fafc" : "#111827"
   };
+}
+
+function terminalContrastRatio(theme: ThemeName): number {
+  return theme === "light" ? 7 : 4.5;
 }
 
 function cssVar(style: CSSStyleDeclaration, name: string, fallback: string): string {

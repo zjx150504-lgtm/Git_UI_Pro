@@ -1995,11 +1995,12 @@ button {
   left: 0;
   top: 4px;
   height: 1px;
-  background: color-mix(in srgb, var(--border) 68%, transparent);
+  display: none;
+  background: transparent;
 }
 
 .console-resize:hover::before {
-  background: color-mix(in srgb, var(--accent) 72%, transparent);
+  background: transparent;
 }
 
 .console-panel {
@@ -2018,7 +2019,6 @@ button {
   gap: 8px;
   min-width: 0;
   min-height: 34px;
-  border-bottom: 1px solid var(--border);
   padding: 0 8px;
   color: var(--text);
 }
@@ -2046,10 +2046,10 @@ button {
 
 .console-tab {
   display: inline-flex;
-  flex: 0 0 104px;
+  flex: 0 0 auto;
   align-items: center;
-  min-width: 86px;
-  max-width: 118px;
+  min-width: 0;
+  max-width: 128px;
   height: 24px;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -2068,8 +2068,8 @@ button {
   align-items: center;
   min-width: 0;
   height: 100%;
-  flex: 1 1 auto;
-  padding: 0 4px 0 8px;
+  flex: 0 1 auto;
+  padding: 0 5px 0 8px;
   color: inherit;
   background: transparent;
   cursor: pointer;
@@ -2095,7 +2095,7 @@ button {
 }
 
 .console-tab-close {
-  width: 22px;
+  width: 20px;
   height: 22px;
   border-radius: 5px;
   margin-right: 1px;
@@ -2116,15 +2116,6 @@ button {
 .console-tab-add:disabled {
   cursor: not-allowed;
   opacity: 0.45;
-}
-
-.console-context {
-  overflow: hidden;
-  flex: 0 1 180px;
-  color: var(--muted);
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .console-title .console-close {
@@ -2168,6 +2159,7 @@ button {
 
 .console-terminal .xterm {
   height: 100%;
+  background: var(--sunken) !important;
 }
 
 .console-terminal .xterm-viewport {
@@ -2176,6 +2168,11 @@ button {
 
 .console-terminal .xterm-screen {
   outline: 0;
+  background: transparent !important;
+}
+
+.console-terminal .xterm-rows {
+  color: var(--text);
 }
 
 .console-empty-state {
@@ -5284,6 +5281,10 @@ code,
 
 .source-control-pane .graph-commit-row {
   min-height: 28px;
+}
+
+.source-control-pane .graph-section-title {
+  border-bottom: 0;
 }
 
 .compact-graph-cell {
