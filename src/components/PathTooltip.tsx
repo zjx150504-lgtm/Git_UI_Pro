@@ -13,9 +13,14 @@ interface TooltipPosition {
   maxWidth: number;
 }
 
+const TOOLTIP_HORIZONTAL_OFFSET = 36;
+const PATH_TOOLTIP_OPEN_EVENT = "git-ui-pro:path-tooltip-open";
+let pathTooltipIdSeed = 0;
+
 export function PathTooltip({ path, className, children }: PathTooltipProps) {
   const anchorRef = useRef<HTMLSpanElement>(null);
   const closeTimerRef = useRef<number | undefined>();
+  const tooltipIdRef = useRef(`path-tooltip-${++pathTooltipIdSeed}`);
   const [visible, setVisible] = useState(false);
   const [position, setPosition] = useState<TooltipPosition | null>(null);
   const classes = ["path-tooltip-anchor", className].filter(Boolean).join(" ");
@@ -33,7 +38,8 @@ export function PathTooltip({ path, className, children }: PathTooltipProps) {
 
     const rect = anchor.getBoundingClientRect();
     const maxWidth = Math.min(460, window.innerWidth - 24);
-    const left = Math.max(12, Math.min(rect.left, window.innerWidth - maxWidth - 12));
+    const preferredLeft = rect.left + TOOLTIP_HORIZONTAL_OFFSET;
+    const left = Math.max(12, Math.min(preferredLeft, window.innerWidth - maxWidth - 12));
     const top = Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - 48));
     setPosition({ left, top, maxWidth });
   }
@@ -45,6 +51,7 @@ export function PathTooltip({ path, className, children }: PathTooltipProps) {
 
     clearCloseTimer();
     updatePosition();
+    window.dispatchEvent(new CustomEvent(PATH_TOOLTIP_OPEN_EVENT, { detail: { id: tooltipIdRef.current } }));
     setVisible(true);
   }
 
@@ -66,6 +73,21 @@ export function PathTooltip({ path, className, children }: PathTooltipProps) {
     },
     []
   );
+
+  useEffect(() => {
+    const onTooltipOpen = (event: Event) => {
+      const activeTooltipId = event instanceof CustomEvent ? event.detail?.id : undefined;
+      if (activeTooltipId === tooltipIdRef.current) {
+        return;
+      }
+
+      clearCloseTimer();
+      setVisible(false);
+    };
+
+    window.addEventListener(PATH_TOOLTIP_OPEN_EVENT, onTooltipOpen);
+    return () => window.removeEventListener(PATH_TOOLTIP_OPEN_EVENT, onTooltipOpen);
+  }, []);
 
   useEffect(() => {
     if (!visible) {
