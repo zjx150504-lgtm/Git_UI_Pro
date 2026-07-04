@@ -1,5 +1,6 @@
 import { Check, ChevronDown, Filter, FolderGit2, FolderPlus, FolderSearch, GitBranch, Pin, PinOff, Search, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState, type DragEvent, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type MouseEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { PathTooltip } from "./PathTooltip";
 import type { GitProject } from "../types/domain";
 
@@ -26,6 +27,7 @@ type ProjectStatusFilterId = "pinned" | "dirty" | "clean" | "conflict" | "ahead"
 
 const PROJECT_CONTEXT_MENU_WIDTH = 168;
 const PROJECT_CONTEXT_MENU_HEIGHT = 76;
+const PROJECT_STATUS_FILTER_MENU_WIDTH = 190;
 const projectStatusFilterGroups: Array<{
   label: string;
   items: Array<{ id: ProjectStatusFilterId; label: string }>;
@@ -73,7 +75,9 @@ export function ProjectRail({
   const [dragOverPlacement, setDragOverPlacement] = useState<"before" | "after">("before");
   const [contextMenu, setContextMenu] = useState<ProjectContextMenuState | null>(null);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [filterMenuPosition, setFilterMenuPosition] = useState<CSSProperties>({ top: 0, left: 0, width: PROJECT_STATUS_FILTER_MENU_WIDTH });
   const [statusFilters, setStatusFilters] = useState<ProjectStatusFilterId[]>([]);
+  const filterMenuButtonRef = useRef<HTMLButtonElement>(null);
   const keyword = query.trim();
   const filteredProjects = useMemo(() => {
     const statusFilteredProjects = statusFilters.length > 0 ? projects.filter((project) => projectMatchesStatusFilters(project, statusFilters)) : projects;
@@ -141,6 +145,20 @@ export function ProjectRail({
 
   function toggleStatusFilter(filterId: ProjectStatusFilterId) {
     setStatusFilters((current) => (current.includes(filterId) ? current.filter((item) => item !== filterId) : [...current, filterId]));
+  }
+
+  function updateFilterMenuPosition() {
+    const rect = filterMenuButtonRef.current?.getBoundingClientRect();
+    if (!rect) {
+      return;
+    }
+
+    const maxLeft = Math.max(8, window.innerWidth - PROJECT_STATUS_FILTER_MENU_WIDTH - 8);
+    setFilterMenuPosition({
+      top: rect.bottom + 4,
+      left: Math.max(8, Math.min(rect.left - 1, maxLeft)),
+      width: PROJECT_STATUS_FILTER_MENU_WIDTH
+    });
   }
 
   function openProjectContextMenu(event: MouseEvent<HTMLDivElement>, project: GitProject) {
@@ -221,6 +239,7 @@ export function ProjectRail({
         </label>
         <div className="project-status-filter">
           <button
+            ref={filterMenuButtonRef}
             type="button"
             className={`project-status-filter-button ${statusFilters.length > 0 ? "active" : ""}`}
             aria-expanded={filterMenuOpen}
@@ -228,6 +247,9 @@ export function ProjectRail({
             onClick={(event) => {
               event.stopPropagation();
               setContextMenu(null);
+              if (!filterMenuOpen) {
+                updateFilterMenuPosition();
+              }
               setFilterMenuOpen((value) => !value);
             }}
           >
@@ -235,35 +257,38 @@ export function ProjectRail({
             <span>{statusFilterSummary}</span>
             <ChevronDown size={14} />
           </button>
-          {filterMenuOpen ? (
-            <div className="floating-menu project-status-filter-menu" role="menu" onPointerDown={(event) => event.stopPropagation()}>
-              <button type="button" className="project-status-filter-reset" role="menuitem" onClick={() => setStatusFilters([])}>
-                <Check size={14} className={statusFilters.length === 0 ? "visible" : ""} />
-                全部状态
-              </button>
-              {projectStatusFilterGroups.map((group) => (
-                <div className="project-status-filter-group" role="group" aria-label={group.label} key={group.label}>
-                  <div className="project-status-filter-group-title">{group.label}</div>
-                  {group.items.map((item) => {
-                    const selected = statusFilters.includes(item.id);
-                    return (
-                      <button
-                        type="button"
-                        className={selected ? "active" : ""}
-                        role="menuitemcheckbox"
-                        aria-checked={selected}
-                        key={item.id}
-                        onClick={() => toggleStatusFilter(item.id)}
-                      >
-                        <Check size={14} className={selected ? "visible" : ""} />
-                        {item.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          ) : null}
+          {filterMenuOpen && typeof document !== "undefined"
+            ? createPortal(
+                <div className="floating-menu project-status-filter-menu" role="menu" style={filterMenuPosition} onPointerDown={(event) => event.stopPropagation()}>
+                  <button type="button" className="project-status-filter-reset" role="menuitem" onClick={() => setStatusFilters([])}>
+                    <Check size={14} className={statusFilters.length === 0 ? "visible" : ""} />
+                    全部状态
+                  </button>
+                  {projectStatusFilterGroups.map((group) => (
+                    <div className="project-status-filter-group" role="group" aria-label={group.label} key={group.label}>
+                      <div className="project-status-filter-group-title">{group.label}</div>
+                      {group.items.map((item) => {
+                        const selected = statusFilters.includes(item.id);
+                        return (
+                          <button
+                            type="button"
+                            className={selected ? "active" : ""}
+                            role="menuitemcheckbox"
+                            aria-checked={selected}
+                            key={item.id}
+                            onClick={() => toggleStatusFilter(item.id)}
+                          >
+                            <Check size={14} className={selected ? "visible" : ""} />
+                            {item.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
+                </div>,
+                document.querySelector(".app-shell") ?? document.body
+              )
+            : null}
         </div>
       </div>
 

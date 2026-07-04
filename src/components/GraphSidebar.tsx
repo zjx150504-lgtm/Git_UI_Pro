@@ -48,7 +48,7 @@ export function GraphSidebar({
 }: GraphSidebarProps) {
   const [commitQuery, setCommitQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
-  const [fileViewMode, setFileViewMode] = useState<GraphFileViewMode>("tree");
+  const [fileViewMode, setFileViewMode] = useState<GraphFileViewMode>("list");
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [viewMenuPosition, setViewMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [expandedHash, setExpandedHash] = useState<string | null>(null);
