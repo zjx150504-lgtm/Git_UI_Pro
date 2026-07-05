@@ -2691,12 +2691,19 @@ button {
   white-space: nowrap;
 }
 
+.editor-diff-shell {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .editor-diff-panel {
   position: relative;
+  height: 100%;
   min-height: 0;
   margin: 0;
   overflow: auto;
-  padding: 12px 24px 28px 14px;
+  padding: 12px 48px 28px 14px;
 }
 
 .editor-diff-panel .diff-lines {
@@ -2705,11 +2712,12 @@ button {
 }
 
 .split-diff-grid {
-  min-width: 980px;
-  border: 1px solid var(--border);
+  width: max-content;
+  min-width: 100%;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   border-radius: 6px;
   overflow: hidden;
-  background: var(--sunken);
+  background: color-mix(in srgb, var(--sunken) 94%, var(--panel));
 }
 
 .split-diff-header {
@@ -2717,9 +2725,9 @@ button {
   position: sticky;
   top: -12px;
   z-index: 2;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  border-bottom: 1px solid var(--border);
-  background: var(--panel);
+  grid-template-columns: minmax(720px, 1fr) minmax(720px, 1fr);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  background: color-mix(in srgb, var(--panel) 92%, var(--sunken));
 }
 
 .split-diff-header span {
@@ -2731,7 +2739,7 @@ button {
 }
 
 .split-diff-header span + span {
-  border-left: 1px solid var(--border);
+  border-left: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
 }
 
 .split-diff-lines {
@@ -2741,95 +2749,133 @@ button {
 
 .split-diff-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(720px, 1fr) minmax(720px, 1fr);
   min-height: 24px;
 }
 
 .split-diff-cell {
   display: grid;
-  grid-template-columns: 54px minmax(0, 1fr);
-  min-width: 0;
+  grid-template-columns: 50px max-content;
+  min-width: 720px;
   border-left: 1px solid transparent;
 }
 
 .split-diff-cell + .split-diff-cell {
-  border-left-color: var(--border);
+  border-left-color: color-mix(in srgb, var(--border) 64%, transparent);
 }
 
 .split-diff-cell.add {
-  background: var(--diff-add-bg);
+  background: color-mix(in srgb, var(--success) 20%, var(--sunken));
 }
 
 .split-diff-cell.delete {
-  background: var(--diff-del-bg);
+  background: color-mix(in srgb, var(--danger) 20%, var(--sunken));
 }
 
 .split-diff-row.replace .split-diff-cell.delete {
-  box-shadow: inset 3px 0 color-mix(in srgb, var(--danger) 72%, transparent);
+  box-shadow: inset 2px 0 color-mix(in srgb, var(--danger) 70%, transparent);
 }
 
 .split-diff-row.replace .split-diff-cell.add {
-  box-shadow: inset 3px 0 color-mix(in srgb, var(--success) 72%, transparent);
+  box-shadow: inset 2px 0 color-mix(in srgb, var(--success) 70%, transparent);
 }
 
 .split-diff-cell.empty {
   background:
     repeating-linear-gradient(
       -45deg,
-      color-mix(in srgb, var(--border) 28%, transparent) 0,
-      color-mix(in srgb, var(--border) 28%, transparent) 1px,
+      color-mix(in srgb, var(--border) 20%, transparent) 0,
+      color-mix(in srgb, var(--border) 20%, transparent) 1px,
       transparent 1px,
-      transparent 7px
+      transparent 8px
     ),
-    var(--sunken);
+    color-mix(in srgb, var(--border) 14%, var(--sunken));
+}
+
+.split-diff-cell.add .line-number {
+  background: color-mix(in srgb, var(--success) 16%, transparent);
+  color: color-mix(in srgb, var(--success) 72%, var(--line-number));
+}
+
+.split-diff-cell.delete .line-number {
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: color-mix(in srgb, var(--danger) 72%, var(--line-number));
+}
+
+.split-diff-cell.empty .line-number {
+  color: color-mix(in srgb, var(--muted) 76%, transparent);
+  background: color-mix(in srgb, var(--border) 10%, transparent);
 }
 
 .split-diff-cell code {
   min-width: 0;
-  overflow: hidden;
   padding: 4px 10px;
   color: var(--diff-text);
-  line-height: 1.4;
+  line-height: 1.45;
   text-overflow: clip;
   white-space: pre;
 }
 
 .diff-scroll-map {
-  position: sticky;
-  top: 8px;
-  right: 4px;
+  position: absolute;
+  top: 16px;
+  right: 14px;
+  bottom: 18px;
   z-index: 4;
-  float: right;
-  width: 8px;
-  height: max(120px, calc(100% - 16px));
-  min-height: 120px;
-  margin: 0 -16px 0 8px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--border) 34%, transparent);
+  width: 18px;
+  min-height: 96px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--border) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 18%, transparent);
+  pointer-events: none;
 }
 
 .diff-scroll-marker {
   position: absolute;
-  right: 1px;
-  width: 6px;
+  right: 2px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1px;
+  width: 14px;
   height: 3px;
   min-height: 3px;
-  border-radius: 999px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 2px;
   padding: 0;
+  background: transparent;
   cursor: pointer;
-  transform: translateY(-50%);
+  opacity: 0.9;
+  pointer-events: auto;
 }
 
-.diff-scroll-marker.add {
-  background: var(--success);
+.diff-scroll-marker-lane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 1px;
 }
 
-.diff-scroll-marker.delete {
-  background: var(--danger);
+.diff-scroll-marker-segment {
+  display: block;
+  min-width: 0;
+  min-height: 0;
+  flex-basis: 0;
+  border-radius: 1px;
 }
 
-.diff-scroll-marker.replace {
-  background: var(--warning);
+.diff-scroll-marker-segment.add {
+  background: color-mix(in srgb, var(--success) 86%, transparent);
+}
+
+.diff-scroll-marker-segment.delete {
+  background: color-mix(in srgb, var(--danger) 86%, transparent);
+}
+
+.diff-scroll-marker-segment.empty {
+  background: color-mix(in srgb, var(--border) 56%, var(--sunken));
 }
 
 .editor-diff-panel .diff-line {
