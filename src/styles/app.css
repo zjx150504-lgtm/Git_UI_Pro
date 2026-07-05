@@ -2692,15 +2692,144 @@ button {
 }
 
 .editor-diff-panel {
+  position: relative;
   min-height: 0;
   margin: 0;
   overflow: auto;
-  padding: 12px 14px 28px;
+  padding: 12px 24px 28px 14px;
 }
 
 .editor-diff-panel .diff-lines {
   min-width: 720px;
   border-radius: 0;
+}
+
+.split-diff-grid {
+  min-width: 980px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--sunken);
+}
+
+.split-diff-header {
+  display: grid;
+  position: sticky;
+  top: -12px;
+  z-index: 2;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.split-diff-header span {
+  min-width: 0;
+  padding: 7px 12px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.split-diff-header span + span {
+  border-left: 1px solid var(--border);
+}
+
+.split-diff-lines {
+  font-family: var(--mono-font);
+  font-size: 12px;
+}
+
+.split-diff-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  min-height: 24px;
+}
+
+.split-diff-cell {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  min-width: 0;
+  border-left: 1px solid transparent;
+}
+
+.split-diff-cell + .split-diff-cell {
+  border-left-color: var(--border);
+}
+
+.split-diff-cell.add {
+  background: var(--diff-add-bg);
+}
+
+.split-diff-cell.delete {
+  background: var(--diff-del-bg);
+}
+
+.split-diff-row.replace .split-diff-cell.delete {
+  box-shadow: inset 3px 0 color-mix(in srgb, var(--danger) 72%, transparent);
+}
+
+.split-diff-row.replace .split-diff-cell.add {
+  box-shadow: inset 3px 0 color-mix(in srgb, var(--success) 72%, transparent);
+}
+
+.split-diff-cell.empty {
+  background:
+    repeating-linear-gradient(
+      -45deg,
+      color-mix(in srgb, var(--border) 28%, transparent) 0,
+      color-mix(in srgb, var(--border) 28%, transparent) 1px,
+      transparent 1px,
+      transparent 7px
+    ),
+    var(--sunken);
+}
+
+.split-diff-cell code {
+  min-width: 0;
+  overflow: hidden;
+  padding: 4px 10px;
+  color: var(--diff-text);
+  line-height: 1.4;
+  text-overflow: clip;
+  white-space: pre;
+}
+
+.diff-scroll-map {
+  position: sticky;
+  top: 8px;
+  right: 4px;
+  z-index: 4;
+  float: right;
+  width: 8px;
+  height: max(120px, calc(100% - 16px));
+  min-height: 120px;
+  margin: 0 -16px 0 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border) 34%, transparent);
+}
+
+.diff-scroll-marker {
+  position: absolute;
+  right: 1px;
+  width: 6px;
+  height: 3px;
+  min-height: 3px;
+  border-radius: 999px;
+  padding: 0;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.diff-scroll-marker.add {
+  background: var(--success);
+}
+
+.diff-scroll-marker.delete {
+  background: var(--danger);
+}
+
+.diff-scroll-marker.replace {
+  background: var(--warning);
 }
 
 .editor-diff-panel .diff-line {

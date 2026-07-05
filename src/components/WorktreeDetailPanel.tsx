@@ -1,3 +1,4 @@
+import { useMemo, useRef, type RefObject } from "react";
 import { Copy, FileText, X } from "lucide-react";
 import { PathTooltip } from "./PathTooltip";
 import type { ChangedFile, DiffLine } from "../types/domain";
@@ -23,8 +24,27 @@ interface WorktreeDetailPanelProps {
   onPinTab: (tabId: string) => void;
 }
 
+type SplitDiffRowType = "context" | "add" | "delete" | "replace";
+
+interface SplitDiffRow {
+  left?: DiffLine;
+  right?: DiffLine;
+  type: SplitDiffRowType;
+}
+
+interface DiffMarker {
+  index: number;
+  type: "add" | "delete" | "replace";
+}
+
 export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelectTab, onCloseTab, onPinTab }: WorktreeDetailPanelProps) {
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+  const diffScrollRef = useRef<HTMLElement>(null);
+  const activeDiffLines = activeTab?.diffLines ?? [];
+  const splitDiffRows = useMemo(() => buildSplitDiffRows(activeDiffLines), [activeDiffLines]);
+  const splitDiffMarkers = useMemo(() => buildSplitDiffMarkers(splitDiffRows), [splitDiffRows]);
+  const inlineDiffMarkers = useMemo(() => buildInlineDiffMarkers(activeDiffLines), [activeDiffLines]);
+  const showSplitDiff = Boolean(activeTab && canUseSplitDiff(activeTab.file.status) && splitDiffRows.length > 0);
 
   if (!activeTab) {
     return (
@@ -97,20 +117,155 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
         {activeTab.subtitle ? <span>{activeTab.subtitle}</span> : null}
       </div>
 
-      <section className="diff-panel editor-diff-panel">
-        <div className="diff-lines">
-          {diffLines.length === 0 ? <div className="empty-inline">没有可显示的文本 diff。</div> : null}
-          {diffLines.map((line, index) => (
-            <div className={`diff-line ${line.type}`} key={`${line.type}-${index}`}>
-              <span className="line-number">{line.oldLineNumber ?? ""}</span>
-              <span className="line-number">{line.newLineNumber ?? ""}</span>
-              <code>{line.content || " "}</code>
+      <section className={`diff-panel editor-diff-panel ${showSplitDiff ? "split-mode" : ""}`} ref={diffScrollRef}>
+        {showSplitDiff ? (
+          <>
+            <DiffScrollMap markers={splitDiffMarkers} totalRows={splitDiffRows.length} scrollContainerRef={diffScrollRef} />
+            <div className="split-diff-grid" role="table" aria-label="左右文件对比">
+              <div className="split-diff-header" role="row">
+                <span>原文件</span>
+                <span>当前文件</span>
+              </div>
+              <div className="split-diff-lines">
+                {splitDiffRows.map((row, index) => (
+                  <div className={`split-diff-row ${row.type}`} role="row" key={`${row.type}-${index}-${row.left?.oldLineNumber ?? ""}-${row.right?.newLineNumber ?? ""}`}>
+                    <DiffCell side="old" line={row.left} />
+                    <DiffCell side="new" line={row.right} />
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
-        </div>
+          </>
+        ) : (
+          <>
+            <DiffScrollMap markers={inlineDiffMarkers} totalRows={diffLines.length} scrollContainerRef={diffScrollRef} />
+            <div className="diff-lines">
+              {diffLines.length === 0 ? <div className="empty-inline">没有可显示的文本 diff。</div> : null}
+              {diffLines.map((line, index) => (
+                <div className={`diff-line ${line.type}`} key={`${line.type}-${index}`}>
+                  <span className="line-number">{line.oldLineNumber ?? ""}</span>
+                  <span className="line-number">{line.newLineNumber ?? ""}</span>
+                  <code>{line.content || " "}</code>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
       </section>
     </aside>
   );
+}
+
+function DiffCell({ side, line }: { side: "old" | "new"; line?: DiffLine }) {
+  const lineNumber = side === "old" ? line?.oldLineNumber : line?.newLineNumber;
+  const empty = !line;
+
+  return (
+    <div className={`split-diff-cell ${line?.type ?? "empty"}`}>
+      <span className="line-number">{lineNumber ?? ""}</span>
+      <code>{empty ? " " : line.content || " "}</code>
+    </div>
+  );
+}
+
+function DiffScrollMap({
+  markers,
+  totalRows,
+  scrollContainerRef
+}: {
+  markers: DiffMarker[];
+  totalRows: number;
+  scrollContainerRef: RefObject<HTMLElement>;
+}) {
+  if (markers.length === 0 || totalRows === 0) {
+    return null;
+  }
+
+  function scrollToMarker(index: number) {
+    const container = scrollContainerRef.current;
+    if (!container) {
+      return;
+    }
+
+    const ratio = totalRows <= 1 ? 0 : index / (totalRows - 1);
+    container.scrollTop = ratio * Math.max(0, container.scrollHeight - container.clientHeight);
+  }
+
+  return (
+    <div className="diff-scroll-map" aria-label="变更定位">
+      {markers.map((marker, markerIndex) => (
+        <button
+          type="button"
+          className={`diff-scroll-marker ${marker.type}`}
+          style={{ top: `${Math.min(98, Math.max(1, (marker.index / Math.max(1, totalRows - 1)) * 100))}%` }}
+          aria-label={marker.type === "add" ? "跳转到新增位置" : marker.type === "delete" ? "跳转到删除位置" : "跳转到修改位置"}
+          key={`${marker.type}-${marker.index}-${markerIndex}`}
+          onClick={() => scrollToMarker(marker.index)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function canUseSplitDiff(status: ChangedFile["status"]) {
+  return status === "modified" || status === "renamed" || status === "copied" || status === "conflicted";
+}
+
+function buildSplitDiffRows(lines: DiffLine[]): SplitDiffRow[] {
+  const rows: SplitDiffRow[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    if (line.type === "context") {
+      rows.push({ left: line, right: line, type: "context" });
+      index += 1;
+      continue;
+    }
+
+    const deletes: DiffLine[] = [];
+    const adds: DiffLine[] = [];
+
+    while (lines[index]?.type === "delete") {
+      deletes.push(lines[index]);
+      index += 1;
+    }
+
+    while (lines[index]?.type === "add") {
+      adds.push(lines[index]);
+      index += 1;
+    }
+
+    if (deletes.length === 0 && adds.length === 0 && line.type === "add") {
+      adds.push(line);
+      index += 1;
+    }
+
+    const rowCount = Math.max(deletes.length, adds.length);
+    for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+      const left = deletes[rowIndex];
+      const right = adds[rowIndex];
+      rows.push({
+        left,
+        right,
+        type: left && right ? "replace" : left ? "delete" : "add"
+      });
+    }
+  }
+
+  return rows;
+}
+
+function buildSplitDiffMarkers(rows: SplitDiffRow[]): DiffMarker[] {
+  return rows
+    .map((row, index): DiffMarker | null => (row.type === "context" ? null : { index, type: row.type === "replace" ? "replace" : row.type }))
+    .filter((marker): marker is DiffMarker => Boolean(marker));
+}
+
+function buildInlineDiffMarkers(lines: DiffLine[]): DiffMarker[] {
+  return lines
+    .map((line, index): DiffMarker | null => (line.type === "context" ? null : { index, type: line.type }))
+    .filter((marker): marker is DiffMarker => Boolean(marker));
 }
 
 function statusLabel(status: ChangedFile["status"]): string {
