@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Check, ChevronDown, ChevronRight, Plus, RefreshCw, Trash2, Undo2 } from "lucide-react";
 import { PathTooltip } from "./PathTooltip";
 import type { ChangedFile, CommitInput, GitProject, GitResetMode, WorktreeState } from "../types/domain";
+import { fileIconInfo } from "../utils/fileIcon";
 import { absoluteFilePath } from "../utils/filePath";
 
 interface WorkspaceViewProps {
@@ -445,6 +446,7 @@ function ScmFileRow({
 }) {
   const clickTimerRef = useRef<number | undefined>();
   const fullPath = absoluteFilePath(repositoryPath, file.path);
+  const icon = fileIconInfo(file.path);
 
   useEffect(
     () => () => {
@@ -486,7 +488,7 @@ function ScmFileRow({
         }
       }}
     >
-      <span className={`scm-file-icon ${fileIconClass(file.path)}`}>{fileIcon(file.path)}</span>
+      <span className={`scm-file-icon ${icon.className}`}>{icon.label}</span>
       <span className="scm-file-main">
         <PathTooltip path={fullPath} className="scm-file-name">
           {file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? file.path}
@@ -549,36 +551,4 @@ function directoryName(filePath: string): string {
   const parts = filePath.split(/[\\/]/).filter(Boolean);
   parts.pop();
   return parts.length > 0 ? parts.join("/") : "";
-}
-
-function fileIcon(filePath: string): string {
-  if (/\.(tsx|jsx)$/i.test(filePath)) {
-    return "TSX";
-  }
-  if (/\.tsx?$/i.test(filePath)) {
-    return "TS";
-  }
-  if (/\.css$/i.test(filePath)) {
-    return "#";
-  }
-  if (/\.md$/i.test(filePath)) {
-    return "MD";
-  }
-  return "";
-}
-
-function fileIconClass(filePath: string): string {
-  if (/\.(tsx|jsx)$/i.test(filePath)) {
-    return "react";
-  }
-  if (/\.tsx?$/i.test(filePath)) {
-    return "typescript";
-  }
-  if (/\.css$/i.test(filePath)) {
-    return "css";
-  }
-  if (/\.md$/i.test(filePath)) {
-    return "markdown";
-  }
-  return "default";
 }

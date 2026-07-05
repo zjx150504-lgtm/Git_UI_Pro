@@ -3697,11 +3697,76 @@ button {
 }
 
 .scm-file-icon {
-  min-width: 20px;
-  height: 20px;
-  color: var(--blue);
-  font-size: 9px;
+  width: 22px;
+  min-width: 22px;
+  height: 18px;
+  border: 1px solid color-mix(in srgb, var(--file-icon-color, var(--blue)) 28%, transparent);
+  border-radius: 4px;
+  color: var(--file-icon-color, var(--blue));
+  background: color-mix(in srgb, var(--file-icon-color, var(--blue)) 12%, transparent);
+  font-size: 8px;
+  font-weight: 800;
   letter-spacing: 0;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.scm-file-icon.file-kind-react {
+  --file-icon-color: #4aa5d8;
+}
+
+.scm-file-icon.file-kind-typescript {
+  --file-icon-color: #5c9ded;
+}
+
+.scm-file-icon.file-kind-javascript {
+  --file-icon-color: #e0b341;
+}
+
+.scm-file-icon.file-kind-style {
+  --file-icon-color: #8bb6ff;
+}
+
+.scm-file-icon.file-kind-markup {
+  --file-icon-color: #ef8a6b;
+}
+
+.scm-file-icon.file-kind-config {
+  --file-icon-color: #94a3b8;
+}
+
+.scm-file-icon.file-kind-markdown,
+.scm-file-icon.file-kind-text {
+  --file-icon-color: var(--muted-strong);
+}
+
+.scm-file-icon.file-kind-data,
+.scm-file-icon.file-kind-database {
+  --file-icon-color: #c99dff;
+}
+
+.scm-file-icon.file-kind-script {
+  --file-icon-color: #7bd88f;
+}
+
+.scm-file-icon.file-kind-backend {
+  --file-icon-color: #51c2a9;
+}
+
+.scm-file-icon.file-kind-mobile {
+  --file-icon-color: #f0c36b;
+}
+
+.scm-file-icon.file-kind-asset {
+  --file-icon-color: #f08fc0;
+}
+
+.scm-file-icon.file-kind-lock {
+  --file-icon-color: var(--warning);
+}
+
+.scm-file-icon.file-kind-default {
+  --file-icon-color: var(--muted);
 }
 
 .scm-file-main {

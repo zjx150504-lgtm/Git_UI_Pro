@@ -23,6 +23,7 @@ import { createPortal } from "react-dom";
 import { apiClient } from "../api/client";
 import { PathTooltip } from "./PathTooltip";
 import type { ChangedFile, CommitGraphAction, CommitNode, GitProject } from "../types/domain";
+import { fileIconInfo } from "../utils/fileIcon";
 import { absoluteFilePath } from "../utils/filePath";
 
 interface GraphSidebarProps {
@@ -859,6 +860,7 @@ function GraphCommitFileRow({
 }) {
   const clickTimerRef = useRef<number | undefined>();
   const fullPath = absoluteFilePath(repositoryPath, file.path);
+  const icon = fileIconInfo(file.path);
 
   useEffect(
     () => () => {
@@ -890,7 +892,7 @@ function GraphCommitFileRow({
         pinImmediately();
       }}
     >
-      <span className={`scm-file-icon ${fileIconClass(file.path)}`}>{fileIcon(file.path)}</span>
+      <span className={`scm-file-icon ${icon.className}`}>{icon.label}</span>
       <span className="graph-commit-file-main">
         <PathTooltip path={fullPath} className="graph-commit-file-name">
           {file.path.split(/[\\/]/).filter(Boolean).at(-1) ?? file.path}
@@ -976,38 +978,6 @@ function directoryName(filePath: string): string {
   const parts = filePath.split(/[\\/]/).filter(Boolean);
   parts.pop();
   return parts.length > 0 ? parts.join("/") : "";
-}
-
-function fileIcon(filePath: string): string {
-  if (/\.(tsx|jsx)$/i.test(filePath)) {
-    return "TSX";
-  }
-  if (/\.tsx?$/i.test(filePath)) {
-    return "TS";
-  }
-  if (/\.css$/i.test(filePath)) {
-    return "#";
-  }
-  if (/\.md$/i.test(filePath)) {
-    return "MD";
-  }
-  return "";
-}
-
-function fileIconClass(filePath: string): string {
-  if (/\.(tsx|jsx)$/i.test(filePath)) {
-    return "react";
-  }
-  if (/\.tsx?$/i.test(filePath)) {
-    return "typescript";
-  }
-  if (/\.css$/i.test(filePath)) {
-    return "css";
-  }
-  if (/\.md$/i.test(filePath)) {
-    return "markdown";
-  }
-  return "";
 }
 
 function GraphSyncRow({ project }: { project: GitProject }) {
