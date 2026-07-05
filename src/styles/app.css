@@ -2706,13 +2706,17 @@ button {
   padding: 12px 48px 28px 14px;
 }
 
+.editor-diff-panel.split-mode {
+  overflow-x: hidden;
+}
+
 .editor-diff-panel .diff-lines {
   min-width: 720px;
   border-radius: 0;
 }
 
 .split-diff-grid {
-  width: max-content;
+  width: 100%;
   min-width: 100%;
   border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   border-radius: 6px;
@@ -2725,7 +2729,7 @@ button {
   position: sticky;
   top: -12px;
   z-index: 2;
-  grid-template-columns: minmax(720px, 1fr) minmax(720px, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   border-bottom: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
   background: color-mix(in srgb, var(--panel) 92%, var(--sunken));
 }
@@ -2749,14 +2753,15 @@ button {
 
 .split-diff-row {
   display: grid;
-  grid-template-columns: minmax(720px, 1fr) minmax(720px, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   min-height: 24px;
 }
 
 .split-diff-cell {
   display: grid;
-  grid-template-columns: 50px max-content;
-  min-width: 720px;
+  grid-template-columns: 50px minmax(0, 1fr);
+  min-width: 0;
+  overflow: hidden;
   border-left: 1px solid transparent;
 }
 
@@ -2807,8 +2812,16 @@ button {
   background: color-mix(in srgb, var(--border) 10%, transparent);
 }
 
-.split-diff-cell code {
+.split-diff-code-wrap {
+  display: block;
   min-width: 0;
+  overflow: hidden;
+}
+
+.split-diff-cell code {
+  display: inline-block;
+  min-width: max-content;
+  transform: translateX(calc(var(--split-scroll-x, 0px) * -1));
   padding: 4px 10px;
   color: var(--diff-text);
   line-height: 1.45;
@@ -2816,66 +2829,19 @@ button {
   white-space: pre;
 }
 
-.diff-scroll-map {
+.split-diff-horizontal-scroll {
   position: absolute;
-  top: 16px;
-  right: 14px;
-  bottom: 18px;
+  right: 50px;
+  bottom: 4px;
+  left: 14px;
   z-index: 4;
-  width: 18px;
-  min-height: 96px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--border) 10%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--border) 18%, transparent);
-  pointer-events: none;
+  height: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
-.diff-scroll-marker {
-  position: absolute;
-  right: 2px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 1px;
-  width: 14px;
-  height: 3px;
-  min-height: 3px;
-  overflow: hidden;
-  border: 0;
-  border-radius: 2px;
-  padding: 0;
-  background: transparent;
-  cursor: pointer;
-  opacity: 0.9;
-  pointer-events: auto;
-}
-
-.diff-scroll-marker-lane {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  border-radius: 1px;
-}
-
-.diff-scroll-marker-segment {
-  display: block;
-  min-width: 0;
-  min-height: 0;
-  flex-basis: 0;
-  border-radius: 1px;
-}
-
-.diff-scroll-marker-segment.add {
-  background: color-mix(in srgb, var(--success) 86%, transparent);
-}
-
-.diff-scroll-marker-segment.delete {
-  background: color-mix(in srgb, var(--danger) 86%, transparent);
-}
-
-.diff-scroll-marker-segment.empty {
-  background: color-mix(in srgb, var(--border) 56%, var(--sunken));
+.split-diff-horizontal-scroll > div {
+  height: 1px;
 }
 
 .editor-diff-panel .diff-line {
