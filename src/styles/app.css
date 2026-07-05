@@ -5713,6 +5713,7 @@ code,
 
 .compact-graph-cell {
   height: 28px;
+  min-height: 28px;
   overflow: visible;
 }
 
@@ -5744,6 +5745,10 @@ code,
   fill: none;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.compact-graph-cell line.graph-line {
+  stroke-linecap: square;
 }
 
 .compact-graph-cell .graph-line.graph-line-local,
@@ -5782,6 +5787,41 @@ code,
   stroke: #f0c36b;
 }
 
+.compact-graph-cell .graph-line.graph-line-branch-rose,
+.compact-graph-cell .graph-node.graph-node-branch-rose,
+.compact-graph-cell .graph-merge-ring.graph-node-branch-rose,
+.compact-graph-cell .graph-merge-dot.graph-node-branch-rose {
+  stroke: #d63384;
+}
+
+.compact-graph-cell .graph-line.graph-line-branch-cyan,
+.compact-graph-cell .graph-node.graph-node-branch-cyan,
+.compact-graph-cell .graph-merge-ring.graph-node-branch-cyan,
+.compact-graph-cell .graph-merge-dot.graph-node-branch-cyan {
+  stroke: #0ea5a8;
+}
+
+.compact-graph-cell .graph-line.graph-line-branch-violet,
+.compact-graph-cell .graph-node.graph-node-branch-violet,
+.compact-graph-cell .graph-merge-ring.graph-node-branch-violet,
+.compact-graph-cell .graph-merge-dot.graph-node-branch-violet {
+  stroke: #8b5cf6;
+}
+
+.compact-graph-cell .graph-line.graph-line-branch-amber,
+.compact-graph-cell .graph-node.graph-node-branch-amber,
+.compact-graph-cell .graph-merge-ring.graph-node-branch-amber,
+.compact-graph-cell .graph-merge-dot.graph-node-branch-amber {
+  stroke: #f0b429;
+}
+
+.compact-graph-cell .graph-line.graph-line-branch-green,
+.compact-graph-cell .graph-node.graph-node-branch-green,
+.compact-graph-cell .graph-merge-ring.graph-node-branch-green,
+.compact-graph-cell .graph-merge-dot.graph-node-branch-green {
+  stroke: #22a06b;
+}
+
 .compact-graph-cell .graph-node.graph-node-local,
 .compact-graph-cell .graph-node.graph-node-synced,
 .compact-graph-cell .graph-node.graph-node-plain,
@@ -5804,6 +5844,31 @@ code,
 .compact-graph-cell .graph-node.graph-node-secondary,
 .compact-graph-cell .graph-merge-dot.graph-node-secondary {
   fill: #f0c36b;
+}
+
+.compact-graph-cell .graph-node.graph-node-branch-rose,
+.compact-graph-cell .graph-merge-dot.graph-node-branch-rose {
+  fill: #d63384;
+}
+
+.compact-graph-cell .graph-node.graph-node-branch-cyan,
+.compact-graph-cell .graph-merge-dot.graph-node-branch-cyan {
+  fill: #0ea5a8;
+}
+
+.compact-graph-cell .graph-node.graph-node-branch-violet,
+.compact-graph-cell .graph-merge-dot.graph-node-branch-violet {
+  fill: #8b5cf6;
+}
+
+.compact-graph-cell .graph-node.graph-node-branch-amber,
+.compact-graph-cell .graph-merge-dot.graph-node-branch-amber {
+  fill: #f0b429;
+}
+
+.compact-graph-cell .graph-node.graph-node-branch-green,
+.compact-graph-cell .graph-merge-dot.graph-node-branch-green {
+  fill: #22a06b;
 }
 
 .compact-graph-cell .graph-merge-ring {
