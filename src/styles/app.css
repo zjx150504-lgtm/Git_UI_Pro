@@ -2596,13 +2596,13 @@ button {
 }
 
 .source-control-pane .graph-commit-row {
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   min-height: 42px;
   border-radius: 5px;
 }
 
 .compact-graph-cell {
-  width: 24px;
+  width: 28px;
   height: 42px;
 }
 
@@ -4148,7 +4148,7 @@ button {
 }
 
 .source-control-pane .graph-commit-row {
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   min-height: 34px;
   border-radius: 4px;
   padding-right: 4px;
@@ -4159,7 +4159,7 @@ button {
 }
 
 .compact-graph-cell {
-  width: 24px;
+  width: 28px;
   height: 34px;
 }
 
@@ -4191,6 +4191,15 @@ button {
 
 .compact-graph-cell.graph-tone-remote .graph-node {
   fill: #b886ff;
+}
+
+.compact-graph-cell.graph-tone-primary .graph-line,
+.compact-graph-cell.graph-tone-primary .graph-node {
+  stroke: #f97316;
+}
+
+.compact-graph-cell.graph-tone-primary .graph-node {
+  fill: #f97316;
 }
 
 .compact-graph-cell.graph-tone-plain .graph-line,
@@ -4254,6 +4263,12 @@ button {
 .graph-ref-row .ref-chip.remoteBranch {
   background: #4a376d;
   color: #e2ccff;
+}
+
+.graph-ref-row .ref-chip.primaryBranch,
+.commit-hover-footer .ref-chip.primaryBranch {
+  background: #a94f00;
+  color: #fff1d6;
 }
 
 .graph-ref-row .ref-chip.tag {
@@ -4777,7 +4792,7 @@ button {
 .source-control-pane .graph-commit-row {
   position: relative;
   z-index: 1;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   gap: 4px;
   min-height: 28px;
   border-radius: 4px;
@@ -4789,7 +4804,7 @@ button {
 }
 
 .compact-graph-cell {
-  width: 24px;
+  width: 28px;
   height: 28px;
 }
 
@@ -5712,6 +5727,43 @@ code,
   transition:
     transform var(--motion-base) var(--motion-ease),
     stroke-width var(--motion-base) var(--motion-ease);
+}
+
+.compact-graph-cell .graph-line.graph-line-local,
+.compact-graph-cell .graph-line.graph-line-synced,
+.compact-graph-cell .graph-line.graph-line-plain,
+.compact-graph-cell .graph-node.graph-node-local,
+.compact-graph-cell .graph-node.graph-node-synced,
+.compact-graph-cell .graph-node.graph-node-plain {
+  stroke: #2f98ff;
+}
+
+.compact-graph-cell .graph-line.graph-line-remote,
+.compact-graph-cell .graph-node.graph-node-remote {
+  stroke: #b886ff;
+}
+
+.compact-graph-cell .graph-line.graph-line-primary,
+.compact-graph-cell .graph-node.graph-node-primary {
+  stroke: #f97316;
+}
+
+.compact-graph-cell .graph-node.graph-node-local,
+.compact-graph-cell .graph-node.graph-node-synced,
+.compact-graph-cell .graph-node.graph-node-plain {
+  fill: #2f98ff;
+}
+
+.compact-graph-cell .graph-node.graph-node-remote {
+  fill: #b886ff;
+}
+
+.compact-graph-cell .graph-node.graph-node-primary {
+  fill: #f97316;
+}
+
+.compact-graph-cell.graph-first-node .graph-node {
+  fill: var(--panel);
 }
 
 .source-control-pane .graph-commit-row.active .graph-node {

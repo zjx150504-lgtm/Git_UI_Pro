@@ -204,6 +204,8 @@ export class GitService {
   }
 
   async getHistory(repositoryPath: string, maxCount = 300): Promise<CommitNode[]> {
+    const status = await this.getStatus(repositoryPath).catch(() => undefined);
+    const revisions = await this.getHistoryRevisions(repositoryPath, status);
     const format = [
       "%H",
       "%P",
@@ -220,11 +222,12 @@ export class GitService {
 
     const result = await this.run(repositoryPath, [
       "log",
-      "--all",
       "--topo-order",
+      "--decorate=full",
       "--date=iso-strict",
       `--max-count=${maxCount}`,
-      `--pretty=format:${format}%x${recordSeparator.charCodeAt(0).toString(16)}`
+      `--pretty=format:${format}%x${recordSeparator.charCodeAt(0).toString(16)}`,
+      ...revisions
     ]);
 
     if (!result.ok) {
@@ -547,6 +550,37 @@ export class GitService {
     return lastResult!;
   }
 
+  private async getHistoryRevisions(repositoryPath: string, status?: GitStatusSummary): Promise<string[]> {
+    const revisions = new Set(["HEAD"]);
+    const availableRefs = await this.getAvailableHistoryRefs(repositoryPath);
+
+    if (status?.upstream) {
+      revisions.add(status.upstream);
+    }
+
+    for (const candidate of primaryBranchCandidates(status)) {
+      if (availableRefs.has(candidate)) {
+        revisions.add(candidate);
+      }
+    }
+
+    return Array.from(revisions);
+  }
+
+  private async getAvailableHistoryRefs(repositoryPath: string): Promise<Set<string>> {
+    const result = await this.run(repositoryPath, ["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes"]);
+    if (!result.ok) {
+      return new Set();
+    }
+
+    return new Set(
+      result.stdout
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((name) => name && !name.endsWith("/HEAD"))
+    );
+  }
+
   private async getSingleCommit(repositoryPath: string, hash: string): Promise<CommitNode[]> {
     const format = [
       "%H",
@@ -565,6 +599,7 @@ export class GitService {
     const result = await this.run(repositoryPath, [
       "log",
       "-1",
+      "--decorate=full",
       "--date=iso-strict",
       `--pretty=format:${format}%x${recordSeparator.charCodeAt(0).toString(16)}`,
       hash
@@ -636,6 +671,18 @@ function parseStatus(output: string): GitStatusSummary {
   }
 
   return summary;
+}
+
+function primaryBranchCandidates(status?: GitStatusSummary): string[] {
+  const candidates: string[] = [];
+  const remoteName = status?.upstream ? status.upstream.split("/")[0] : undefined;
+
+  if (remoteName) {
+    candidates.push(`${remoteName}/master`, `${remoteName}/main`);
+  }
+
+  candidates.push("origin/master", "origin/main", "master", "main");
+  return Array.from(new Set(candidates));
 }
 
 function parseCommitLog(output: string): CommitNode[] {

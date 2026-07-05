@@ -22,7 +22,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { createPortal } from "react-dom";
 import { apiClient } from "../api/client";
 import { PathTooltip } from "./PathTooltip";
-import type { ChangedFile, CommitGraphAction, CommitNode, GitProject } from "../types/domain";
+import type { ChangedFile, CommitGraphAction, CommitNode, CommitRef, GitProject } from "../types/domain";
 import { fileIconInfo } from "../utils/fileIcon";
 import { absoluteFilePath } from "../utils/filePath";
 
@@ -49,7 +49,7 @@ const graphOperations = [
   { label: "切换分支", title: "切换分支", icon: GitBranch }
 ];
 
-type GraphTone = "local" | "remote" | "synced" | "plain";
+type GraphTone = "local" | "remote" | "primary" | "synced" | "plain";
 type GraphFileViewMode = "list" | "tree";
 type CommitContextMenuState = {
   commit: CommitNode;
@@ -58,6 +58,11 @@ type CommitContextMenuState = {
   isHead: boolean;
   isLocalOnly: boolean;
   canUndoHead: boolean;
+};
+type GraphBranchContext = {
+  currentBranch?: string;
+  upstream?: string;
+  primaryBranches: Set<string>;
 };
 
 const GRAPH_TOOLBAR_ICON_SIZE = 16;
@@ -110,7 +115,8 @@ export function GraphSidebar({
 
     return commits.filter((commit) => `${commit.hash} ${commit.subject} ${commit.authorName} ${commit.authorEmail}`.toLowerCase().includes(keyword));
   }, [commits, commitQuery]);
-  const rowTones = useMemo(() => buildGraphTones(filteredCommits), [filteredCommits]);
+  const graphContext = useMemo(() => buildGraphBranchContext(project), [project?.status?.currentBranch, project?.status?.upstream]);
+  const rowTones = useMemo(() => buildGraphTones(filteredCommits, graphContext), [filteredCommits, graphContext]);
   const syncProject = project && ((project.status?.ahead ?? 0) > 0 || (project.status?.behind ?? 0) > 0) ? project : undefined;
   const localOnlyCount = project?.status?.upstream ? project.status.ahead : commits.length;
 
@@ -487,12 +493,19 @@ export function GraphSidebar({
             {syncProject ? <GraphSyncRow project={syncProject} /> : null}
             {filteredCommits.map((commit, index) => {
               const tone = rowTones.get(commit.hash) ?? "plain";
+              const previousCommit = filteredCommits[index - 1];
+              const nextCommit = filteredCommits[index + 1];
+              const previousTone = previousCommit ? rowTones.get(previousCommit.hash) ?? "plain" : undefined;
+              const nextTone = nextCommit ? rowTones.get(nextCommit.hash) ?? "plain" : undefined;
 
               return (
                 <GraphCommitRow
                   key={commit.hash}
                   commit={commit}
+                  graphContext={graphContext}
                   tone={tone}
+                  previousTone={previousTone}
+                  nextTone={nextTone}
                   selected={commit.hash === selectedHash || commit.hash === hoveredDotHash || commit.hash === expandedHash}
                   expanded={commit.hash === expandedHash}
                   details={commitDetailsByHash[commit.hash]}
@@ -516,7 +529,7 @@ export function GraphSidebar({
         </>
       ) : null}
       {hoveredCommit ? (
-        <CommitHoverCard commit={hoveredCommit} x={hoverPosition.x} y={hoverPosition.y} onMouseEnter={keepHoverOpen} onMouseLeave={scheduleCloseHover} />
+        <CommitHoverCard commit={hoveredCommit} graphContext={graphContext} x={hoverPosition.x} y={hoverPosition.y} onMouseEnter={keepHoverOpen} onMouseLeave={scheduleCloseHover} />
       ) : null}
       {commitContextMenu && typeof document !== "undefined"
         ? createPortal(
@@ -580,7 +593,10 @@ export function GraphSidebar({
 
 function GraphCommitRow({
   commit,
+  graphContext,
   tone,
+  previousTone,
+  nextTone,
   selected,
   expanded,
   details,
@@ -599,7 +615,10 @@ function GraphCommitRow({
   onHoverEnd
 }: {
   commit: CommitNode;
+  graphContext: GraphBranchContext;
   tone: GraphTone;
+  previousTone?: GraphTone;
+  nextTone?: GraphTone;
   selected: boolean;
   expanded: boolean;
   details?: CommitNode;
@@ -617,7 +636,7 @@ function GraphCommitRow({
   onHoverStart: (row: HTMLElement) => void;
   onHoverEnd: () => void;
 }) {
-  const visibleRefs = commit.refs.filter((ref) => ref.type !== "head" && !ref.name.endsWith("/HEAD"));
+  const visibleRefs = visibleRefsForCommit(commit, graphContext);
 
   return (
     <div role="listitem" className={`graph-commit-entry graph-tone-${tone} ${expanded ? "expanded" : ""} ${isLast ? "last" : ""}`}>
@@ -632,7 +651,7 @@ function GraphCommitRow({
         onFocus={(event) => onHoverStart(event.currentTarget)}
         onBlur={onHoverEnd}
       >
-        <CompactGraphCell isFirst={isFirst} isLast={isLast} tone={tone} />
+        <CompactGraphCell isFirst={isFirst} isLast={isLast} tone={tone} previousTone={previousTone} nextTone={nextTone} hasMergeParents={commit.parents.length > 1} />
         <span className="graph-commit-main">
           <span className="graph-commit-text">
             <span className="graph-commit-subject">{commit.subject}</span>
@@ -641,7 +660,7 @@ function GraphCommitRow({
           {visibleRefs.length > 0 ? (
             <span className="graph-ref-row">
               {visibleRefs.map((ref) => (
-                <span className={`ref-chip ${ref.type}`} key={`${commit.hash}-${ref.type}-${ref.name}`}>
+                <span className={refChipClassName(ref, graphContext)} key={`${commit.hash}-${ref.type}-${ref.name}`}>
                   {ref.type === "remoteBranch" ? <Cloud size={10} /> : ref.type === "localBranch" ? <GitBranch size={10} /> : null}
                   <span className="ref-chip-label">{ref.name}</span>
                 </span>
@@ -980,6 +999,83 @@ function directoryName(filePath: string): string {
   return parts.length > 0 ? parts.join("/") : "";
 }
 
+function buildGraphBranchContext(project?: GitProject): GraphBranchContext {
+  const currentBranch = project?.status?.currentBranch ?? undefined;
+  const upstream = project?.status?.upstream;
+
+  return {
+    currentBranch,
+    upstream,
+    primaryBranches: primaryBranchNames(upstream)
+  };
+}
+
+function primaryBranchNames(upstream?: string): Set<string> {
+  const names = new Set(["master", "main", "origin/master", "origin/main"]);
+  const remoteName = upstream ? upstream.split("/")[0] : undefined;
+
+  if (remoteName) {
+    names.add(`${remoteName}/master`);
+    names.add(`${remoteName}/main`);
+  }
+
+  return names;
+}
+
+function visibleRefsForCommit(commit: CommitNode, graphContext: GraphBranchContext): CommitRef[] {
+  return commit.refs
+    .filter((ref) => isVisibleGraphRef(ref, graphContext))
+    .sort((left, right) => graphRefPriority(left, graphContext) - graphRefPriority(right, graphContext) || left.name.localeCompare(right.name));
+}
+
+function isVisibleGraphRef(ref: CommitRef, graphContext: GraphBranchContext): boolean {
+  if (ref.type === "head" || ref.name.endsWith("/HEAD")) {
+    return false;
+  }
+
+  return isCurrentBranchRef(ref, graphContext) || isUpstreamBranchRef(ref, graphContext) || isPrimaryBranchRef(ref, graphContext);
+}
+
+function isCurrentBranchRef(ref: CommitRef, graphContext: GraphBranchContext): boolean {
+  return ref.type === "localBranch" && Boolean(graphContext.currentBranch) && ref.name === graphContext.currentBranch;
+}
+
+function isUpstreamBranchRef(ref: CommitRef, graphContext: GraphBranchContext): boolean {
+  return ref.type === "remoteBranch" && Boolean(graphContext.upstream) && ref.name === graphContext.upstream;
+}
+
+function isPrimaryBranchRef(ref: CommitRef, graphContext: GraphBranchContext): boolean {
+  if (ref.type !== "localBranch" && ref.type !== "remoteBranch") {
+    return false;
+  }
+
+  if (isCurrentBranchRef(ref, graphContext) || isUpstreamBranchRef(ref, graphContext)) {
+    return false;
+  }
+
+  return graphContext.primaryBranches.has(ref.name);
+}
+
+function graphRefPriority(ref: CommitRef, graphContext: GraphBranchContext): number {
+  if (isCurrentBranchRef(ref, graphContext)) {
+    return 0;
+  }
+
+  if (isUpstreamBranchRef(ref, graphContext)) {
+    return 1;
+  }
+
+  if (isPrimaryBranchRef(ref, graphContext)) {
+    return ref.type === "remoteBranch" ? 2 : 3;
+  }
+
+  return 4;
+}
+
+function refChipClassName(ref: CommitRef, graphContext: GraphBranchContext): string {
+  return `ref-chip ${ref.type} ${isPrimaryBranchRef(ref, graphContext) ? "primaryBranch" : ""}`;
+}
+
 function GraphSyncRow({ project }: { project: GitProject }) {
   const branch = project.status?.currentBranch ?? "当前分支";
   const ahead = project.status?.ahead ?? 0;
@@ -997,12 +1093,14 @@ function GraphSyncRow({ project }: { project: GitProject }) {
 
 function CommitHoverCard({
   commit,
+  graphContext,
   x,
   y,
   onMouseEnter,
   onMouseLeave
 }: {
   commit: CommitNode;
+  graphContext: GraphBranchContext;
   x: number;
   y: number;
   onMouseEnter: () => void;
@@ -1031,11 +1129,10 @@ function CommitHoverCard({
       <div className="commit-hover-subject">{commit.subject}</div>
       {bodyText ? <div className="commit-hover-body">{bodyText}</div> : null}
       <div className="commit-hover-footer">
-        {commit.refs
-          .filter((ref) => ref.type !== "head" && !ref.name.endsWith("/HEAD"))
+        {visibleRefsForCommit(commit, graphContext)
           .slice(0, 4)
           .map((ref) => (
-          <span className={`ref-chip ${ref.type}`} key={`${commit.hash}-${ref.type}-${ref.name}`}>
+          <span className={refChipClassName(ref, graphContext)} key={`${commit.hash}-${ref.type}-${ref.name}`}>
             {ref.type === "remoteBranch" ? <Cloud size={10} /> : ref.type === "localBranch" ? <GitBranch size={10} /> : null}
             <span className="ref-chip-label">{ref.name}</span>
           </span>
@@ -1066,22 +1163,54 @@ function commitHoverCardStyle(x: number, targetY: number, cardHeight?: number): 
   } as CSSProperties;
 }
 
-function CompactGraphCell({ isFirst, isLast, tone }: { isFirst: boolean; isLast: boolean; tone: GraphTone }) {
+function CompactGraphCell({
+  isFirst,
+  isLast,
+  tone,
+  previousTone,
+  nextTone,
+  hasMergeParents
+}: {
+  isFirst: boolean;
+  isLast: boolean;
+  tone: GraphTone;
+  previousTone?: GraphTone;
+  nextTone?: GraphTone;
+  hasMergeParents: boolean;
+}) {
+  const nodeX = graphLaneX(tone);
+  const previousX = graphLaneX(previousTone ?? tone);
+  const nextX = graphLaneX(nextTone ?? tone);
+  const lineTone = tone === "plain" ? "local" : tone;
+  const nextLineTone = nextTone && nextTone !== "plain" ? nextTone : lineTone;
+  const showMergeArc = hasMergeParents && tone !== "primary";
+
   return (
-    <svg className={`compact-graph-cell graph-tone-${tone} ${isFirst ? "graph-first-node" : ""}`} viewBox="0 0 24 32" aria-hidden="true">
-      {!isFirst ? <line x1="12" y1="0" x2="12" y2="13" className="graph-line" /> : null}
-      {!isLast ? <line x1="12" y1="19" x2="12" y2="32" className="graph-line" /> : null}
-      <circle cx="12" cy="16" r="4.2" className="graph-node" />
+    <svg className={`compact-graph-cell graph-tone-${tone} ${isFirst ? "graph-first-node" : ""}`} viewBox="0 0 28 32" aria-hidden="true">
+      {!isFirst && previousX === nodeX ? <line x1={nodeX} y1="0" x2={nodeX} y2="13" className={`graph-line graph-line-${lineTone}`} /> : null}
+      {!isFirst && previousX !== nodeX ? (
+        <path d={`M ${previousX} 0 C ${previousX} 8 ${nodeX} 8 ${nodeX} 13`} className={`graph-line graph-line-${lineTone}`} />
+      ) : null}
+      {!isLast && nextX === nodeX ? <line x1={nodeX} y1="19" x2={nodeX} y2="32" className={`graph-line graph-line-${nextLineTone}`} /> : null}
+      {!isLast && nextX !== nodeX ? (
+        <path d={`M ${nodeX} 19 C ${nodeX} 25 ${nextX} 25 ${nextX} 32`} className={`graph-line graph-line-${nextLineTone}`} />
+      ) : null}
+      {showMergeArc ? <path d="M 18 0 C 18 8 8 8 8 16" className="graph-line graph-line-primary graph-merge-arc" /> : null}
+      <circle cx={nodeX} cy="16" r="4.2" className={`graph-node graph-node-${lineTone}`} />
     </svg>
   );
 }
 
-function buildGraphTones(commits: CommitNode[]): Map<string, GraphTone> {
+function graphLaneX(tone: GraphTone): number {
+  return tone === "primary" ? 18 : 8;
+}
+
+function buildGraphTones(commits: CommitNode[], graphContext: GraphBranchContext): Map<string, GraphTone> {
   const tones = new Map<string, GraphTone>();
   let activeTone: GraphTone = "plain";
 
   for (const commit of commits) {
-    const tone: GraphTone = refTone(commit) ?? activeTone;
+    const tone: GraphTone = refTone(commit, graphContext) ?? activeTone;
     tones.set(commit.hash, tone);
     if (tone !== "plain") {
       activeTone = tone;
@@ -1091,20 +1220,26 @@ function buildGraphTones(commits: CommitNode[]): Map<string, GraphTone> {
   return tones;
 }
 
-function refTone(commit: CommitNode): GraphTone | undefined {
-  const hasLocal = commit.refs.some((ref) => ref.type === "head" || ref.type === "localBranch");
-  const hasRemote = commit.refs.some((ref) => ref.type === "remoteBranch");
+function refTone(commit: CommitNode, graphContext: GraphBranchContext): GraphTone | undefined {
+  const visibleRefs = visibleRefsForCommit(commit, graphContext);
+  const hasCurrent = visibleRefs.some((ref) => isCurrentBranchRef(ref, graphContext));
+  const hasUpstream = visibleRefs.some((ref) => isUpstreamBranchRef(ref, graphContext));
+  const hasPrimary = visibleRefs.some((ref) => isPrimaryBranchRef(ref, graphContext));
 
-  if (hasLocal && hasRemote) {
+  if (hasCurrent && hasUpstream) {
     return "synced";
   }
 
-  if (hasLocal) {
+  if (hasCurrent) {
     return "local";
   }
 
-  if (hasRemote) {
+  if (hasUpstream) {
     return "remote";
+  }
+
+  if (hasPrimary) {
+    return "primary";
   }
 
   return undefined;
