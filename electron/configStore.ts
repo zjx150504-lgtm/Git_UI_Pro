@@ -104,7 +104,7 @@ export class ConfigStore {
       updatedAt: now
     };
 
-    config.projects.push(project);
+    config.projects = placeProjectAfterPinned(config.projects, project);
     config.recentProjectIds = [project.id, ...config.recentProjectIds.filter((id) => id !== project.id)].slice(0, 20);
     await this.write(config);
 

@@ -589,7 +589,7 @@ export function App() {
         return;
       }
 
-      setProjects((current) => [project, ...current.filter((item) => item.id !== project.id)]);
+      setProjects((current) => addProjectWithPinnedOrder(current, project));
       setSelectedProjectId(project.id);
       notifySuccess("已添加项目", project.name);
       void refreshProjectListStatuses([project]);
@@ -1913,6 +1913,11 @@ function placeProjectAfterPinned(projects: GitProject[], project: GitProject): G
   }
 
   return [...projects.slice(0, firstUnpinnedIndex), project, ...projects.slice(firstUnpinnedIndex)];
+}
+
+function addProjectWithPinnedOrder(projects: GitProject[], project: GitProject): GitProject[] {
+  const remainingProjects = projects.filter((item) => item.id !== project.id);
+  return project.favorite ? [project, ...remainingProjects] : placeProjectAfterPinned(remainingProjects, project);
 }
 
 function chooseBranch(branches: BranchInfo[], promptTitle: string): BranchInfo | undefined {
