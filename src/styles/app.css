@@ -3784,10 +3784,10 @@ button {
   gap: 7px;
   align-items: center;
   max-width: 260px;
-  min-height: 35px;
-  border-right: 1px solid var(--border);
-  border-radius: 0;
-  padding: 0 6px 0 10px;
+  min-height: 30px;
+  border-right: 0;
+  border-radius: 7px;
+  padding: 0 7px 0 10px;
   color: var(--muted-strong);
   background: var(--panel-strong);
   cursor: pointer;
@@ -5214,24 +5214,25 @@ code,
 
 .editor-tab {
   border: 1px solid transparent;
+  border-radius: 7px;
   color: var(--muted-strong);
   background: transparent;
 }
 
 .editor-tab:not(.active):hover {
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
 }
 
 .editor-tab.active {
   border-color: color-mix(in srgb, var(--border-strong) 82%, transparent);
   color: var(--text-strong);
   background: var(--surface);
-  box-shadow: inset 0 -2px 0 var(--accent);
+  box-shadow: none;
 }
 
-.editor-tab.active.preview,
-.editor-tab.active.preview .editor-tab-name,
-.editor-tab.active .editor-tab-name {
+.editor-tab.active.pinned,
+.editor-tab.active.pinned .editor-tab-name,
+.editor-tab.active:not(.preview) .editor-tab-name {
   font-style: normal;
   font-weight: 700;
   transform: none;
