@@ -33,6 +33,15 @@ export const apiClient = {
     };
   },
 
+  async openExternal(url: string): Promise<boolean> {
+    if (window.gitUI) {
+      return window.gitUI.openExternal(url);
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer");
+    return true;
+  },
+
   async startTerminal(project: GitProject): Promise<TerminalSessionInfo> {
     if (window.gitUI) {
       return window.gitUI.startTerminal(project.path);

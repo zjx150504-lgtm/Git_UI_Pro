@@ -1,5 +1,20 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent } from "react";
-import { Check, FolderGit2, GitBranch, MessageSquareText, Moon, PanelLeftClose, PanelLeftOpen, Plus, Sun, Terminal, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  ExternalLink,
+  FolderGit2,
+  GitBranch,
+  MessageSquareText,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Plus,
+  RefreshCw,
+  Sun,
+  Terminal,
+  X
+} from "lucide-react";
 import { Toaster, toast } from "sonner";
 import { apiClient } from "./api/client";
 import { AppChrome } from "./components/AppChrome";
@@ -36,10 +51,15 @@ const SELECTED_PROJECT_REFRESH_INTERVAL_MS = 1600;
 const PROJECT_LIST_STATUS_REFRESH_INTERVAL_MS = 5000;
 const PROJECT_LIST_STATUS_BATCH_SIZE = 4;
 const RESET_OPERATION_TIMEOUT_MS = 45_000;
+const GIT_DOWNLOAD_URL = "https://git-scm.com/downloads";
 
 type ResizeTarget = "sidebar" | "detail" | "sourceSplit" | "console";
 type ToastId = string | number;
 type ProjectStatusRefresh = { projectId: string; status: GitProject["status"] };
+type GitDependencyState =
+  | { status: "checking" }
+  | { status: "ready"; version: string }
+  | { status: "missing"; message: string; details?: string };
 type BranchDialogState =
   | { mode: "create"; project: GitProject; branchName: string; checkout: boolean; startPoint?: string; startLabel?: string }
   | { mode: "switch"; project: GitProject; branches: BranchInfo[]; query: string };
@@ -63,6 +83,7 @@ export function App() {
   const [worktreeTabs, setWorktreeTabs] = useState<WorktreeEditorTab[]>([]);
   const [activeWorktreeTabId, setActiveWorktreeTabId] = useState<string | null>(null);
   const [gitVersion, setGitVersion] = useState("检测中");
+  const [gitDependency, setGitDependency] = useState<GitDependencyState>({ status: "checking" });
   const [statusMessage, setStatusMessage] = useState("准备就绪");
   const [themeMode, setThemeModeState] = useState<ThemeMode>(() => readThemeMode());
   const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">(() => resolveTheme(readThemeMode()));
@@ -196,13 +217,21 @@ export function App() {
       return;
     }
 
+    if (gitDependency.status !== "ready") {
+      setCommits([]);
+      setSelectedCommitHash("");
+      setWorktree(emptyWorktree);
+      clearWorktreeEditorTabs();
+      return;
+    }
+
     setCommits([]);
     setSelectedCommitHash("");
     void loadProjectData(selectedProject);
-  }, [selectedProject?.id]);
+  }, [selectedProject?.id, gitDependency.status]);
 
   useEffect(() => {
-    if (!selectedProject) {
+    if (!selectedProject || gitDependency.status !== "ready") {
       return;
     }
 
@@ -238,9 +267,13 @@ export function App() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [selectedProject?.id, selectedProject?.path]);
+  }, [selectedProject?.id, selectedProject?.path, gitDependency.status]);
 
   useEffect(() => {
+    if (gitDependency.status !== "ready") {
+      return;
+    }
+
     let disposed = false;
     const refresh = () => {
       if (document.hidden) {
@@ -259,7 +292,7 @@ export function App() {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, []);
+  }, [gitDependency.status]);
 
   async function loadInitialData() {
     try {
@@ -267,11 +300,71 @@ export function App() {
       const orderedProjects = orderProjectsWithPinnedFirst(projectList);
       setProjects(orderedProjects);
       setSelectedProjectId(orderedProjects[0]?.id ?? null);
-      setGitVersion(formatGitVersion(versionResult));
-      void refreshProjectListStatuses(orderedProjects);
+      applyGitVersionResult(versionResult);
+      if (versionResult.ok) {
+        void refreshProjectListStatuses(orderedProjects);
+      }
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "初始化失败");
     }
+  }
+
+  function applyGitVersionResult(result: GitOperationResult) {
+    setGitVersion(formatGitVersion(result));
+    if (result.ok) {
+      setGitDependency({ status: "ready", version: result.stdout.trim() || "Git 已就绪" });
+      rememberStatus("Git 已就绪");
+      return true;
+    }
+
+    setGitDependency({
+      status: "missing",
+      message: result.messageZh ?? "未检测到 Git，请安装 Git 并确认已加入 PATH。",
+      details: gitOutputPreview(result)
+    });
+    rememberStatus("未检测到 Git");
+    return false;
+  }
+
+  async function handleRecheckGit() {
+    setGitDependency({ status: "checking" });
+    setGitVersion("检测中");
+    rememberStatus("正在检测 Git...");
+
+    let result: GitOperationResult;
+    try {
+      result = await apiClient.getGitVersion();
+      const ready = applyGitVersionResult(result);
+      if (!ready) {
+        notifyError(result.messageZh ?? "仍未检测到 Git", gitOutputPreview(result));
+        return;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Git 检测失败";
+      setGitDependency({ status: "missing", message });
+      setGitVersion("Git 未就绪");
+      notifyError(message);
+      return;
+    }
+
+    notifySuccess("Git 检测通过", result.stdout.trim());
+    if (selectedProject) {
+      await loadProjectData(selectedProject);
+    }
+    void refreshProjectListStatuses();
+  }
+
+  async function openGitDownloadPage() {
+    await apiClient.openExternal(GIT_DOWNLOAD_URL);
+  }
+
+  function requireGitReady(actionLabel = "该操作") {
+    if (gitDependency.status === "ready") {
+      return true;
+    }
+
+    notifyInfo(`${actionLabel}需要先安装 Git`);
+    return false;
   }
 
   async function loadProjectData(project: GitProject) {
@@ -486,6 +579,10 @@ export function App() {
   }
 
   async function handleAddProject() {
+    if (!requireGitReady("添加项目")) {
+      return;
+    }
+
     try {
       const project = await apiClient.chooseAndAddProject();
       if (!project) {
@@ -502,6 +599,10 @@ export function App() {
   }
 
   async function handleScanProjects() {
+    if (!requireGitReady("扫描项目")) {
+      return;
+    }
+
     try {
       const scannedProjects = await apiClient.chooseAndScanProjects();
       if (scannedProjects.length === 0) {
@@ -581,6 +682,10 @@ export function App() {
       return;
     }
 
+    if (!requireGitReady(action)) {
+      return;
+    }
+
     if (action === "fetch" || action === "pull" || action === "push") {
       await runRemoteOperation(action, selectedProject);
       return;
@@ -611,6 +716,10 @@ export function App() {
   }
 
   async function runRemoteOperation(action: "fetch" | "pull" | "push", project: GitProject) {
+    if (!requireGitReady({ fetch: "抓取", pull: "拉取", push: "推送" }[action])) {
+      return;
+    }
+
     const label = { fetch: "抓取", pull: "拉取", push: "推送" }[action];
     const toastId = notifyLoading(`正在${label}...`);
 
@@ -623,6 +732,10 @@ export function App() {
   }
 
   async function runSyncOperation(project: GitProject) {
+    if (!requireGitReady("同步")) {
+      return;
+    }
+
     const toastId = notifyLoading("正在同步...");
 
     const pullResult = await apiClient.pull(project);
@@ -644,10 +757,18 @@ export function App() {
   }
 
   async function createBranchFromToolbar(project: GitProject) {
+    if (!requireGitReady("新建分支")) {
+      return;
+    }
+
     setBranchDialog({ mode: "create", project, branchName: "", checkout: true });
   }
 
   async function submitCreateBranch() {
+    if (!requireGitReady("创建分支")) {
+      return;
+    }
+
     if (!branchDialog || branchDialog.mode !== "create") {
       return;
     }
@@ -679,6 +800,10 @@ export function App() {
   }
 
   async function switchBranchFromToolbar(project: GitProject) {
+    if (!requireGitReady("切换分支")) {
+      return;
+    }
+
     rememberStatus("正在读取分支列表...");
     const branches = await apiClient.getBranches(project);
     if (branches.length === 0) {
@@ -691,6 +816,10 @@ export function App() {
   }
 
   async function submitSwitchBranch(target: BranchInfo) {
+    if (!requireGitReady("切换分支")) {
+      return;
+    }
+
     if (!branchDialog || branchDialog.mode !== "switch") {
       return;
     }
@@ -722,6 +851,10 @@ export function App() {
   }
 
   async function deleteBranchFromToolbar(project: GitProject) {
+    if (!requireGitReady("删除分支")) {
+      return;
+    }
+
     const branches = (await apiClient.getBranches(project)).filter((branch) => branch.type === "local" && !branch.current);
     const target = chooseBranch(branches, "输入要删除的本地分支序号或名称：");
     if (!target) {
@@ -742,6 +875,10 @@ export function App() {
   }
 
   function openAmendLastCommitDialog() {
+    if (!requireGitReady("修改提交信息")) {
+      return;
+    }
+
     if (!selectedProject) {
       notifyInfo("请先选择一个 Git 项目");
       return;
@@ -761,6 +898,10 @@ export function App() {
   }
 
   async function submitAmendCommitMessage() {
+    if (!requireGitReady("修改提交信息")) {
+      return;
+    }
+
     if (!commitMessageDialog) {
       return;
     }
@@ -796,6 +937,10 @@ export function App() {
   }
 
   async function handleUndoLastCommit(mode: Exclude<GitResetMode, "hard">) {
+    if (!requireGitReady("撤销提交")) {
+      return;
+    }
+
     if (!selectedProject) {
       notifyInfo("请先选择一个 Git 项目");
       return;
@@ -884,6 +1029,10 @@ export function App() {
     if (action === "copyMessage") {
       await navigator.clipboard.writeText([commit.subject, commit.body].filter(Boolean).join("\n\n"));
       notifySuccess("已复制提交信息");
+      return;
+    }
+
+    if (!requireGitReady("提交历史操作")) {
       return;
     }
 
@@ -1010,6 +1159,10 @@ export function App() {
       return;
     }
 
+    if (!requireGitReady("暂存")) {
+      return;
+    }
+
     const result = await apiClient.stageFile(selectedProject, file.path);
     notifyGitResult(result, `已暂存：${file.path}`, "暂存失败");
     clearWorktreeEditorTabs();
@@ -1018,6 +1171,10 @@ export function App() {
 
   async function handleStageAll() {
     if (!selectedProject || worktree.unstagedFiles.length === 0) {
+      return;
+    }
+
+    if (!requireGitReady("暂存所有更改")) {
       return;
     }
 
@@ -1032,6 +1189,10 @@ export function App() {
       return;
     }
 
+    if (!requireGitReady("取消暂存")) {
+      return;
+    }
+
     const result = await apiClient.unstageFile(selectedProject, file.path);
     notifyGitResult(result, `已取消暂存：${file.path}`, "取消暂存失败");
     clearWorktreeEditorTabs();
@@ -1043,6 +1204,10 @@ export function App() {
       return;
     }
 
+    if (!requireGitReady("取消暂存所有更改")) {
+      return;
+    }
+
     const result = await apiClient.unstageAll(selectedProject);
     notifyGitResult(result, "已取消暂存所有更改", "取消暂存所有更改失败");
     clearWorktreeEditorTabs();
@@ -1051,6 +1216,10 @@ export function App() {
 
   async function handleDiscardFile(file: ChangedFile) {
     if (!selectedProject) {
+      return;
+    }
+
+    if (!requireGitReady("放弃更改")) {
       return;
     }
 
@@ -1067,6 +1236,10 @@ export function App() {
 
   async function handleDiscardAll() {
     if (!selectedProject || worktree.unstagedFiles.length === 0) {
+      return;
+    }
+
+    if (!requireGitReady("放弃所有更改")) {
       return;
     }
 
@@ -1093,6 +1266,10 @@ export function App() {
   }
 
   async function handleCommit(input: CommitInput): Promise<boolean> {
+    if (!requireGitReady("提交")) {
+      return false;
+    }
+
     if (!selectedProject) {
       notifyInfo("请先选择一个 Git 项目");
       return false;
@@ -1325,82 +1502,93 @@ export function App() {
         <TopBar
           project={selectedProject}
           gitVersion={gitVersion}
+          gitReady={gitDependency.status === "ready"}
         />
 
-        <section className="main-grid">
-          <div
-            className={`source-control-pane ${changesPanelOpen ? "" : "changes-collapsed"} ${graphPanelOpen ? "" : "graph-collapsed"} ${
-              sourcePaneHeight !== DEFAULT_SOURCE_PANE_HEIGHT ? "source-pane-customized" : ""
-            }`}
-          >
-            <WorkspaceView
-              project={selectedProject}
-              worktree={worktree}
-              onStageFile={handleStageFile}
-              onStageAll={handleStageAll}
-              onUnstageFile={handleUnstageFile}
-              onUnstageAll={handleUnstageAll}
-              onDiscardFile={handleDiscardFile}
-              onDiscardAll={handleDiscardAll}
-              onSelectFile={handleSelectWorktreeFile}
-              onPinFile={handlePinWorktreeFile}
-              selectedFilePath={activeWorktreeTab?.file.path}
-              selectedFileStaged={activeWorktreeTab?.file.staged}
-              onCommit={handleCommit}
-              onAmendLastMessage={openAmendLastCommitDialog}
-              onUndoLastCommit={(mode) => void handleUndoLastCommit(mode)}
-              onSyncChanges={() => (selectedProject ? runSyncOperation(selectedProject) : Promise.resolve())}
-              hasCommits={commits.length > 0}
-              focusRequest={commitFocusRequest}
-              messageDraftRequest={commitMessageDraftRequest}
-              panelOpen={changesPanelOpen}
-              onTogglePanel={() => setChangesPanelOpen((value) => !value)}
+        {gitDependency.status !== "ready" ? (
+          <section className="main-grid git-dependency-grid">
+            <GitDependencyNotice
+              state={gitDependency}
+              onDownload={openGitDownloadPage}
+              onRecheck={() => void handleRecheckGit()}
             />
-            <div className="source-graph-divider" onMouseDown={(event) => beginResize("sourceSplit", event)} />
-            <GraphSidebar
-              project={selectedProject}
-              commits={commits}
-              selectedHash={selectedCommitHash}
-              onSelectCommit={handleSelectCommit}
-              onSelectCommitFile={handleSelectCommitFile}
-              onPinCommitFile={handlePinCommitFile}
-              selectedCommitFileHash={activeWorktreeTab?.sourceType === "commit" ? activeWorktreeTab.commitHash : undefined}
-              selectedCommitFilePath={activeWorktreeTab?.sourceType === "commit" ? activeWorktreeTab.file.path : undefined}
-              onOperation={handleOperation}
-              onCommitAction={(action, commit) => void handleCommitGraphAction(action, commit)}
-              panelOpen={graphPanelOpen}
-              onTogglePanel={() => setGraphPanelOpen((value) => !value)}
-            />
-          </div>
-          {!rightCollapsed ? <div className="resize-handle detail-resize" onMouseDown={(event) => beginResize("detail", event)} /> : null}
-          {!rightCollapsed ? (
-            <section className={`detail-stack ${consoleOpen ? "console-open" : ""}`} aria-label="文件查看和控制台" ref={detailStackRef} style={detailStackStyle}>
-              <WorktreeDetailPanel
-                tabs={worktreeTabs}
-                activeTabId={activeWorktreeTabId}
-                repositoryPath={selectedProject?.path}
-                onSelectTab={handleSelectWorktreeTab}
-                onCloseTab={handleCloseWorktreeTab}
-                onPinTab={handlePinWorktreeTab}
-              />
-              <div className="console-resize" hidden={!consoleOpen} onMouseDown={(event) => beginResize("console", event)} />
-              <ConsolePanel
+          </section>
+        ) : (
+          <section className="main-grid">
+            <div
+              className={`source-control-pane ${changesPanelOpen ? "" : "changes-collapsed"} ${graphPanelOpen ? "" : "graph-collapsed"} ${
+                sourcePaneHeight !== DEFAULT_SOURCE_PANE_HEIGHT ? "source-pane-customized" : ""
+              }`}
+            >
+              <WorkspaceView
                 project={selectedProject}
-                theme={resolvedTheme}
-                visible={consoleOpen}
-                maximized={consoleMaximized}
-                onToggleMaximized={toggleConsoleMaximized}
-                onHide={() => setConsoleOpen(false)}
+                worktree={worktree}
+                onStageFile={handleStageFile}
+                onStageAll={handleStageAll}
+                onUnstageFile={handleUnstageFile}
+                onUnstageAll={handleUnstageAll}
+                onDiscardFile={handleDiscardFile}
+                onDiscardAll={handleDiscardAll}
+                onSelectFile={handleSelectWorktreeFile}
+                onPinFile={handlePinWorktreeFile}
+                selectedFilePath={activeWorktreeTab?.file.path}
+                selectedFileStaged={activeWorktreeTab?.file.staged}
+                onCommit={handleCommit}
+                onAmendLastMessage={openAmendLastCommitDialog}
+                onUndoLastCommit={(mode) => void handleUndoLastCommit(mode)}
+                onSyncChanges={() => (selectedProject ? runSyncOperation(selectedProject) : Promise.resolve())}
+                hasCommits={commits.length > 0}
+                focusRequest={commitFocusRequest}
+                messageDraftRequest={commitMessageDraftRequest}
+                panelOpen={changesPanelOpen}
+                onTogglePanel={() => setChangesPanelOpen((value) => !value)}
               />
-              {!consoleOpen ? (
-                <button type="button" className="console-dock-toggle" aria-label="打开控制台" onClick={() => setConsoleOpen(true)}>
-                  <Terminal size={15} />
-                  控制台
-                </button>
-              ) : null}
-            </section>
-          ) : null}
-        </section>
+              <div className="source-graph-divider" onMouseDown={(event) => beginResize("sourceSplit", event)} />
+              <GraphSidebar
+                project={selectedProject}
+                commits={commits}
+                selectedHash={selectedCommitHash}
+                onSelectCommit={handleSelectCommit}
+                onSelectCommitFile={handleSelectCommitFile}
+                onPinCommitFile={handlePinCommitFile}
+                selectedCommitFileHash={activeWorktreeTab?.sourceType === "commit" ? activeWorktreeTab.commitHash : undefined}
+                selectedCommitFilePath={activeWorktreeTab?.sourceType === "commit" ? activeWorktreeTab.file.path : undefined}
+                onOperation={handleOperation}
+                onCommitAction={(action, commit) => void handleCommitGraphAction(action, commit)}
+                panelOpen={graphPanelOpen}
+                onTogglePanel={() => setGraphPanelOpen((value) => !value)}
+              />
+            </div>
+            {!rightCollapsed ? <div className="resize-handle detail-resize" onMouseDown={(event) => beginResize("detail", event)} /> : null}
+            {!rightCollapsed ? (
+              <section className={`detail-stack ${consoleOpen ? "console-open" : ""}`} aria-label="文件查看和控制台" ref={detailStackRef} style={detailStackStyle}>
+                <WorktreeDetailPanel
+                  tabs={worktreeTabs}
+                  activeTabId={activeWorktreeTabId}
+                  repositoryPath={selectedProject?.path}
+                  onSelectTab={handleSelectWorktreeTab}
+                  onCloseTab={handleCloseWorktreeTab}
+                  onPinTab={handlePinWorktreeTab}
+                />
+                <div className="console-resize" hidden={!consoleOpen} onMouseDown={(event) => beginResize("console", event)} />
+                <ConsolePanel
+                  project={selectedProject}
+                  theme={resolvedTheme}
+                  visible={consoleOpen}
+                  maximized={consoleMaximized}
+                  onToggleMaximized={toggleConsoleMaximized}
+                  onHide={() => setConsoleOpen(false)}
+                />
+                {!consoleOpen ? (
+                  <button type="button" className="console-dock-toggle" aria-label="打开控制台" onClick={() => setConsoleOpen(true)}>
+                    <Terminal size={15} />
+                    控制台
+                  </button>
+                ) : null}
+              </section>
+            ) : null}
+          </section>
+        )}
 
         <div className="sr-only" aria-live="polite">
           {statusMessage}
@@ -1438,6 +1626,61 @@ export function App() {
         ) : null}
       </main>
     </div>
+  );
+}
+
+function GitDependencyNotice({
+  state,
+  onDownload,
+  onRecheck
+}: {
+  state: GitDependencyState;
+  onDownload: () => void;
+  onRecheck: () => void;
+}) {
+  const checking = state.status === "checking";
+  const message = state.status === "missing" ? state.message : "正在确认本机 Git 命令是否可用";
+  const details = state.status === "missing" ? state.details : undefined;
+
+  return (
+    <section className="git-dependency-notice" aria-label="Git 安装检测">
+      <div className="git-dependency-card">
+        <div className="git-dependency-icon" aria-hidden="true">
+          {checking ? <RefreshCw size={24} /> : <AlertTriangle size={24} />}
+        </div>
+        <div className="git-dependency-content">
+          <span className="git-dependency-kicker">本机依赖检测</span>
+          <h2>{checking ? "正在检测 Git" : "未检测到 Git"}</h2>
+          <p>{message}</p>
+
+          <div className="git-dependency-steps" aria-label="处理步骤">
+            <div>
+              <span>1</span>
+              <strong>安装 Git for Windows</strong>
+              <p>安装时保留“从命令行使用 Git”的 PATH 选项。</p>
+            </div>
+            <div>
+              <span>2</span>
+              <strong>回到软件重新检测</strong>
+              <p>检测通过后会自动恢复项目状态、提交记录和工作区操作。</p>
+            </div>
+          </div>
+
+          {details ? <pre className="git-dependency-details">{details}</pre> : null}
+
+          <div className="git-dependency-actions">
+            <button type="button" className="git-dependency-primary" onClick={onDownload}>
+              <ExternalLink size={15} />
+              下载 Git
+            </button>
+            <button type="button" className="git-dependency-secondary" onClick={onRecheck} disabled={checking}>
+              <RefreshCw size={15} />
+              重新检测
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
   );
 }
 

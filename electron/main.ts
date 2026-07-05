@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, type WebContents } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, type WebContents } from "electron";
 import path from "node:path";
 import { existsSync } from "node:fs";
 import * as pty from "@homebridge/node-pty-prebuilt-multiarch";
@@ -49,6 +49,16 @@ async function createWindow(): Promise<void> {
 function registerIpc(): void {
   ipcMain.handle("app:command", (_event, command: string) => {
     runAppCommand(command);
+    return true;
+  });
+
+  ipcMain.handle("app:openExternal", async (_event, url: string) => {
+    const target = new URL(url);
+    if (target.protocol !== "https:" && target.protocol !== "http:") {
+      return false;
+    }
+
+    await shell.openExternal(target.toString());
     return true;
   });
 

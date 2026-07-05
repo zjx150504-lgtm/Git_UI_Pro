@@ -7,11 +7,13 @@ export type ThemeMode = "system" | "light" | "dark";
 interface TopBarProps {
   project?: GitProject;
   gitVersion: string;
+  gitReady?: boolean;
 }
 
 export function TopBar({
   project,
-  gitVersion
+  gitVersion,
+  gitReady = true
 }: TopBarProps) {
   const gitVersionLabel = gitVersion.replace(/^git version\s*/i, "").trim() || gitVersion;
 
@@ -26,7 +28,7 @@ export function TopBar({
 
       <div className="layout-controls" aria-label="布局控制">
         <PathTooltip content={gitVersion} className="git-version-tooltip">
-          <span className="git-version-badge" aria-label={gitVersion}>
+          <span className={`git-version-badge ${gitReady ? "" : "warning"}`} aria-label={gitVersion}>
             <GitBranch size={13} />
             <span>{gitVersionLabel}</span>
           </span>

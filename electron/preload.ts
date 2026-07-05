@@ -7,6 +7,7 @@ type WindowState = {
 
 contextBridge.exposeInMainWorld("gitUI", {
   runAppCommand: (command: string) => ipcRenderer.invoke("app:command", command),
+  openExternal: (url: string) => ipcRenderer.invoke("app:openExternal", url),
   setNativeTheme: (themeSource: "system" | "light" | "dark") => ipcRenderer.invoke("theme:setNative", themeSource),
   getWindowState: () => ipcRenderer.invoke("window:getState"),
   onWindowStateChange: (callback: (state: WindowState) => void) => {

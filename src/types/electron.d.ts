@@ -22,6 +22,7 @@ export interface WindowState {
 
 export interface GitUIBridge {
   runAppCommand: (command: string) => Promise<boolean>;
+  openExternal: (url: string) => Promise<boolean>;
   setNativeTheme: (themeSource: "system" | "light" | "dark") => Promise<boolean>;
   getWindowState: () => Promise<WindowState>;
   onWindowStateChange: (callback: (state: WindowState) => void) => () => void;
