@@ -98,6 +98,7 @@ export function App() {
   const [projects, setProjects] = useState<GitProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [commits, setCommits] = useState<CommitNode[]>([]);
+  const [graphLoading, setGraphLoading] = useState(false);
   const [graphHistoryFilter, setGraphHistoryFilter] = useState<GitHistoryFilter>(() => defaultGraphHistoryFilter());
   const [graphHistoryRefs, setGraphHistoryRefs] = useState<GitHistoryRef[]>([]);
   const [selectedCommitHash, setSelectedCommitHash] = useState("");
@@ -371,10 +372,12 @@ export function App() {
     const nextHistoryFilter = defaultGraphHistoryFilter();
 
     if (!selectedProject) {
+      setGraphLoading(false);
       return;
     }
 
     if (gitDependency.status !== "ready") {
+      setGraphLoading(false);
       setCommits([]);
       setGraphHistoryRefs([]);
       setSelectedCommitHash("");
@@ -391,7 +394,11 @@ export function App() {
         return;
       }
 
-      setCommits([]);
+      const cachedSnapshot = readFreshProjectDataCache(selectedProject.id, nextHistoryFilter);
+      if (!cachedSnapshot) {
+        setGraphLoading(true);
+        setCommits([]);
+      }
       setSelectedCommitHash("");
       void loadProjectData(selectedProject, requestId, nextHistoryFilter, { preferCache: true, clearTabs: true });
     }, PROJECT_SELECTION_LOAD_DELAY_MS);
@@ -600,6 +607,10 @@ export function App() {
       setWorktree(emptyWorktree);
       clearWorktreeEditorTabs();
       notifyError(error instanceof Error ? error.message : "加载项目失败");
+    } finally {
+      if (isCurrentProjectLoad(requestId)) {
+        setGraphLoading(false);
+      }
     }
   }
 
@@ -624,6 +635,7 @@ export function App() {
     const requestId = nextProjectLoadRequestId();
     setGraphHistoryFilter(filter);
     setSelectedCommitHash("");
+    setGraphLoading(true);
     const cachedHistory = readFreshGraphHistoryCache(selectedProject.id, filter);
     if (cachedHistory) {
       setCommits(cachedHistory.history);
@@ -649,6 +661,10 @@ export function App() {
       }
 
       notifyError(error instanceof Error ? error.message : "无法加载图表引用。");
+    } finally {
+      if (isCurrentProjectLoad(requestId)) {
+        setGraphLoading(false);
+      }
     }
   }
 
@@ -1895,6 +1911,7 @@ export function App() {
                 commits={commits}
                 historyRefs={graphHistoryRefs}
                 historyFilter={graphHistoryFilter}
+                loading={graphLoading}
                 onHistoryFilterChange={(filter) => void handleGraphHistoryFilterChange(filter)}
                 selectedHash={selectedCommitHash}
                 onSelectCommit={handleSelectCommit}

@@ -33,6 +33,7 @@ interface GraphSidebarProps {
   commits: CommitNode[];
   historyRefs: GitHistoryRef[];
   historyFilter: GitHistoryFilter;
+  loading: boolean;
   onHistoryFilterChange: (filter: GitHistoryFilter) => void;
   selectedHash: string;
   onSelectCommit: (hash: string) => void;
@@ -135,6 +136,7 @@ export function GraphSidebar({
   commits,
   historyRefs,
   historyFilter,
+  loading,
   onHistoryFilterChange,
   selectedHash,
   onSelectCommit,
@@ -711,7 +713,12 @@ export function GraphSidebar({
           ) : null}
 
           <div className="graph-commit-list" role="list" aria-label="提交图" ref={graphListRef} onScroll={handleGraphListScroll}>
-            {filteredCommits.length === 0 ? <div className="empty-state graph-empty">当前仓库没有可显示的提交。</div> : null}
+            {filteredCommits.length === 0 && loading ? (
+              <div className="graph-loading-state" aria-label="正在加载提交图">
+                <span aria-hidden="true" />
+              </div>
+            ) : null}
+            {filteredCommits.length === 0 && !loading ? <div className="empty-state graph-empty">当前仓库没有可显示的提交。</div> : null}
             {operationProject ? <GraphOperationRow project={operationProject} /> : null}
             {syncProject ? <GraphSyncRow project={syncProject} /> : null}
             {virtualGraphEnabled && graphVirtualRange.topPadding > 0 ? <div className="graph-virtual-spacer" style={{ height: graphVirtualRange.topPadding }} aria-hidden="true" /> : null}

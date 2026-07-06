@@ -597,6 +597,21 @@ button {
   padding: 18px 8px;
 }
 
+.graph-loading-state {
+  display: grid;
+  min-height: 72px;
+  place-items: center;
+}
+
+.graph-loading-state span {
+  width: 18px;
+  height: 18px;
+  border: 2px solid color-mix(in srgb, var(--blue) 22%, transparent);
+  border-top-color: var(--blue);
+  border-radius: 999px;
+  animation: graph-loading-spin 760ms linear infinite;
+}
+
 .graph-empty-inline {
   padding: 8px 6px;
 }
@@ -5456,6 +5471,12 @@ button {
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes graph-loading-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
