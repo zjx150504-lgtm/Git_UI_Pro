@@ -3498,24 +3498,29 @@ button {
 
 .project-rail-meta {
   display: flex;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 3px 4px;
   align-items: center;
   min-width: 0;
-  overflow: hidden;
+  max-width: 100%;
+  overflow: visible;
 }
 
 .project-rail-branch-tooltip {
   display: inline-flex;
   flex: 0 1 auto;
   min-width: 0;
+  max-width: 112px;
+  overflow: hidden;
 }
 
 .project-rail-branch {
   display: inline-flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
   gap: 4px;
   align-items: center;
-  max-width: 112px;
+  min-width: 0;
+  max-width: 100%;
   height: 18px;
   border: 1px solid color-mix(in srgb, var(--blue) 24%, transparent);
   border-radius: 4px;
@@ -3534,7 +3539,6 @@ button {
 .project-rail-branch span {
   overflow: hidden;
   min-width: 0;
-  max-width: 88px;
   font-size: 10.5px;
   font-weight: 650;
   line-height: 16px;
@@ -3547,7 +3551,7 @@ button {
   flex: 0 1 auto;
   align-items: center;
   min-width: 0;
-  max-width: 100px;
+  max-width: 100%;
   height: 18px;
   border: 1px solid color-mix(in srgb, var(--border-strong) 58%, transparent);
   border-radius: 4px;
