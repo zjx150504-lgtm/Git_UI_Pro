@@ -4782,20 +4782,11 @@ button {
 }
 
 .graph-commit-entry.expanded:not(.last)::before {
-  content: "";
-  position: absolute;
-  z-index: 0;
-  left: 12px;
-  top: 14px;
-  bottom: 0;
-  width: 2px;
-  border-radius: 999px;
-  background: #2f98ff;
-  pointer-events: none;
+  content: none;
 }
 
 .graph-commit-entry.expanded.graph-tone-remote::before {
-  background: #b886ff;
+  content: none;
 }
 
 .source-control-pane .graph-commit-row {
@@ -4965,26 +4956,30 @@ button {
 
 .graph-commit-expansion {
   position: relative;
-  margin: -1px 0 3px;
+  margin: -1px 0 0;
   border-left: 0;
   padding: 0;
 }
 
 .graph-commit-expansion::before {
-  content: "";
+  content: none;
+}
+
+.graph-commit-expansion-lines {
   position: absolute;
+  inset: 0;
   z-index: 0;
-  left: 12px;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  border-radius: 999px;
-  background: #2f98ff;
   pointer-events: none;
 }
 
-.graph-commit-entry.graph-tone-remote .graph-commit-expansion::before {
-  background: #b886ff;
+.graph-commit-expansion-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--graph-expansion-line-x, var(--graph-expansion-x, 8px));
+  width: 2px;
+  border-radius: 999px;
+  background: var(--graph-expansion-line-color, var(--graph-expansion-color, #2f98ff));
 }
 
 .graph-commit-file-row {

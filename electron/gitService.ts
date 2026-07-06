@@ -247,7 +247,11 @@ export class GitService {
       throw new Error("找不到指定提交。");
     }
 
-    const filesResult = await this.run(repositoryPath, ["diff-tree", "--root", "--no-commit-id", "--name-status", "-r", "-M", hash]);
+    const filesArgs =
+      commit.parents.length > 1
+        ? ["diff", "--name-status", "-r", "-M", `${hash}^1`, hash]
+        : ["diff-tree", "--root", "--no-commit-id", "--name-status", "-r", "-M", hash];
+    const filesResult = await this.run(repositoryPath, filesArgs);
     if (!filesResult.ok) {
       throw new Error(filesResult.messageZh ?? "无法读取提交变更文件。");
     }
@@ -259,7 +263,16 @@ export class GitService {
   }
 
   async getCommitDiff(repositoryPath: string, hash: string, filePath?: string): Promise<DiffLine[]> {
-    const args = ["show", "--format=", "--patch", "--find-renames", "--no-ext-diff", hash];
+    const commits = await this.getSingleCommit(repositoryPath, hash);
+    const commit = commits[0];
+    if (!commit) {
+      throw new Error("找不到指定提交。");
+    }
+
+    const args =
+      commit.parents.length > 1
+        ? ["diff", "--patch", "--find-renames", "--no-ext-diff", `${hash}^1`, hash]
+        : ["show", "--format=", "--patch", "--find-renames", "--no-ext-diff", hash];
     if (filePath) {
       args.push("--", filePath);
     }

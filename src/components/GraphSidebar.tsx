@@ -50,14 +50,8 @@ const graphOperations = [
 ];
 
 const graphBranchTones = ["branch-rose", "branch-cyan", "branch-violet", "branch-amber", "branch-green"] as const;
-const graphMergeCurveTones: GraphBranchTone[] = ["branch-rose", "branch-amber", "branch-cyan", "branch-violet", "branch-green"];
 const graphRowHeight = 28;
 const graphNodeCenterY = 14;
-const graphNodeRadius = 4.2;
-const graphNodeTopY = graphNodeCenterY - graphNodeRadius;
-const graphNodeBottomY = graphNodeCenterY + graphNodeRadius;
-const graphLineOverlap = 2;
-const graphNodeOverlap = 1;
 
 type GraphBranchTone = (typeof graphBranchTones)[number];
 type GraphTone = "local" | "remote" | "primary" | "secondary" | "synced" | "plain" | GraphBranchTone;
@@ -82,10 +76,18 @@ type GraphSegment =
     };
 type GraphRowLayout = {
   segments: GraphSegment[];
-  nodePass?: Extract<GraphSegment, { type: "line" }>;
+  expansionLines: GraphExpansionLine[];
   nodeX: number;
   nodeTone: GraphTone;
   merge: boolean;
+};
+type GraphExpansionLine = {
+  x: number;
+  tone: GraphTone;
+};
+type GraphLaneNode = {
+  id: string;
+  tone: GraphTone;
 };
 type VisibleGraphParent = {
   hash: string;
@@ -707,6 +709,7 @@ function GraphCommitRow({
       {expanded ? (
         <GraphCommitExpansion
           commit={details ?? commit}
+          graphLayout={graphLayout}
           loading={loadingDetails}
           error={detailsError}
           viewMode={fileViewMode}
@@ -722,6 +725,7 @@ function GraphCommitRow({
 
 function GraphCommitExpansion({
   commit,
+  graphLayout,
   loading,
   error,
   viewMode,
@@ -731,6 +735,7 @@ function GraphCommitExpansion({
   onPinFile
 }: {
   commit: CommitNode;
+  graphLayout: GraphRowLayout;
   loading: boolean;
   error?: string;
   viewMode: GraphFileViewMode;
@@ -739,21 +744,42 @@ function GraphCommitExpansion({
   onSelectFile: (file: ChangedFile) => void;
   onPinFile: (file: ChangedFile) => void;
 }) {
+  const expansionStyle = {
+    "--graph-expansion-x": `${graphLayout.nodeX}px`,
+    "--graph-expansion-color": graphToneColor(graphLayout.nodeTone)
+  } as CSSProperties;
+  const expansionLines = graphLayout.expansionLines;
+
   if (loading) {
-    return <div className="graph-commit-expansion graph-commit-expansion-loading" aria-label="正在读取变更文件" />;
+    return (
+      <div className="graph-commit-expansion graph-commit-expansion-loading" style={expansionStyle} aria-label="正在读取变更文件">
+        <GraphExpansionLines lines={expansionLines} />
+      </div>
+    );
   }
 
   if (error) {
-    return <div className="graph-commit-expansion graph-commit-expansion-state error">{error}</div>;
+    return (
+      <div className="graph-commit-expansion graph-commit-expansion-state error" style={expansionStyle}>
+        <GraphExpansionLines lines={expansionLines} />
+        {error}
+      </div>
+    );
   }
 
   if (commit.files.length === 0) {
-    return <div className="graph-commit-expansion graph-commit-expansion-state">没有可显示的变更文件。</div>;
+    return (
+      <div className="graph-commit-expansion graph-commit-expansion-state" style={expansionStyle}>
+        <GraphExpansionLines lines={expansionLines} />
+        没有可显示的变更文件。
+      </div>
+    );
   }
 
   if (viewMode === "tree") {
     return (
-      <div className="graph-commit-expansion" aria-label="提交变更文件">
+      <div className="graph-commit-expansion" style={expansionStyle} aria-label="提交变更文件">
+        <GraphExpansionLines lines={expansionLines} />
         <GraphCommitFileTree
           files={commit.files}
           repositoryPath={repositoryPath}
@@ -766,7 +792,8 @@ function GraphCommitExpansion({
   }
 
   return (
-    <div className="graph-commit-expansion" aria-label="提交变更文件">
+    <div className="graph-commit-expansion" style={expansionStyle} aria-label="提交变更文件">
+      <GraphExpansionLines lines={expansionLines} />
       {commit.files.map((file) => (
         <GraphCommitFileRow
           file={file}
@@ -776,6 +803,25 @@ function GraphCommitExpansion({
           key={`${commit.hash}-${file.path}-${file.status}`}
           onSelect={() => onSelectFile(file)}
           onPin={() => onPinFile(file)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function GraphExpansionLines({ lines }: { lines: GraphExpansionLine[] }) {
+  return (
+    <div className="graph-commit-expansion-lines" aria-hidden="true">
+      {lines.map((line) => (
+        <span
+          className="graph-commit-expansion-line"
+          style={
+            {
+              "--graph-expansion-line-x": `${line.x}px`,
+              "--graph-expansion-line-color": graphToneColor(line.tone)
+            } as CSSProperties
+          }
+          key={`${line.x}-${line.tone}`}
         />
       ))}
     </div>
@@ -1217,223 +1263,170 @@ function buildGraphLayouts(commits: CommitNode[], rowTones: Map<string, GraphTon
   const layouts = new Map<string, GraphRowLayout>();
   const visibleHashes = new Set(commits.map((commit) => commit.hash));
   const commitsByHash = new Map(commits.map((commit) => [commit.hash, commit]));
-  const firstParentMainline = buildFirstParentMainline(commits, visibleHashes);
-  const lanes: string[] = [];
-  const laneTones: GraphTone[] = [];
-  const laneSideBranches: boolean[] = [];
-  const laneStartsAtNode: boolean[] = [];
-  let mergeCurveToneIndex = 0;
+  let outputLanesFromPreviousRow: GraphLaneNode[] = [];
+  let branchToneIndex = 0;
 
-  commits.forEach((commit, rowIndex) => {
-    let laneIndex = lanes.indexOf(commit.hash);
-    const existedInLane = laneIndex >= 0;
-    const inheritedTone = normalizedGraphTone(rowTones.get(commit.hash));
-    const directTone = refTone(commit, graphContext);
-    const isMainlineCommit = firstParentMainline.has(commit.hash);
-
-    if (laneIndex < 0) {
-      laneIndex = 0;
-      lanes.splice(0, 0, commit.hash);
-      laneTones.splice(0, 0, directTone ?? inheritedTone);
-      laneSideBranches.splice(0, 0, false);
-      laneStartsAtNode.splice(0, 0, false);
-    }
-
-    const laneTone = normalizedGraphTone(laneTones[laneIndex] ?? directTone);
-    const laneIsSideBranch = laneSideBranches[laneIndex] ?? false;
-    const laneStartsHere = laneStartsAtNode[laneIndex] ?? false;
-    const nodeTone = laneIsSideBranch && !isMainlineCommit && isBranchGraphTone(laneTone) ? laneTone : directTone ?? inheritedTone;
-    laneTones[laneIndex] = nodeTone;
-    laneSideBranches[laneIndex] = laneIsSideBranch && !isMainlineCommit;
-    laneStartsAtNode[laneIndex] = false;
-    const closingLaneIndices = lanes.reduce<number[]>((indices, hash, index) => {
-      if (index !== laneIndex && hash === commit.hash) {
-        indices.push(index);
-      }
-
-      return indices;
-    }, []);
-    const closingLaneIndexSet = new Set(closingLaneIndices);
-
-    const segments: GraphSegment[] = [];
-    let nodePass: Extract<GraphSegment, { type: "line" }> | undefined;
-    lanes.forEach((_hash, index) => {
-      const tone = normalizedGraphTone(laneTones[index]);
-      const x = graphLaneX(index);
-      if (closingLaneIndexSet.has(index)) {
-        return;
-      }
-
-      if (index === laneIndex) {
-        if (existedInLane && rowIndex > 0) {
-          if (laneIsSideBranch && isBranchGraphTone(nodeTone)) {
-            nodePass = { type: "line", tone, x, y1: laneStartsHere ? graphNodeCenterY : -graphLineOverlap, y2: graphRowHeight + graphLineOverlap };
-          } else if (!laneStartsHere) {
-            segments.push({ type: "line", tone, x, y1: 0, y2: graphNodeTopY - 1 });
-          }
-        }
-        return;
-      }
-
-      segments.push({
-        type: "line",
-        tone,
-        x,
-        y1: isBranchGraphTone(tone) ? -graphLineOverlap : 0,
-        y2: isBranchGraphTone(tone) ? graphRowHeight + graphLineOverlap : graphRowHeight
-      });
-    });
-    closingLaneIndices.forEach((index) => {
-      segments.push({
-        type: "curve",
-        tone: normalizedGraphTone(laneTones[index]),
-        x1: graphLaneX(index),
-        y1: 0,
-        x2: graphNodeConnectionX(laneIndex, commit.parents.length > 1),
-        y2: graphNodeCenterY,
-        connectToNode: true
-      });
-    });
-
+  commits.forEach((commit) => {
     const parents = visibleParentHashes(commit.parents, visibleHashes);
-    const nextLanes = lanes.slice();
-    const nextLaneTones = laneTones.slice();
-    const nextLaneSideBranches = laneSideBranches.slice();
-    const nextLaneStartsAtNode = laneStartsAtNode.slice();
-    nextLanes.splice(laneIndex, 1);
-    nextLaneTones.splice(laneIndex, 1);
-    nextLaneSideBranches.splice(laneIndex, 1);
-    nextLaneStartsAtNode.splice(laneIndex, 1);
-    removeGraphLaneEntries(nextLanes, nextLaneTones, nextLaneSideBranches, nextLaneStartsAtNode, commit.hash);
+    const inputLanes = outputLanesFromPreviousRow.map((lane) => ({ ...lane }));
+    const inputIndex = inputLanes.findIndex((lane) => lane.id === commit.hash);
+    const nodeIndex = inputIndex >= 0 ? inputIndex : inputLanes.length;
+    const directTone = refTone(commit, graphContext);
+    const inheritedTone = normalizedGraphTone(rowTones.get(commit.hash));
+    const outputLanes: GraphLaneNode[] = [];
+    let firstParentAdded = false;
 
-    const parentTargets = parents.map(({ hash: parentHash, parentIndex }) => {
-      const parentCommit = commitsByHash.get(parentHash);
-      const directParentTone = parentCommit ? refTone(parentCommit, graphContext) : undefined;
-      const parentMainlineTone = directParentTone ?? normalizedGraphTone(rowTones.get(parentHash));
-      let targetIndex = nextLanes.indexOf(parentHash);
-      const targetExists = targetIndex >= 0;
-      const targetLaneIsSideBranch = targetExists ? nextLaneSideBranches[targetIndex] : false;
-      const parentIsNextRow = parentHash === commits[rowIndex + 1]?.hash;
-      const closesSideToNextMainNode = parentIndex === 0 && laneIsSideBranch && parentIsNextRow && targetExists && !targetLaneIsSideBranch;
-      const connectsMergeToNextNode = parentIndex > 0 && parentIsNextRow;
-      const targetCommitIsMerge = (parentCommit?.parents.length ?? 0) > 1;
-
-      if (targetIndex < 0) {
-        targetIndex = Math.min(laneIndex + parentIndex, nextLanes.length);
-      }
-
-      const parentIsSideBranch = parentIndex > 0 || (laneIsSideBranch && !closesSideToNextMainNode);
-      let parentTone: GraphTone;
-      let edgeTone: GraphTone;
-
-      if (parentIndex > 0) {
-        const sideLaneIndex = targetExists && !targetLaneIsSideBranch ? targetIndex + 1 : targetIndex;
-        parentTone = targetExists && targetLaneIsSideBranch ? normalizedGraphTone(nextLaneTones[targetIndex]) : graphBranchLaneTone(sideLaneIndex);
-        if (targetExists && targetLaneIsSideBranch) {
-          edgeTone = nextGraphMergeCurveTone(mergeCurveToneIndex);
-          mergeCurveToneIndex += 1;
-        } else {
-          edgeTone = parentTone;
-        }
-      } else if (parentIsSideBranch) {
-        parentTone = nodeTone;
-        edgeTone = nodeTone;
-      } else {
-        parentTone = parentMainlineTone;
-        edgeTone = nodeTone;
-      }
-
-      if (targetExists && parentIsSideBranch && !targetLaneIsSideBranch) {
-        targetIndex += 1;
-        nextLanes.splice(targetIndex, 0, parentHash);
-        nextLaneTones.splice(targetIndex, 0, parentTone);
-        nextLaneSideBranches.splice(targetIndex, 0, true);
-        nextLaneStartsAtNode.splice(targetIndex, 0, connectsMergeToNextNode);
-      } else if (targetExists && !parentIsSideBranch && targetLaneIsSideBranch) {
-        nextLanes.splice(targetIndex, 0, parentHash);
-        nextLaneTones.splice(targetIndex, 0, parentTone);
-        nextLaneSideBranches.splice(targetIndex, 0, false);
-        nextLaneStartsAtNode.splice(targetIndex, 0, false);
-      } else if (!targetExists) {
-        nextLanes.splice(targetIndex, 0, parentHash);
-        nextLaneTones.splice(targetIndex, 0, parentTone);
-        nextLaneSideBranches.splice(targetIndex, 0, parentIsSideBranch);
-        nextLaneStartsAtNode.splice(targetIndex, 0, connectsMergeToNextNode);
-      } else if (parentIsSideBranch) {
-        nextLaneTones[targetIndex] = parentTone;
-        nextLaneSideBranches[targetIndex] = true;
-        nextLaneStartsAtNode[targetIndex] = connectsMergeToNextNode || nextLaneStartsAtNode[targetIndex];
-      } else {
-        nextLaneTones[targetIndex] = parentTone;
-        nextLaneSideBranches[targetIndex] = false;
-        nextLaneStartsAtNode[targetIndex] = false;
-      }
-
-      return {
-        laneIndex: targetIndex,
-        parentIndex,
-        tone: normalizedGraphTone(edgeTone),
-        connectToNode: connectsMergeToNextNode || closesSideToNextMainNode,
-        sourceOnLane: closesSideToNextMainNode,
-        targetMerge: targetCommitIsMerge,
-        targetOnLane: parentIndex > 0
-      };
-    });
-
-    for (const target of parentTargets) {
-      const sourceX = target.sourceOnLane ? graphLaneX(laneIndex) : target.connectToNode || target.parentIndex > 0 ? graphNodeConnectionX(laneIndex, commit.parents.length > 1) : graphLaneX(laneIndex);
-      const targetX = target.targetOnLane ? graphLaneX(target.laneIndex) : target.connectToNode ? graphNodeConnectionX(target.laneIndex, target.targetMerge) : graphLaneX(target.laneIndex);
-      const sourceY =
-        target.sourceOnLane || (laneIsSideBranch && target.laneIndex === laneIndex && target.parentIndex === 0 && !target.connectToNode)
-          ? graphNodeBottomY - graphNodeOverlap
-          : target.connectToNode
-            ? graphNodeCenterY
-            : target.parentIndex === 0
-              ? graphNodeBottomY
-              : graphNodeCenterY;
-      const targetY = target.targetOnLane ? graphRowHeight + graphNodeTopY + graphNodeOverlap : target.connectToNode ? graphRowHeight + graphNodeCenterY : graphRowHeight;
-      if (targetX === sourceX) {
-        if (laneIsSideBranch && target.parentIndex === 0 && !target.connectToNode) {
+    if (parents.length > 0) {
+      for (const lane of inputLanes) {
+        if (lane.id === commit.hash) {
+          if (!firstParentAdded) {
+            outputLanes.push({ id: parents[0].hash, tone: normalizedGraphTone(directTone ?? lane.tone) });
+            firstParentAdded = true;
+          }
           continue;
         }
 
-        segments.push({ type: "line", tone: target.tone, x: targetX, y1: sourceY, y2: targetY });
-      } else {
+        outputLanes.push({ ...lane });
+      }
+    } else {
+      for (const lane of inputLanes) {
+        if (lane.id !== commit.hash) {
+          outputLanes.push({ ...lane });
+        }
+      }
+    }
+
+    for (let parentIndex = firstParentAdded ? 1 : 0; parentIndex < parents.length; parentIndex += 1) {
+      const parentHash = parents[parentIndex].hash;
+      const parentCommit = commitsByHash.get(parentHash);
+      const parentTone =
+        parentIndex === 0
+          ? directTone ?? rowTones.get(commit.hash)
+          : parentCommit
+            ? refTone(parentCommit, graphContext)
+            : undefined;
+
+      outputLanes.push({
+        id: parentHash,
+        tone: normalizedGraphTone(parentTone ?? graphBranchLaneTone(branchToneIndex))
+      });
+
+      if (!parentTone) {
+        branchToneIndex += 1;
+      }
+    }
+
+    const nodeTone = outputLanes[nodeIndex]?.tone ?? inputLanes[nodeIndex]?.tone ?? directTone ?? inheritedTone;
+
+    const segments: GraphSegment[] = [];
+    const expansionLines = new Map<number, GraphExpansionLine>();
+    let outputLaneIndex = 0;
+
+    for (let index = 0; index < inputLanes.length; index += 1) {
+      const inputLane = inputLanes[index];
+      const inputX = graphLaneX(index);
+
+      if (inputLane.id === commit.hash) {
+        if (index !== nodeIndex) {
+          segments.push({
+            type: "curve",
+            tone: inputLane.tone,
+            x1: inputX,
+            y1: 0,
+            x2: graphLaneX(nodeIndex),
+            y2: graphNodeCenterY,
+            connectToNode: true
+          });
+        } else {
+          outputLaneIndex += 1;
+        }
+        continue;
+      }
+
+      while (outputLaneIndex < outputLanes.length && outputLanes[outputLaneIndex].id === commit.hash) {
+        outputLaneIndex += 1;
+      }
+
+      if (outputLaneIndex < outputLanes.length && inputLane.id === outputLanes[outputLaneIndex].id) {
+        const outputX = graphLaneX(outputLaneIndex);
+        if (index === outputLaneIndex) {
+          segments.push({ type: "line", tone: inputLane.tone, x: inputX, y1: 0, y2: graphRowHeight });
+        } else {
+          segments.push({
+            type: "curve",
+            tone: inputLane.tone,
+            x1: inputX,
+            y1: 0,
+            x2: outputX,
+            y2: graphRowHeight
+          });
+        }
+        expansionLines.set(outputLaneIndex, { x: outputX, tone: inputLane.tone });
+        outputLaneIndex += 1;
+      }
+    }
+
+    const nodeX = graphLaneX(nodeIndex);
+    if (inputIndex >= 0) {
+      segments.push({ type: "line", tone: inputLanes[inputIndex].tone, x: nodeX, y1: 0, y2: graphNodeCenterY });
+    }
+
+    if (parents.length > 0) {
+      const outputTone = outputLanes[nodeIndex]?.tone ?? nodeTone;
+      segments.push({ type: "line", tone: outputTone, x: nodeX, y1: graphNodeCenterY, y2: graphRowHeight });
+      expansionLines.set(nodeIndex, { x: nodeX, tone: outputTone });
+
+      for (let parentIndex = 1; parentIndex < parents.length; parentIndex += 1) {
+        const parentOutputIndex = findLastGraphLaneIndex(outputLanes, parents[parentIndex].hash);
+        if (parentOutputIndex < 0 || parentOutputIndex === nodeIndex) {
+          continue;
+        }
+
         segments.push({
           type: "curve",
-          tone: target.tone,
-          x1: sourceX,
-          y1: sourceY,
-          x2: targetX,
-          y2: targetY,
-          merge: target.parentIndex > 0,
-          connectToNode: target.connectToNode
+          tone: outputLanes[parentOutputIndex].tone,
+          x1: nodeX,
+          y1: graphNodeCenterY,
+          x2: graphLaneX(parentOutputIndex),
+          y2: graphRowHeight,
+          merge: true
         });
+        expansionLines.set(parentOutputIndex, { x: graphLaneX(parentOutputIndex), tone: outputLanes[parentOutputIndex].tone });
       }
     }
 
     layouts.set(commit.hash, {
       segments,
-      nodePass,
-      nodeX: graphLaneX(laneIndex),
-      nodeTone,
+      expansionLines: Array.from(expansionLines.values()).sort((left, right) => left.x - right.x),
+      nodeX,
+      nodeTone: normalizedGraphTone(nodeTone),
       merge: commit.parents.length > 1
     });
 
-    lanes.splice(0, lanes.length, ...nextLanes);
-    laneTones.splice(0, laneTones.length, ...nextLaneTones.map(normalizedGraphTone));
-    laneSideBranches.splice(0, laneSideBranches.length, ...nextLaneSideBranches);
-    laneStartsAtNode.splice(0, laneStartsAtNode.length, ...nextLaneStartsAtNode);
+    outputLanesFromPreviousRow = outputLanes;
   });
 
   return layouts;
 }
 
+function findLastGraphLaneIndex(lanes: GraphLaneNode[], id: string): number {
+  for (let index = lanes.length - 1; index >= 0; index -= 1) {
+    if (lanes[index].id === id) {
+      return index;
+    }
+  }
+
+  return -1;
+}
+
 function fallbackGraphLayout(commit: CommitNode, tone: GraphTone): GraphRowLayout {
+  const normalizedTone = normalizedGraphTone(tone);
+  const segments: GraphSegment[] = commit.parents.length > 0 ? [{ type: "line", tone: normalizedTone, x: graphLaneX(0), y1: graphNodeCenterY, y2: graphRowHeight }] : [];
   return {
-    segments: commit.parents.length > 0 ? [{ type: "line", tone: normalizedGraphTone(tone), x: graphLaneX(0), y1: graphNodeBottomY, y2: graphRowHeight }] : [],
+    segments,
+    expansionLines: commit.parents.length > 0 ? [{ x: graphLaneX(0), tone: normalizedTone }] : [],
     nodeX: graphLaneX(0),
-    nodeTone: normalizedGraphTone(tone),
+    nodeTone: normalizedTone,
     merge: commit.parents.length > 1
   };
 }
@@ -1452,33 +1445,6 @@ function visibleParentHashes(parents: string[], visibleHashes: Set<string>): Vis
   return result;
 }
 
-function removeGraphLaneEntries(lanes: string[], laneTones: GraphTone[], laneSideBranches: boolean[], laneStartsAtNode: boolean[], hash: string) {
-  for (let index = lanes.length - 1; index >= 0; index -= 1) {
-    if (lanes[index] !== hash) {
-      continue;
-    }
-
-    lanes.splice(index, 1);
-    laneTones.splice(index, 1);
-    laneSideBranches.splice(index, 1);
-    laneStartsAtNode.splice(index, 1);
-  }
-}
-
-function buildFirstParentMainline(commits: CommitNode[], visibleHashes: Set<string>): Set<string> {
-  const commitsByHash = new Map(commits.map((commit) => [commit.hash, commit]));
-  const mainline = new Set<string>();
-  let currentHash: string | undefined = commits[0]?.hash;
-
-  while (currentHash && !mainline.has(currentHash)) {
-    mainline.add(currentHash);
-    const currentCommit = commitsByHash.get(currentHash);
-    currentHash = currentCommit?.parents[0] ? visibleParentHash(currentCommit.parents[0], visibleHashes) : undefined;
-  }
-
-  return mainline;
-}
-
 function visibleParentHash(parent: string, visibleHashes: Set<string>): string | undefined {
   return visibleHashes.has(parent) ? parent : Array.from(visibleHashes).find((hash) => hash.startsWith(parent));
 }
@@ -1487,24 +1453,38 @@ function normalizedGraphTone(tone: GraphTone | undefined): GraphTone {
   return tone && tone !== "plain" ? tone : "local";
 }
 
-function isBranchGraphTone(tone: GraphTone): boolean {
-  return tone === "secondary" || graphBranchTones.includes(tone as GraphBranchTone);
-}
-
 function graphBranchLaneTone(laneIndex: number): GraphTone {
   return graphBranchTones[Math.max(0, laneIndex - 1) % graphBranchTones.length];
-}
-
-function nextGraphMergeCurveTone(index: number): GraphTone {
-  return graphMergeCurveTones[index % graphMergeCurveTones.length];
 }
 
 function graphLaneX(laneIndex: number): number {
   return 8 + Math.min(laneIndex, 2) * 14;
 }
 
-function graphNodeConnectionX(laneIndex: number, merge: boolean): number {
-  return graphLaneX(laneIndex) + (merge ? 5.2 : 4.2);
+function graphToneColor(tone: GraphTone): string {
+  switch (tone) {
+    case "remote":
+      return "#b886ff";
+    case "primary":
+      return "#f97316";
+    case "secondary":
+      return "#f0c36b";
+    case "branch-rose":
+      return "#d63384";
+    case "branch-cyan":
+      return "#0ea5a8";
+    case "branch-violet":
+      return "#8b5cf6";
+    case "branch-amber":
+      return "#f0b429";
+    case "branch-green":
+      return "#22a06b";
+    case "local":
+    case "synced":
+    case "plain":
+    default:
+      return "#2f98ff";
+  }
 }
 
 function CompactGraphCell({ layout, isFirst }: { layout: GraphRowLayout; isFirst: boolean }) {
@@ -1536,32 +1516,22 @@ function CompactGraphCell({ layout, isFirst }: { layout: GraphRowLayout; isFirst
       ) : (
         <circle cx={layout.nodeX} cy={graphNodeCenterY} r="4.2" className={`graph-node graph-node-${layout.nodeTone}`} />
       )}
-      {layout.nodePass ? (
-        <line
-          x1={layout.nodePass.x}
-          y1={layout.nodePass.y1}
-          x2={layout.nodePass.x}
-          y2={layout.nodePass.y2}
-          className={`graph-line graph-line-${layout.nodePass.tone} graph-node-pass`}
-        />
-      ) : null}
     </svg>
   );
 }
 
 function graphCurvePath(segment: Extract<GraphSegment, { type: "curve" }>): string {
   if (segment.connectToNode) {
-    const bulgeX = Math.max(segment.x1, segment.x2) + 6;
-    return `M ${segment.x1} ${segment.y1} C ${bulgeX} ${segment.y1} ${bulgeX} ${segment.y2} ${segment.x2} ${segment.y2}`;
+    const midY = (segment.y1 + segment.y2) / 2;
+    return `M ${segment.x1} ${segment.y1} C ${segment.x1} ${midY} ${segment.x2} ${midY} ${segment.x2} ${segment.y2}`;
   }
 
   if (!segment.merge) {
-    return `M ${segment.x1} ${segment.y1} C ${segment.x1} ${graphRowHeight} ${segment.x2} ${graphRowHeight - 3} ${segment.x2} ${segment.y2}`;
+    return `M ${segment.x1} ${segment.y1} C ${segment.x1} ${graphNodeCenterY} ${segment.x2} ${graphNodeCenterY} ${segment.x2} ${segment.y2}`;
   }
 
-  const direction = segment.x2 > segment.x1 ? 1 : -1;
-  const bulgeX = segment.x2 + direction * 6;
-  return `M ${segment.x1} ${segment.y1} C ${bulgeX} ${segment.y1} ${bulgeX} ${segment.y2 - 4} ${segment.x2} ${segment.y2}`;
+  const midY = (segment.y1 + segment.y2) / 2;
+  return `M ${segment.x1} ${segment.y1} C ${segment.x1} ${midY} ${segment.x2} ${midY} ${segment.x2} ${segment.y2}`;
 }
 
 function refTone(commit: CommitNode, graphContext: GraphBranchContext): GraphTone | undefined {
