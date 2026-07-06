@@ -130,7 +130,7 @@ const GRAPH_VIRTUAL_OVERSCAN = 20;
 const GRAPH_OPERATION_ROW_HEIGHT = 28;
 const GRAPH_SYNC_ROW_HEIGHT = 26;
 const GRAPH_REFS_MENU_WIDTH = 360;
-const GRAPH_REFS_MENU_ESTIMATED_HEIGHT = 360;
+const GRAPH_REFS_MENU_MAX_HEIGHT = 460;
 
 export function GraphSidebar({
   project,
@@ -302,6 +302,21 @@ export function GraphSidebar({
     };
   }, [refsMenuOpen]);
 
+  useLayoutEffect(() => {
+    if (!refsMenuOpen || !refsMenuRef.current || !refsButtonRef.current) {
+      return;
+    }
+
+    const buttonRect = refsButtonRef.current.getBoundingClientRect();
+    const menuRect = refsMenuRef.current.getBoundingClientRect();
+    const menuHeight = Math.min(menuRect.height, GRAPH_REFS_MENU_MAX_HEIGHT, window.innerHeight - 16);
+    const canOpenDown = buttonRect.bottom + menuHeight + 4 <= window.innerHeight - 8;
+    setRefsMenuPosition({
+      top: canOpenDown ? buttonRect.bottom + 4 : Math.max(8, buttonRect.top - menuHeight - 4),
+      left: Math.max(8, Math.min(buttonRect.left, window.innerWidth - GRAPH_REFS_MENU_WIDTH - 8))
+    });
+  }, [refsMenuOpen, refsQuery, historyRefs.length, refsDraftFilter]);
+
   useEffect(() => {
     if (!viewMenuOpen) {
       return;
@@ -442,9 +457,8 @@ export function GraphSidebar({
   function toggleRefsMenu() {
     const rect = refsButtonRef.current?.getBoundingClientRect();
     if (rect) {
-      const opensUp = rect.bottom + GRAPH_REFS_MENU_ESTIMATED_HEIGHT > window.innerHeight - 8;
       setRefsMenuPosition({
-        top: opensUp ? Math.max(8, rect.top - GRAPH_REFS_MENU_ESTIMATED_HEIGHT - 4) : rect.bottom + 4,
+        top: rect.bottom + 4,
         left: Math.max(8, Math.min(rect.left, window.innerWidth - GRAPH_REFS_MENU_WIDTH - 8))
       });
     }

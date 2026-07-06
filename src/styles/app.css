@@ -4244,12 +4244,14 @@ button {
   white-space: nowrap;
 }
 
-.graph-ref-row .ref-chip.localBranch {
+.graph-ref-row .ref-chip.localBranch,
+.commit-hover-footer .ref-chip.localBranch {
   background: #1f4f83;
   color: #c9e0ff;
 }
 
-.graph-ref-row .ref-chip.remoteBranch {
+.graph-ref-row .ref-chip.remoteBranch,
+.commit-hover-footer .ref-chip.remoteBranch {
   background: #4a376d;
   color: #e2ccff;
 }
@@ -4258,11 +4260,11 @@ button {
 .commit-hover-footer .ref-chip.primaryBranch,
 .graph-ref-row .ref-chip.selectedRef,
 .commit-hover-footer .ref-chip.selectedRef {
-  background: #a94f00;
-  color: #fff1d6;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 48%, transparent);
 }
 
-.graph-ref-row .ref-chip.tag {
+.graph-ref-row .ref-chip.tag,
+.commit-hover-footer .ref-chip.tag {
   background: #4f3d18;
   color: #f4d277;
 }
@@ -4683,7 +4685,7 @@ button {
 .graph-ref-filter-button:hover,
 .graph-ref-filter-button.active {
   color: var(--text);
-  background: var(--surface);
+  background: transparent;
 }
 
 .graph-view-menu {
