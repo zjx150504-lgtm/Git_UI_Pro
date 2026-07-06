@@ -4379,6 +4379,67 @@ button {
   font-weight: 700;
 }
 
+.feedback-confirm-backdrop {
+  z-index: 360;
+}
+
+.feedback-confirm-dialog {
+  width: min(420px, calc(100vw - 48px));
+}
+
+.feedback-confirm-header .branch-dialog-title svg {
+  color: var(--blue);
+}
+
+.feedback-confirm-dialog.tone-warning .feedback-confirm-header .branch-dialog-title svg {
+  color: var(--warning);
+}
+
+.feedback-confirm-dialog.tone-danger .feedback-confirm-header .branch-dialog-title svg {
+  color: var(--danger);
+}
+
+.feedback-confirm-body {
+  display: grid;
+  gap: 10px;
+  padding: 14px 14px 4px;
+}
+
+.feedback-confirm-body p {
+  margin: 0;
+  color: var(--muted-strong);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.feedback-confirm-body pre {
+  max-height: 140px;
+  margin: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 8px;
+  color: var(--muted-strong);
+  background: var(--sunken);
+  font-family: var(--app-font);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.feedback-confirm-actions {
+  padding: 10px 14px 14px;
+}
+
+.feedback-confirm-dialog.tone-danger .primary-action {
+  background: var(--danger);
+}
+
+.feedback-confirm-dialog.tone-warning .primary-action {
+  background: var(--warning);
+  color: var(--accent-contrast);
+}
+
 .branch-create-form,
 .branch-switch-panel {
   display: grid;

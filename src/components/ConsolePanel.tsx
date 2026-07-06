@@ -19,6 +19,7 @@ interface ConsolePanelProps {
   maximized: boolean;
   onToggleMaximized: () => void;
   onHide: () => void;
+  onConfirmCloseTabs: (count: number) => Promise<boolean>;
 }
 
 interface TerminalTab {
@@ -46,7 +47,7 @@ interface TerminalRuntime {
   sessionId?: string;
 }
 
-export function ConsolePanel({ project, theme, visible, maximized, onToggleMaximized, onHide }: ConsolePanelProps) {
+export function ConsolePanel({ project, theme, visible, maximized, onToggleMaximized, onHide, onConfirmCloseTabs }: ConsolePanelProps) {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -374,7 +375,7 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
     runtime?.terminal.focus();
   }
 
-  function handleCloseProjectTabs() {
+  async function handleCloseProjectTabs() {
     if (!project) {
       return;
     }
@@ -384,7 +385,7 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
       return;
     }
 
-    const confirmed = window.confirm(`关闭当前项目的 ${closingTabs.length} 个终端标签？正在运行的终端进程会被结束。`);
+    const confirmed = await onConfirmCloseTabs(closingTabs.length);
     if (!confirmed) {
       return;
     }
