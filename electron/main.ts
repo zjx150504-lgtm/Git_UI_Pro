@@ -25,6 +25,8 @@ type TerminalSession = {
 // Avoid packaged Windows installs exiting when Chromium's GPU sandbox cannot start.
 app.commandLine.appendSwitch("disable-gpu-sandbox");
 
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -187,6 +189,22 @@ function registerWindowStateEvents(window: BrowserWindow): void {
   window.on("restore", emit);
 }
 
+function focusMainWindow(): void {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+
+  if (!mainWindow.isVisible()) {
+    mainWindow.show();
+  }
+
+  mainWindow.focus();
+}
+
 function runAppCommand(command: string): void {
   if (command === "app:quit") {
     app.quit();
@@ -260,25 +278,35 @@ function runAppCommand(command: string): void {
   }
 }
 
-app.whenReady().then(async () => {
-  configStore = new ConfigStore(app.getPath("userData"));
-  configureApplicationMenu();
-  registerIpc();
-  await createWindow();
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    focusMainWindow();
+  });
 
-  app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      void createWindow();
+  app.whenReady().then(async () => {
+    configStore = new ConfigStore(app.getPath("userData"));
+    configureApplicationMenu();
+    registerIpc();
+    await createWindow();
+
+    app.on("activate", () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        void createWindow();
+      } else {
+        focusMainWindow();
+      }
+    });
+  });
+
+  app.on("window-all-closed", () => {
+    disposeAllTerminalSessions();
+    if (process.platform !== "darwin") {
+      app.quit();
     }
   });
-});
-
-app.on("window-all-closed", () => {
-  disposeAllTerminalSessions();
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
-});
+}
 
 function startTerminalSession(webContents: WebContents, repositoryPath: string): { sessionId: string; shell: string; cwd: string } {
   const cwd = path.resolve(repositoryPath);
