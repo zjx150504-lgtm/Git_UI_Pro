@@ -7,6 +7,12 @@
 - `npm run dist:win`: 生成未签名 Windows NSIS 安装包和 portable 包到 `release/`。
 - `npm run dist:win:signed`: 生成签名 Windows 包，需先配置代码签名证书环境变量。
 
+所有正式和验证打包产物统一输出到 `release/`，不要使用 `release-*` 临时输出目录。
+
+Windows 安装包使用辅助安装向导，默认按当前用户安装，并允许用户选择安装目录。
+
+打包后的 Windows 应用会保留 `contextIsolation` 并关闭 renderer sandbox，以规避部分自定义安装目录下 Electron renderer 子进程启动失败导致的黑屏问题。
+
 ## Windows 签名
 
 默认配置保留图标和版本资源编辑，但将 `win.signExecutable` 设为 `false`，方便本地生成未签名包。

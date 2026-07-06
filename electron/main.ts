@@ -22,6 +22,9 @@ type TerminalSession = {
   webContents: WebContents;
 };
 
+// Avoid packaged Windows installs exiting when Chromium's GPU sandbox cannot start.
+app.commandLine.appendSwitch("disable-gpu-sandbox");
+
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 1440,
@@ -34,7 +37,9 @@ async function createWindow(): Promise<void> {
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      // Some Windows custom install paths fail to start Electron's renderer sandbox.
+      sandbox: false
     }
   });
   registerWindowStateEvents(mainWindow);
