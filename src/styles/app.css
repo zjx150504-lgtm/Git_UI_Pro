@@ -4122,7 +4122,7 @@ button {
   gap: 7px;
   align-items: center;
   min-height: 26px;
-  padding: 0 6px;
+  padding: 0 6px 0 0;
   color: var(--muted);
   font-size: 12px;
 }
@@ -4137,7 +4137,8 @@ button {
 .sync-ring {
   width: 12px;
   height: 12px;
-  justify-self: center;
+  justify-self: start;
+  margin-left: 2px;
   border: 2px dashed var(--blue);
   border-radius: 50%;
 }

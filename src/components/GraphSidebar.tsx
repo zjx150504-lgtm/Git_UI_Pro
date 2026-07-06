@@ -1178,7 +1178,12 @@ function GraphSyncRow({ project }: { project: GitProject }) {
   const branch = project.status?.currentBranch ?? "当前分支";
   const ahead = project.status?.ahead ?? 0;
   const behind = project.status?.behind ?? 0;
-  const label = ahead > 0 && behind > 0 ? "传入/传出的更改" : ahead > 0 ? "传出的更改" : "传入的更改";
+  const label =
+    ahead > 0 && behind > 0
+      ? `待同步 ${ahead + behind} 个提交`
+      : ahead > 0
+        ? `待推送 ${ahead} 个提交`
+        : `待拉取 ${behind} 个提交`;
 
   return (
     <div className="graph-sync-row">
