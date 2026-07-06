@@ -788,7 +788,7 @@ export function App() {
         setWorktreeTabs((current) =>
           current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines: [], preview, pinned: tab.pinned || pinned } : tab))
         );
-        rememberStatus(`正在查看图片：${file.path}`);
+        rememberStatus(`正在查看媒体：${file.path}`);
         return;
       }
 
@@ -833,7 +833,7 @@ export function App() {
         setWorktreeTabs((current) =>
           current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines: [], preview, pinned: tab.pinned || pinned } : tab))
         );
-        rememberStatus(`正在查看提交 ${commit.shortHash} 的图片 ${file.path}`);
+        rememberStatus(`正在查看提交 ${commit.shortHash} 的媒体 ${file.path}`);
         return;
       }
 

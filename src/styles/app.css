@@ -2660,8 +2660,9 @@ button {
   overflow-x: hidden;
 }
 
-.editor-diff-panel.image-mode {
+.editor-diff-panel.media-mode {
   padding: 14px;
+  overflow: hidden;
 }
 
 .editor-diff-panel .diff-lines {
@@ -2669,21 +2670,69 @@ button {
   border-radius: 0;
 }
 
-.editor-image-preview {
+.editor-media-preview {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 10px;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
   min-height: 100%;
 }
 
-.editor-image-stage {
+.editor-media-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 0;
+  min-height: 28px;
+}
+
+.editor-media-toolgroup {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+}
+
+.editor-media-action-tooltip {
+  display: inline-flex;
+}
+
+.editor-media-tool {
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  border-radius: 6px;
+}
+
+.editor-media-scale {
+  display: grid;
+  min-width: 52px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 6px;
+  color: var(--muted-strong);
+  background: color-mix(in srgb, var(--panel-strong) 78%, transparent);
+  font-family: var(--mono-font);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.editor-media-stage {
+  position: relative;
   display: grid;
   place-items: center;
   min-width: 0;
   min-height: 220px;
+  height: 100%;
   border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   border-radius: 6px;
-  overflow: auto;
+  outline: 0;
+  overflow: hidden;
   background:
     linear-gradient(45deg, color-mix(in srgb, var(--surface) 72%, transparent) 25%, transparent 25%),
     linear-gradient(-45deg, color-mix(in srgb, var(--surface) 72%, transparent) 25%, transparent 25%),
@@ -2696,16 +2745,63 @@ button {
     8px -8px,
     -8px 0;
   background-size: 16px 16px;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
 }
 
-.editor-image-stage img {
+.editor-media-stage.dragging {
+  cursor: grabbing;
+}
+
+.editor-media-stage:focus-visible {
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+
+.editor-preview-media {
   display: block;
   max-width: 100%;
-  max-height: min(72vh, 960px);
+  max-height: 100%;
   object-fit: contain;
+  transform-origin: center;
+  transition: transform 80ms ease-out;
 }
 
-.editor-image-meta {
+.editor-media-stage.dragging .editor-preview-media {
+  transition: none;
+}
+
+.editor-preview-media.image {
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.editor-preview-media.video {
+  width: min(100%, 1120px);
+  background: #000;
+  pointer-events: auto;
+}
+
+.editor-media-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max-content;
+  max-width: min(360px, calc(100% - 32px));
+  transform: translate(-50%, -50%);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--border));
+  border-radius: 7px;
+  padding: 9px 12px;
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--panel-strong) 94%, transparent);
+  box-shadow: 0 14px 34px color-mix(in srgb, #000 24%, transparent);
+  font-size: 12px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.editor-media-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -2715,7 +2811,7 @@ button {
   font-size: 12px;
 }
 
-.editor-image-meta span {
+.editor-media-meta span {
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   border-radius: 999px;
   padding: 3px 8px;

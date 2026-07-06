@@ -61,7 +61,7 @@ export interface DiffLine {
 }
 
 export interface FilePreview {
-  type: "image";
+  type: "image" | "video";
   mimeType: string;
   dataUrl: string;
   sizeBytes: number;
@@ -118,6 +118,7 @@ const fieldSeparator = "\x1f";
 const recordSeparator = "\x1e";
 const resetCommandTimeoutMs = 30_000;
 const maxPreviewImageBytes = 25 * 1024 * 1024;
+const maxPreviewVideoBytes = 80 * 1024 * 1024;
 
 const graphColors = ["#51c2a9", "#7aa7ff", "#d69cff", "#f0c36b", "#ef6b73", "#8bd38b"];
 const gitOperationMarkers: Array<{ path: string; state: GitOperationState }> = [
@@ -483,19 +484,19 @@ export class GitService {
   }
 
   async getCommitFilePreview(repositoryPath: string, hash: string, file: ChangedFile): Promise<FilePreview | null> {
-    const mimeType = imageMimeTypeFromPath(file.path);
-    if (!mimeType) {
+    const targetPath = file.status === "deleted" ? file.oldPath ?? file.path : file.path;
+    const media = previewMediaFromPath(targetPath);
+    if (!media) {
       return null;
     }
 
-    const targetPath = file.status === "deleted" ? file.oldPath ?? file.path : file.path;
     const revision = file.status === "deleted" ? `${hash}^` : hash;
     const result = await this.readGitBlob(repositoryPath, revision, targetPath);
     if (!result) {
       return null;
     }
 
-    return createImagePreview(result, mimeType, file.status === "deleted" ? "删除前版本" : "提交版本");
+    return createFilePreview(result, media, file.status === "deleted" ? "删除前版本" : "提交版本");
   }
 
   async getWorktree(repositoryPath: string): Promise<WorktreeState> {
@@ -540,28 +541,29 @@ export class GitService {
   }
 
   async getWorktreeFilePreview(repositoryPath: string, file: ChangedFile): Promise<FilePreview | null> {
-    const mimeType = imageMimeTypeFromPath(file.path);
-    if (!mimeType) {
+    const previewPath = file.status === "deleted" ? file.oldPath ?? file.path : file.path;
+    const media = previewMediaFromPath(previewPath);
+    if (!media) {
       return null;
     }
 
     if (file.staged) {
       const indexBlob = file.status === "deleted" ? null : await this.readGitBlob(repositoryPath, "", file.path, true);
       if (indexBlob) {
-        return createImagePreview(indexBlob, mimeType, "暂存版本");
+        return createFilePreview(indexBlob, media, "暂存版本");
       }
     }
 
     if (file.status !== "deleted") {
       const worktreeBlob = await readWorktreeFile(repositoryPath, file.path);
       if (worktreeBlob) {
-        return createImagePreview(worktreeBlob, mimeType, file.staged ? "工作区版本" : "当前工作区版本");
+        return createFilePreview(worktreeBlob, media, file.staged ? "工作区版本" : "当前工作区版本");
       }
     }
 
     const previousBlob = await this.readGitBlob(repositoryPath, "HEAD", file.oldPath ?? file.path);
     if (previousBlob) {
-      return createImagePreview(previousBlob, mimeType, "删除前版本");
+      return createFilePreview(previousBlob, media, "删除前版本");
     }
 
     return null;
@@ -1174,40 +1176,62 @@ async function readWorktreeFile(repositoryPath: string, filePath: string): Promi
   }
 }
 
-function createImagePreview(content: Buffer, mimeType: string, sourceDescription: string): FilePreview {
-  if (content.byteLength > maxPreviewImageBytes) {
-    throw new Error("图片文件过大，暂不在查看区预览。");
+function createFilePreview(content: Buffer, media: { type: FilePreview["type"]; mimeType: string }, sourceDescription: string): FilePreview {
+  const maxBytes = media.type === "video" ? maxPreviewVideoBytes : maxPreviewImageBytes;
+  if (content.byteLength > maxBytes) {
+    const label = media.type === "video" ? "视频" : "图片";
+    throw new Error(`${label}文件过大，暂不在查看区预览。`);
   }
 
   return {
-    type: "image",
-    mimeType,
-    dataUrl: `data:${mimeType};base64,${content.toString("base64")}`,
+    type: media.type,
+    mimeType: media.mimeType,
+    dataUrl: `data:${media.mimeType};base64,${content.toString("base64")}`,
     sizeBytes: content.byteLength,
     sourceDescription
   };
 }
 
-function imageMimeTypeFromPath(filePath: string): string | undefined {
+function previewMediaFromPath(filePath: string): { type: FilePreview["type"]; mimeType: string } | undefined {
   const extension = filePath.split(/[\\/]/).pop()?.split(".").pop()?.toLowerCase();
   switch (extension) {
     case "png":
-      return "image/png";
+      return { type: "image", mimeType: "image/png" };
+    case "apng":
+      return { type: "image", mimeType: "image/apng" };
     case "jpg":
     case "jpeg":
-      return "image/jpeg";
+    case "jfif":
+      return { type: "image", mimeType: "image/jpeg" };
     case "gif":
-      return "image/gif";
+      return { type: "image", mimeType: "image/gif" };
     case "webp":
-      return "image/webp";
+      return { type: "image", mimeType: "image/webp" };
     case "svg":
-      return "image/svg+xml";
+      return { type: "image", mimeType: "image/svg+xml" };
     case "bmp":
-      return "image/bmp";
+      return { type: "image", mimeType: "image/bmp" };
     case "ico":
-      return "image/x-icon";
+      return { type: "image", mimeType: "image/x-icon" };
     case "avif":
-      return "image/avif";
+      return { type: "image", mimeType: "image/avif" };
+    case "mp4":
+    case "m4v":
+      return { type: "video", mimeType: "video/mp4" };
+    case "mov":
+      return { type: "video", mimeType: "video/quicktime" };
+    case "webm":
+      return { type: "video", mimeType: "video/webm" };
+    case "ogv":
+    case "ogg":
+      return { type: "video", mimeType: "video/ogg" };
+    case "mpeg":
+    case "mpg":
+      return { type: "video", mimeType: "video/mpeg" };
+    case "mkv":
+      return { type: "video", mimeType: "video/x-matroska" };
+    case "avi":
+      return { type: "video", mimeType: "video/x-msvideo" };
     default:
       return undefined;
   }

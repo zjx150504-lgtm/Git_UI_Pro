@@ -62,7 +62,7 @@ export interface DiffLine {
 }
 
 export interface FilePreview {
-  type: "image";
+  type: "image" | "video";
   mimeType: string;
   dataUrl: string;
   sizeBytes: number;

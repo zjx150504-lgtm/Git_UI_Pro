@@ -88,7 +88,17 @@ const extensionIcons: Record<string, { label: string; tone: FileIconTone }> = {
   gif: { label: "GIF", tone: "asset" },
   avif: { label: "AVF", tone: "asset" },
   bmp: { label: "BMP", tone: "asset" },
-  ico: { label: "ICO", tone: "asset" }
+  ico: { label: "ICO", tone: "asset" },
+  mp4: { label: "MP4", tone: "asset" },
+  m4v: { label: "M4V", tone: "asset" },
+  mov: { label: "MOV", tone: "asset" },
+  webm: { label: "WEB", tone: "asset" },
+  ogv: { label: "OGV", tone: "asset" },
+  ogg: { label: "OGG", tone: "asset" },
+  mpeg: { label: "MPG", tone: "asset" },
+  mpg: { label: "MPG", tone: "asset" },
+  mkv: { label: "MKV", tone: "asset" },
+  avi: { label: "AVI", tone: "asset" }
 };
 
 const filenameIcons: Record<string, { label: string; tone: FileIconTone }> = {

@@ -1,5 +1,16 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type UIEvent as ReactUIEvent } from "react";
-import { Copy, FileText, X } from "lucide-react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  type UIEvent as ReactUIEvent,
+  type WheelEvent as ReactWheelEvent
+} from "react";
+import { Copy, FileText, Maximize2, X, ZoomIn, ZoomOut } from "lucide-react";
 import { PathTooltip } from "./PathTooltip";
 import type { ChangedFile, DiffLine, FilePreview } from "../types/domain";
 import { absoluteFilePath } from "../utils/filePath";
@@ -36,6 +47,10 @@ interface SplitDiffRow {
 const DIFF_ROW_HEIGHT = 24;
 const DIFF_VIRTUAL_THRESHOLD = 500;
 const DIFF_VIRTUAL_OVERSCAN = 36;
+const MEDIA_MIN_SCALE = 0.2;
+const MEDIA_MAX_SCALE = 8;
+const MEDIA_ZOOM_STEP = 1.2;
+const MEDIA_PAN_STEP = 36;
 
 export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelectTab, onCloseTab, onPinTab }: WorktreeDetailPanelProps) {
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
@@ -45,14 +60,14 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
   const diffScrollFrameRef = useRef<number | undefined>();
   const prefersSplitDiff = useSplitDiffLayout();
   const activeDiffLines = activeTab?.diffLines ?? [];
-  const imagePreview = activeTab?.preview?.type === "image" ? activeTab.preview : undefined;
+  const mediaPreview = activeTab?.preview;
   const splitDiffRows = useMemo(() => buildSplitDiffRows(activeDiffLines), [activeDiffLines]);
-  const showSplitDiff = Boolean(!imagePreview && prefersSplitDiff && activeTab && canUseSplitDiff(activeTab.file.status) && splitDiffRows.length > 0);
+  const showSplitDiff = Boolean(!mediaPreview && prefersSplitDiff && activeTab && canUseSplitDiff(activeTab.file.status) && splitDiffRows.length > 0);
   const [splitMaxScroll, setSplitMaxScroll] = useState(0);
   const [splitScrollX, setSplitScrollX] = useState(0);
   const [diffPanelHeight, setDiffPanelHeight] = useState(0);
   const [diffScrollTop, setDiffScrollTop] = useState(0);
-  const virtualRowCount = imagePreview ? 0 : showSplitDiff ? splitDiffRows.length : activeDiffLines.length;
+  const virtualRowCount = mediaPreview ? 0 : showSplitDiff ? splitDiffRows.length : activeDiffLines.length;
   const diffVirtualEnabled = virtualRowCount > DIFF_VIRTUAL_THRESHOLD;
   const diffVirtualRange = useMemo(() => {
     if (!diffVirtualEnabled) {
@@ -234,9 +249,9 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
       </div>
 
       <div className="editor-diff-shell" style={splitDiffStyle}>
-        <section className={`diff-panel editor-diff-panel ${showSplitDiff ? "split-mode" : ""} ${imagePreview ? "image-mode" : ""}`} ref={diffPanelRef} onScroll={handleDiffPanelScroll}>
-          {imagePreview ? (
-            <ImagePreview preview={imagePreview} filePath={file.path} />
+        <section className={`diff-panel editor-diff-panel ${showSplitDiff ? "split-mode" : ""} ${mediaPreview ? "media-mode" : ""}`} ref={diffPanelRef} onScroll={handleDiffPanelScroll}>
+          {mediaPreview ? (
+            <MediaPreview preview={mediaPreview} filePath={file.path} />
           ) : showSplitDiff ? (
             <div className="split-diff-grid" role="table" aria-label="左右文件对比" ref={splitDiffRef}>
               <div className="split-diff-header" role="row">
@@ -285,21 +300,222 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
   );
 }
 
-function ImagePreview({ preview, filePath }: { preview: FilePreview; filePath: string }) {
+function MediaPreview({ preview, filePath }: { preview: FilePreview; filePath: string }) {
   const fileName = filePath.split(/[\\/]/).filter(Boolean).at(-1) ?? filePath;
+  const stageRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const zoomLabel = `${Math.round(scale * 100)}%`;
+  const mediaStyle = {
+    transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${scale})`
+  } satisfies CSSProperties;
+
+  useEffect(() => {
+    setScale(1);
+    setOffset({ x: 0, y: 0 });
+    setDragging(false);
+    setLoadFailed(false);
+    dragRef.current = null;
+  }, [preview.dataUrl, preview.type]);
+
+  function resetView() {
+    setScale(1);
+    setOffset({ x: 0, y: 0 });
+  }
+
+  function panBy(deltaX: number, deltaY: number) {
+    setOffset((current) => ({
+      x: current.x + deltaX,
+      y: current.y + deltaY
+    }));
+  }
+
+  function zoomBy(factor: number, anchor?: { clientX: number; clientY: number }) {
+    setScale((currentScale) => {
+      const nextScale = clampNumber(Number((currentScale * factor).toFixed(3)), MEDIA_MIN_SCALE, MEDIA_MAX_SCALE);
+      if (nextScale !== currentScale && anchor && stageRef.current) {
+        const rect = stageRef.current.getBoundingClientRect();
+        const anchorX = anchor.clientX - rect.left - rect.width / 2;
+        const anchorY = anchor.clientY - rect.top - rect.height / 2;
+        const ratio = nextScale / currentScale;
+
+        setOffset((currentOffset) => ({
+          x: anchorX - (anchorX - currentOffset.x) * ratio,
+          y: anchorY - (anchorY - currentOffset.y) * ratio
+        }));
+      }
+
+      return nextScale;
+    });
+  }
+
+  function handleWheel(event: ReactWheelEvent<HTMLDivElement>) {
+    event.preventDefault();
+    zoomBy(event.deltaY < 0 ? MEDIA_ZOOM_STEP : 1 / MEDIA_ZOOM_STEP, { clientX: event.clientX, clientY: event.clientY });
+  }
+
+  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0 || event.target instanceof HTMLVideoElement) {
+      return;
+    }
+
+    event.preventDefault();
+    event.currentTarget.focus();
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: offset.x,
+      originY: offset.y
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setDragging(true);
+  }
+
+  function handlePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) {
+      return;
+    }
+
+    setOffset({
+      x: drag.originX + event.clientX - drag.startX,
+      y: drag.originY + event.clientY - drag.startY
+    });
+  }
+
+  function endDrag(event: ReactPointerEvent<HTMLDivElement>) {
+    if (dragRef.current?.pointerId === event.pointerId) {
+      dragRef.current = null;
+      setDragging(false);
+    }
+  }
+
+  function handleKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.target !== event.currentTarget) {
+      return;
+    }
+
+    const withCommand = event.ctrlKey || event.metaKey;
+    if (withCommand && isZoomInKey(event.key)) {
+      event.preventDefault();
+      zoomBy(MEDIA_ZOOM_STEP);
+      return;
+    }
+
+    if (withCommand && isZoomOutKey(event.key)) {
+      event.preventDefault();
+      zoomBy(1 / MEDIA_ZOOM_STEP);
+      return;
+    }
+
+    if (withCommand && event.key === "0") {
+      event.preventDefault();
+      resetView();
+      return;
+    }
+
+    if (event.altKey || event.ctrlKey || event.metaKey) {
+      return;
+    }
+
+    const panStep = event.shiftKey ? MEDIA_PAN_STEP * 2 : MEDIA_PAN_STEP;
+    switch (event.key) {
+      case "ArrowUp":
+        event.preventDefault();
+        panBy(0, -panStep);
+        break;
+      case "ArrowDown":
+        event.preventDefault();
+        panBy(0, panStep);
+        break;
+      case "ArrowLeft":
+        event.preventDefault();
+        panBy(-panStep, 0);
+        break;
+      case "ArrowRight":
+        event.preventDefault();
+        panBy(panStep, 0);
+        break;
+    }
+  }
 
   return (
-    <div className="editor-image-preview">
-      <div className="editor-image-stage">
-        <img src={preview.dataUrl} alt={fileName} />
+    <div className="editor-media-preview">
+      <div className="editor-media-toolbar" aria-label="媒体预览工具">
+        <div className="editor-media-toolgroup">
+          <PathTooltip content="缩小 (Ctrl + -)" className="editor-media-action-tooltip">
+            <button
+              type="button"
+              className="icon-button compact-icon editor-media-tool"
+              aria-label="缩小"
+              disabled={scale <= MEDIA_MIN_SCALE}
+              onClick={() => zoomBy(1 / MEDIA_ZOOM_STEP)}
+            >
+              <ZoomOut size={15} />
+            </button>
+          </PathTooltip>
+          <span className="editor-media-scale" aria-label={`当前缩放 ${zoomLabel}`}>
+            {zoomLabel}
+          </span>
+          <PathTooltip content="放大 (Ctrl + +)" className="editor-media-action-tooltip">
+            <button
+              type="button"
+              className="icon-button compact-icon editor-media-tool"
+              aria-label="放大"
+              disabled={scale >= MEDIA_MAX_SCALE}
+              onClick={() => zoomBy(MEDIA_ZOOM_STEP)}
+            >
+              <ZoomIn size={15} />
+            </button>
+          </PathTooltip>
+          <PathTooltip content="适应窗口 (Ctrl + 0)" className="editor-media-action-tooltip">
+            <button type="button" className="icon-button compact-icon editor-media-tool" aria-label="适应窗口" onClick={resetView}>
+              <Maximize2 size={15} />
+            </button>
+          </PathTooltip>
+        </div>
       </div>
-      <div className="editor-image-meta">
+      <div
+        className={`editor-media-stage ${preview.type}-stage ${dragging ? "dragging" : ""}`}
+        ref={stageRef}
+        role="group"
+        tabIndex={0}
+        aria-label={`${fileName} ${preview.type === "video" ? "视频预览" : "图片预览"}`}
+        onWheel={handleWheel}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={endDrag}
+        onPointerCancel={endDrag}
+        onKeyDown={handleKeyDown}
+      >
+        {preview.type === "video" ? (
+          <video key={preview.dataUrl} className="editor-preview-media video" style={mediaStyle} controls preload="metadata" onError={() => setLoadFailed(true)}>
+            <source src={preview.dataUrl} type={preview.mimeType} />
+          </video>
+        ) : (
+          <img className="editor-preview-media image" style={mediaStyle} src={preview.dataUrl} alt={fileName} draggable={false} onError={() => setLoadFailed(true)} />
+        )}
+        {loadFailed ? <div className="editor-media-error">当前格式无法在查看区解码。</div> : null}
+      </div>
+      <div className="editor-media-meta">
         <span>{preview.sourceDescription}</span>
         <span>{preview.mimeType}</span>
         <span>{formatBytes(preview.sizeBytes)}</span>
       </div>
     </div>
   );
+}
+
+function isZoomInKey(key: string): boolean {
+  return key === "+" || key === "=" || key === "Add";
+}
+
+function isZoomOutKey(key: string): boolean {
+  return key === "-" || key === "_" || key === "Subtract";
 }
 
 function DiffCell({ side, line }: { side: "old" | "new"; line?: DiffLine }) {
