@@ -4979,6 +4979,7 @@ button {
   bottom: 0;
   left: var(--graph-expansion-line-x, var(--graph-expansion-x, 8px));
   width: 2px;
+  transform: translateX(-50%);
   border-radius: 999px;
   background: var(--graph-expansion-line-color, var(--graph-expansion-color, #2f98ff));
 }
