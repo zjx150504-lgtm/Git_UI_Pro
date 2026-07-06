@@ -86,6 +86,8 @@ const extensionIcons: Record<string, { label: string; tone: FileIconTone }> = {
   jpeg: { label: "JPG", tone: "asset" },
   webp: { label: "WEB", tone: "asset" },
   gif: { label: "GIF", tone: "asset" },
+  avif: { label: "AVF", tone: "asset" },
+  bmp: { label: "BMP", tone: "asset" },
   ico: { label: "ICO", tone: "asset" }
 };
 

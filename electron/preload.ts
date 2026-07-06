@@ -42,8 +42,12 @@ contextBridge.exposeInMainWorld("gitUI", {
   getHistoryRefs: (repositoryPath: string) => ipcRenderer.invoke("git:getHistoryRefs", repositoryPath),
   getCommitDetails: (repositoryPath: string, hash: string) => ipcRenderer.invoke("git:getCommitDetails", repositoryPath, hash),
   getCommitDiff: (repositoryPath: string, hash: string, filePath?: string) => ipcRenderer.invoke("git:getCommitDiff", repositoryPath, hash, filePath),
+  getCommitFilePreview: (repositoryPath: string, hash: string, file: { path: string; oldPath?: string; status: string; staged: boolean }) =>
+    ipcRenderer.invoke("git:getCommitFilePreview", repositoryPath, hash, file),
   getWorktree: (repositoryPath: string) => ipcRenderer.invoke("git:getWorktree", repositoryPath),
   getWorktreeDiff: (repositoryPath: string, filePath: string, staged: boolean) => ipcRenderer.invoke("git:getWorktreeDiff", repositoryPath, filePath, staged),
+  getWorktreeFilePreview: (repositoryPath: string, file: { path: string; oldPath?: string; status: string; staged: boolean }) =>
+    ipcRenderer.invoke("git:getWorktreeFilePreview", repositoryPath, file),
   stageFile: (repositoryPath: string, filePath: string) => ipcRenderer.invoke("git:stageFile", repositoryPath, filePath),
   stageAll: (repositoryPath: string) => ipcRenderer.invoke("git:stageAll", repositoryPath),
   unstageFile: (repositoryPath: string, filePath: string) => ipcRenderer.invoke("git:unstageFile", repositoryPath, filePath),

@@ -60,6 +60,14 @@ export interface DiffLine {
   content: string;
 }
 
+export interface FilePreview {
+  type: "image";
+  mimeType: string;
+  dataUrl: string;
+  sizeBytes: number;
+  sourceDescription: string;
+}
+
 export interface WorktreeState {
   stagedFiles: ChangedFile[];
   unstagedFiles: ChangedFile[];
@@ -109,6 +117,7 @@ export type GitOperationState = "merge" | "rebase" | "cherry-pick" | "revert" | 
 const fieldSeparator = "\x1f";
 const recordSeparator = "\x1e";
 const resetCommandTimeoutMs = 30_000;
+const maxPreviewImageBytes = 25 * 1024 * 1024;
 
 const graphColors = ["#51c2a9", "#7aa7ff", "#d69cff", "#f0c36b", "#ef6b73", "#8bd38b"];
 const gitOperationMarkers: Array<{ path: string; state: GitOperationState }> = [
@@ -204,6 +213,84 @@ export class GitService {
           stderr,
           exitCode,
           messageZh: exitCode === 0 ? undefined : toChineseGitError(stdout, stderr)
+        });
+      });
+    });
+  }
+
+  private async runBinary(cwd: string, args: string[], options: { timeoutMs?: number } = {}): Promise<Omit<GitOperationResult, "stdout"> & { stdout: Buffer }> {
+    return new Promise((resolve) => {
+      const command = `git ${args.join(" ")}`;
+      let settled = false;
+      const child = spawn("git", args, {
+        cwd,
+        env: {
+          ...process.env,
+          GIT_TERMINAL_PROMPT: "0",
+          GIT_PAGER: "cat"
+        },
+        shell: false,
+        windowsHide: true
+      });
+
+      const stdoutChunks: Buffer[] = [];
+      let stderr = "";
+      const finish = (result: Omit<GitOperationResult, "stdout"> & { stdout: Buffer }) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        if (timeoutId) {
+          clearTimeout(timeoutId);
+        }
+        resolve(result);
+      };
+      const timeoutId = options.timeoutMs
+        ? setTimeout(() => {
+            const timeoutText = `Git command timed out after ${Math.round((options.timeoutMs ?? 0) / 1000)}s.`;
+            stderr = stderr ? `${stderr}\n${timeoutText}` : timeoutText;
+            child.kill();
+            finish({
+              ok: false,
+              command,
+              stdout: Buffer.concat(stdoutChunks),
+              stderr,
+              exitCode: -1,
+              messageZh: "Git 命令执行超时，请确认仓库未被其它进程锁定后重试"
+            });
+          }, options.timeoutMs)
+        : undefined;
+
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdoutChunks.push(chunk);
+      });
+
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk.toString();
+      });
+
+      child.on("error", (error) => {
+        finish({
+          ok: false,
+          command,
+          stdout: Buffer.concat(stdoutChunks),
+          stderr: error.message,
+          exitCode: -1,
+          messageZh: "无法执行 Git 命令，请确认本机已安装 Git 并加入 PATH。"
+        });
+      });
+
+      child.on("close", (code) => {
+        const exitCode = code ?? -1;
+        const stdout = Buffer.concat(stdoutChunks);
+        finish({
+          ok: exitCode === 0,
+          command,
+          stdout,
+          stderr,
+          exitCode,
+          messageZh: exitCode === 0 ? undefined : toChineseGitError("", stderr)
         });
       });
     });
@@ -395,6 +482,22 @@ export class GitService {
     return parseUnifiedDiff(result.stdout);
   }
 
+  async getCommitFilePreview(repositoryPath: string, hash: string, file: ChangedFile): Promise<FilePreview | null> {
+    const mimeType = imageMimeTypeFromPath(file.path);
+    if (!mimeType) {
+      return null;
+    }
+
+    const targetPath = file.status === "deleted" ? file.oldPath ?? file.path : file.path;
+    const revision = file.status === "deleted" ? `${hash}^` : hash;
+    const result = await this.readGitBlob(repositoryPath, revision, targetPath);
+    if (!result) {
+      return null;
+    }
+
+    return createImagePreview(result, mimeType, file.status === "deleted" ? "删除前版本" : "提交版本");
+  }
+
   async getWorktree(repositoryPath: string): Promise<WorktreeState> {
     const [statusResult, untrackedResult] = await Promise.all([
       this.run(repositoryPath, ["status", "--porcelain=v2"]),
@@ -434,6 +537,34 @@ export class GitService {
     }
 
     return diffLines;
+  }
+
+  async getWorktreeFilePreview(repositoryPath: string, file: ChangedFile): Promise<FilePreview | null> {
+    const mimeType = imageMimeTypeFromPath(file.path);
+    if (!mimeType) {
+      return null;
+    }
+
+    if (file.staged) {
+      const indexBlob = file.status === "deleted" ? null : await this.readGitBlob(repositoryPath, "", file.path, true);
+      if (indexBlob) {
+        return createImagePreview(indexBlob, mimeType, "暂存版本");
+      }
+    }
+
+    if (file.status !== "deleted") {
+      const worktreeBlob = await readWorktreeFile(repositoryPath, file.path);
+      if (worktreeBlob) {
+        return createImagePreview(worktreeBlob, mimeType, file.staged ? "工作区版本" : "当前工作区版本");
+      }
+    }
+
+    const previousBlob = await this.readGitBlob(repositoryPath, "HEAD", file.oldPath ?? file.path);
+    if (previousBlob) {
+      return createImagePreview(previousBlob, mimeType, "删除前版本");
+    }
+
+    return null;
   }
 
   async stageFile(repositoryPath: string, filePath: string): Promise<GitOperationResult> {
@@ -723,6 +854,17 @@ export class GitService {
     }
 
     return parseCommitLog(result.stdout);
+  }
+
+  private async readGitBlob(repositoryPath: string, revision: string, filePath: string, staged = false): Promise<Buffer | null> {
+    const gitPath = toGitPath(filePath);
+    const objectName = staged ? `:${gitPath}` : `${revision}:${gitPath}`;
+    const result = await this.runBinary(repositoryPath, ["show", objectName], { timeoutMs: 10_000 });
+    if (!result.ok) {
+      return null;
+    }
+
+    return result.stdout;
   }
 }
 
@@ -1016,6 +1158,63 @@ async function readFileAsAddedDiff(repositoryPath: string, filePath: string): Pr
     newLineNumber: index + 1,
     content: line
   }));
+}
+
+async function readWorktreeFile(repositoryPath: string, filePath: string): Promise<Buffer | null> {
+  try {
+    const absolutePath = path.join(repositoryPath, filePath);
+    const info = await stat(absolutePath);
+    if (!info.isFile()) {
+      return null;
+    }
+
+    return readFile(absolutePath);
+  } catch {
+    return null;
+  }
+}
+
+function createImagePreview(content: Buffer, mimeType: string, sourceDescription: string): FilePreview {
+  if (content.byteLength > maxPreviewImageBytes) {
+    throw new Error("图片文件过大，暂不在查看区预览。");
+  }
+
+  return {
+    type: "image",
+    mimeType,
+    dataUrl: `data:${mimeType};base64,${content.toString("base64")}`,
+    sizeBytes: content.byteLength,
+    sourceDescription
+  };
+}
+
+function imageMimeTypeFromPath(filePath: string): string | undefined {
+  const extension = filePath.split(/[\\/]/).pop()?.split(".").pop()?.toLowerCase();
+  switch (extension) {
+    case "png":
+      return "image/png";
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg";
+    case "gif":
+      return "image/gif";
+    case "webp":
+      return "image/webp";
+    case "svg":
+      return "image/svg+xml";
+    case "bmp":
+      return "image/bmp";
+    case "ico":
+      return "image/x-icon";
+    case "avif":
+      return "image/avif";
+    default:
+      return undefined;
+  }
+}
+
+function toGitPath(filePath: string): string {
+  return filePath.replace(/\\/g, "/");
 }
 
 function extractPorcelainPaths(line: string, hasOriginalPath: boolean): { path: string; oldPath?: string } {

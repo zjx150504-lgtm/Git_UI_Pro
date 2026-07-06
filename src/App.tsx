@@ -783,9 +783,18 @@ export function App() {
     setActiveWorktreeTabId(tabId);
 
     try {
+      const preview = await apiClient.getWorktreeFilePreview(selectedProject, file);
+      if (preview) {
+        setWorktreeTabs((current) =>
+          current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines: [], preview, pinned: tab.pinned || pinned } : tab))
+        );
+        rememberStatus(`正在查看图片：${file.path}`);
+        return;
+      }
+
       const diffLines = await apiClient.getWorktreeDiff(selectedProject, file.path, file.staged);
       setWorktreeTabs((current) =>
-        current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines, pinned: tab.pinned || pinned } : tab))
+        current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines, preview: null, pinned: tab.pinned || pinned } : tab))
       );
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "加载工作区文件失败");
@@ -819,9 +828,18 @@ export function App() {
     setActiveWorktreeTabId(tabId);
 
     try {
+      const preview = await apiClient.getCommitFilePreview(selectedProject, commit.hash, file);
+      if (preview) {
+        setWorktreeTabs((current) =>
+          current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines: [], preview, pinned: tab.pinned || pinned } : tab))
+        );
+        rememberStatus(`正在查看提交 ${commit.shortHash} 的图片 ${file.path}`);
+        return;
+      }
+
       const diffLines = await apiClient.getCommitDiff(selectedProject, commit.hash, file.path);
       setWorktreeTabs((current) =>
-        current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines, pinned: tab.pinned || pinned } : tab))
+        current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines, preview: null, pinned: tab.pinned || pinned } : tab))
       );
       rememberStatus(`正在查看提交 ${commit.shortHash} 的 ${file.path}`);
     } catch (error) {

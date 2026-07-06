@@ -61,6 +61,14 @@ export interface DiffLine {
   content: string;
 }
 
+export interface FilePreview {
+  type: "image";
+  mimeType: string;
+  dataUrl: string;
+  sizeBytes: number;
+  sourceDescription: string;
+}
+
 export interface WorktreeState {
   stagedFiles: ChangedFile[];
   unstagedFiles: ChangedFile[];

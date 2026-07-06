@@ -5,6 +5,7 @@ import type {
   CommitInput,
   CommitNode,
   DiffLine,
+  FilePreview,
   GitHistoryFilter,
   GitHistoryRef,
   GitOperationResult,
@@ -47,8 +48,10 @@ export interface GitUIBridge {
   getHistoryRefs: (repositoryPath: string) => Promise<GitHistoryRef[]>;
   getCommitDetails: (repositoryPath: string, hash: string) => Promise<CommitNode>;
   getCommitDiff: (repositoryPath: string, hash: string, filePath?: string) => Promise<DiffLine[]>;
+  getCommitFilePreview: (repositoryPath: string, hash: string, file: ChangedFile) => Promise<FilePreview | null>;
   getWorktree: (repositoryPath: string) => Promise<WorktreeState>;
   getWorktreeDiff: (repositoryPath: string, filePath: string, staged: boolean) => Promise<DiffLine[]>;
+  getWorktreeFilePreview: (repositoryPath: string, file: ChangedFile) => Promise<FilePreview | null>;
   stageFile: (repositoryPath: string, filePath: string) => Promise<GitOperationResult>;
   stageAll: (repositoryPath: string) => Promise<GitOperationResult>;
   unstageFile: (repositoryPath: string, filePath: string) => Promise<GitOperationResult>;

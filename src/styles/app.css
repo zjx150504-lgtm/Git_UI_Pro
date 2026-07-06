@@ -2660,9 +2660,66 @@ button {
   overflow-x: hidden;
 }
 
+.editor-diff-panel.image-mode {
+  padding: 14px;
+}
+
 .editor-diff-panel .diff-lines {
   min-width: 720px;
   border-radius: 0;
+}
+
+.editor-image-preview {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 100%;
+}
+
+.editor-image-stage {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 220px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 6px;
+  overflow: auto;
+  background:
+    linear-gradient(45deg, color-mix(in srgb, var(--surface) 72%, transparent) 25%, transparent 25%),
+    linear-gradient(-45deg, color-mix(in srgb, var(--surface) 72%, transparent) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--surface) 72%, transparent) 75%),
+    linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--surface) 72%, transparent) 75%),
+    var(--sunken);
+  background-position:
+    0 0,
+    0 8px,
+    8px -8px,
+    -8px 0;
+  background-size: 16px 16px;
+}
+
+.editor-image-stage img {
+  display: block;
+  max-width: 100%;
+  max-height: min(72vh, 960px);
+  object-fit: contain;
+}
+
+.editor-image-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.editor-image-meta span {
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 999px;
+  padding: 3px 8px;
+  background: color-mix(in srgb, var(--panel-strong) 78%, transparent);
 }
 
 .split-diff-grid {

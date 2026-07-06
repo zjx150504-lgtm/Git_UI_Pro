@@ -6,6 +6,7 @@ import type {
   CommitInput,
   CommitNode,
   DiffLine,
+  FilePreview,
   GitHistoryFilter,
   GitHistoryRef,
   GitOperationResult,
@@ -229,6 +230,18 @@ export const apiClient = {
     return mockDiffLines;
   },
 
+  async getCommitFilePreview(project: GitProject, hash: string, file: ChangedFile): Promise<FilePreview | null> {
+    if (window.gitUI) {
+      return window.gitUI.getCommitFilePreview(project.path, hash, file);
+    }
+
+    void project;
+    void hash;
+    void file;
+    await wait(40);
+    return null;
+  },
+
   async getWorktree(project: GitProject): Promise<WorktreeState> {
     if (window.gitUI) {
       return window.gitUI.getWorktree(project.path);
@@ -252,6 +265,17 @@ export const apiClient = {
 
     await wait(mockDelay);
     return mockDiffLines;
+  },
+
+  async getWorktreeFilePreview(project: GitProject, file: ChangedFile): Promise<FilePreview | null> {
+    if (window.gitUI) {
+      return window.gitUI.getWorktreeFilePreview(project.path, file);
+    }
+
+    void project;
+    void file;
+    await wait(40);
+    return null;
   },
 
   async stageFile(project: GitProject, filePath: string): Promise<GitOperationResult> {

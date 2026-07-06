@@ -119,10 +119,12 @@ function registerIpc(): void {
   ipcMain.handle("git:getHistoryRefs", (_event, repositoryPath: string) => gitService.getHistoryRefs(repositoryPath));
   ipcMain.handle("git:getCommitDetails", (_event, repositoryPath: string, hash: string) => gitService.getCommitDetails(repositoryPath, hash));
   ipcMain.handle("git:getCommitDiff", (_event, repositoryPath: string, hash: string, filePath?: string) => gitService.getCommitDiff(repositoryPath, hash, filePath));
+  ipcMain.handle("git:getCommitFilePreview", (_event, repositoryPath: string, hash: string, file) => gitService.getCommitFilePreview(repositoryPath, hash, file));
   ipcMain.handle("git:getWorktree", (_event, repositoryPath: string) => gitService.getWorktree(repositoryPath));
   ipcMain.handle("git:getWorktreeDiff", (_event, repositoryPath: string, filePath: string, staged: boolean) =>
     gitService.getWorktreeDiff(repositoryPath, filePath, staged)
   );
+  ipcMain.handle("git:getWorktreeFilePreview", (_event, repositoryPath: string, file) => gitService.getWorktreeFilePreview(repositoryPath, file));
   ipcMain.handle("git:stageFile", (_event, repositoryPath: string, filePath: string) => gitService.stageFile(repositoryPath, filePath));
   ipcMain.handle("git:stageAll", (_event, repositoryPath: string) => gitService.stageAll(repositoryPath));
   ipcMain.handle("git:unstageFile", (_event, repositoryPath: string, filePath: string) => gitService.unstageFile(repositoryPath, filePath));

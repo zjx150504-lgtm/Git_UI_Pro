@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type UIEvent as ReactUIEvent } from "react";
 import { Copy, FileText, X } from "lucide-react";
 import { PathTooltip } from "./PathTooltip";
-import type { ChangedFile, DiffLine } from "../types/domain";
+import type { ChangedFile, DiffLine, FilePreview } from "../types/domain";
 import { absoluteFilePath } from "../utils/filePath";
 
 export interface WorktreeEditorTab {
@@ -9,6 +9,7 @@ export interface WorktreeEditorTab {
   file: ChangedFile;
   diffLines: DiffLine[];
   pinned: boolean;
+  preview?: FilePreview | null;
   sourceType?: "worktree" | "commit";
   commitHash?: string;
   sourceLabel?: string;
@@ -44,13 +45,14 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
   const diffScrollFrameRef = useRef<number | undefined>();
   const prefersSplitDiff = useSplitDiffLayout();
   const activeDiffLines = activeTab?.diffLines ?? [];
+  const imagePreview = activeTab?.preview?.type === "image" ? activeTab.preview : undefined;
   const splitDiffRows = useMemo(() => buildSplitDiffRows(activeDiffLines), [activeDiffLines]);
-  const showSplitDiff = Boolean(prefersSplitDiff && activeTab && canUseSplitDiff(activeTab.file.status) && splitDiffRows.length > 0);
+  const showSplitDiff = Boolean(!imagePreview && prefersSplitDiff && activeTab && canUseSplitDiff(activeTab.file.status) && splitDiffRows.length > 0);
   const [splitMaxScroll, setSplitMaxScroll] = useState(0);
   const [splitScrollX, setSplitScrollX] = useState(0);
   const [diffPanelHeight, setDiffPanelHeight] = useState(0);
   const [diffScrollTop, setDiffScrollTop] = useState(0);
-  const virtualRowCount = showSplitDiff ? splitDiffRows.length : activeDiffLines.length;
+  const virtualRowCount = imagePreview ? 0 : showSplitDiff ? splitDiffRows.length : activeDiffLines.length;
   const diffVirtualEnabled = virtualRowCount > DIFF_VIRTUAL_THRESHOLD;
   const diffVirtualRange = useMemo(() => {
     if (!diffVirtualEnabled) {
@@ -232,8 +234,10 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
       </div>
 
       <div className="editor-diff-shell" style={splitDiffStyle}>
-        <section className={`diff-panel editor-diff-panel ${showSplitDiff ? "split-mode" : ""}`} ref={diffPanelRef} onScroll={handleDiffPanelScroll}>
-          {showSplitDiff ? (
+        <section className={`diff-panel editor-diff-panel ${showSplitDiff ? "split-mode" : ""} ${imagePreview ? "image-mode" : ""}`} ref={diffPanelRef} onScroll={handleDiffPanelScroll}>
+          {imagePreview ? (
+            <ImagePreview preview={imagePreview} filePath={file.path} />
+          ) : showSplitDiff ? (
             <div className="split-diff-grid" role="table" aria-label="左右文件对比" ref={splitDiffRef}>
               <div className="split-diff-header" role="row">
                 <span>原文件</span>
@@ -278,6 +282,23 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
         ) : null}
       </div>
     </aside>
+  );
+}
+
+function ImagePreview({ preview, filePath }: { preview: FilePreview; filePath: string }) {
+  const fileName = filePath.split(/[\\/]/).filter(Boolean).at(-1) ?? filePath;
+
+  return (
+    <div className="editor-image-preview">
+      <div className="editor-image-stage">
+        <img src={preview.dataUrl} alt={fileName} />
+      </div>
+      <div className="editor-image-meta">
+        <span>{preview.sourceDescription}</span>
+        <span>{preview.mimeType}</span>
+        <span>{formatBytes(preview.sizeBytes)}</span>
+      </div>
+    </div>
   );
 }
 
@@ -382,6 +403,18 @@ function buildSplitDiffRows(lines: DiffLine[]): SplitDiffRow[] {
 
 function clampNumber(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024) {
+    return `${value} B`;
+  }
+
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function statusLabel(status: ChangedFile["status"]): string {
