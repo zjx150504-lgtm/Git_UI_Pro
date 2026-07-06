@@ -75,6 +75,23 @@ export interface BranchInfo {
   headHash: string;
 }
 
+export type GitHistoryFilterMode = "auto" | "all" | "custom";
+
+export interface GitHistoryFilter {
+  mode: GitHistoryFilterMode;
+  refIds?: string[];
+}
+
+export interface GitHistoryRef {
+  id: string;
+  name: string;
+  type: "branch" | "remoteBranch" | "tag";
+  revision: string;
+  category: "branches" | "remote branches" | "tags";
+  current?: boolean;
+  upstream?: boolean;
+}
+
 export interface CommitInput {
   subject: string;
   body?: string;

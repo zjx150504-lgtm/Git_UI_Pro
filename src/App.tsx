@@ -32,6 +32,8 @@ import type {
   CommitInput,
   CommitMessageInput,
   CommitNode,
+  GitHistoryFilter,
+  GitHistoryRef,
   GitOperationResult,
   GitProject,
   GitResetMode,
@@ -42,6 +44,8 @@ const emptyWorktree: WorktreeState = {
   stagedFiles: [],
   unstagedFiles: []
 };
+
+const defaultGraphHistoryFilter = (): GitHistoryFilter => ({ mode: "auto" });
 
 const DEFAULT_SOURCE_PANE_HEIGHT = 320;
 const DEFAULT_CONSOLE_HEIGHT = 240;
@@ -79,6 +83,8 @@ export function App() {
   const [projects, setProjects] = useState<GitProject[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [commits, setCommits] = useState<CommitNode[]>([]);
+  const [graphHistoryFilter, setGraphHistoryFilter] = useState<GitHistoryFilter>(() => defaultGraphHistoryFilter());
+  const [graphHistoryRefs, setGraphHistoryRefs] = useState<GitHistoryRef[]>([]);
   const [selectedCommitHash, setSelectedCommitHash] = useState("");
   const [worktree, setWorktree] = useState<WorktreeState>(emptyWorktree);
   const [worktreeTabs, setWorktreeTabs] = useState<WorktreeEditorTab[]>([]);
@@ -231,6 +237,7 @@ export function App() {
   useEffect(() => {
     window.clearTimeout(selectedProjectLoadTimerRef.current);
     const requestId = nextProjectLoadRequestId();
+    const nextHistoryFilter = defaultGraphHistoryFilter();
 
     if (!selectedProject) {
       return;
@@ -238,11 +245,15 @@ export function App() {
 
     if (gitDependency.status !== "ready") {
       setCommits([]);
+      setGraphHistoryRefs([]);
       setSelectedCommitHash("");
       setWorktree(emptyWorktree);
       clearWorktreeEditorTabs();
       return;
     }
+
+    setGraphHistoryFilter(nextHistoryFilter);
+    setGraphHistoryRefs([]);
 
     selectedProjectLoadTimerRef.current = window.setTimeout(() => {
       if (projectLoadRequestRef.current !== requestId) {
@@ -251,7 +262,7 @@ export function App() {
 
       setCommits([]);
       setSelectedCommitHash("");
-      void loadProjectData(selectedProject, requestId);
+      void loadProjectData(selectedProject, requestId, nextHistoryFilter);
     }, PROJECT_SELECTION_LOAD_DELAY_MS);
 
     return () => window.clearTimeout(selectedProjectLoadTimerRef.current);
@@ -403,15 +414,16 @@ export function App() {
     return projectLoadRequestRef.current === requestId;
   }
 
-  async function loadProjectData(project: GitProject, requestId = nextProjectLoadRequestId()) {
+  async function loadProjectData(project: GitProject, requestId = nextProjectLoadRequestId(), historyFilter = graphHistoryFilter) {
     try {
       if (isCurrentProjectLoad(requestId)) {
         rememberStatus(`正在加载 ${project.name} 的 Git 状态...`);
       }
 
-      const [status, history, worktreeState] = await Promise.all([
+      const [status, history, historyRefs, worktreeState] = await Promise.all([
         apiClient.getProjectStatus(project),
-        apiClient.getHistory(project),
+        apiClient.getHistory(project, historyFilter),
+        apiClient.getHistoryRefs(project),
         apiClient.getWorktree(project)
       ]);
 
@@ -436,6 +448,7 @@ export function App() {
       }
 
       setCommits(history);
+      setGraphHistoryRefs(historyRefs);
       setWorktree(worktreeState);
       clearWorktreeEditorTabs();
       setSelectedCommitHash("");
@@ -446,6 +459,7 @@ export function App() {
       }
 
       setCommits([]);
+      setGraphHistoryRefs([]);
       setWorktree(emptyWorktree);
       clearWorktreeEditorTabs();
       notifyError(error instanceof Error ? error.message : "加载项目失败");
@@ -462,6 +476,35 @@ export function App() {
     setSelectedCommitHash(hash);
     const commit = commits.find((item) => item.hash === hash);
     rememberStatus(commit ? `已选中提交 ${commit.shortHash}` : "已选中提交。");
+  }
+
+  async function handleGraphHistoryFilterChange(filter: GitHistoryFilter) {
+    if (!selectedProject) {
+      setGraphHistoryFilter(filter);
+      return;
+    }
+
+    const requestId = nextProjectLoadRequestId();
+    setGraphHistoryFilter(filter);
+    setSelectedCommitHash("");
+    rememberStatus("正在按新的图表引用加载提交...");
+
+    try {
+      const [history, historyRefs] = await Promise.all([apiClient.getHistory(selectedProject, filter), apiClient.getHistoryRefs(selectedProject)]);
+      if (!isCurrentProjectLoad(requestId)) {
+        return;
+      }
+
+      setCommits(history);
+      setGraphHistoryRefs(historyRefs);
+      rememberStatus(history.length > 0 ? `已加载 ${history.length} 条提交。` : "当前引用范围没有可显示的提交。");
+    } catch (error) {
+      if (!isCurrentProjectLoad(requestId)) {
+        return;
+      }
+
+      notifyError(error instanceof Error ? error.message : "无法加载图表引用。");
+    }
   }
 
   async function refreshProjectChanges(project: GitProject) {
@@ -1622,6 +1665,9 @@ export function App() {
               <GraphSidebar
                 project={selectedProject}
                 commits={commits}
+                historyRefs={graphHistoryRefs}
+                historyFilter={graphHistoryFilter}
+                onHistoryFilterChange={(filter) => void handleGraphHistoryFilterChange(filter)}
                 selectedHash={selectedCommitHash}
                 onSelectCommit={handleSelectCommit}
                 onSelectCommitFile={handleSelectCommitFile}

@@ -115,7 +115,8 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("git:getStatus", (_event, repositoryPath: string) => gitService.getStatus(repositoryPath));
-  ipcMain.handle("git:getHistory", (_event, repositoryPath: string) => gitService.getHistory(repositoryPath));
+  ipcMain.handle("git:getHistory", (_event, repositoryPath: string, filter) => gitService.getHistory(repositoryPath, filter));
+  ipcMain.handle("git:getHistoryRefs", (_event, repositoryPath: string) => gitService.getHistoryRefs(repositoryPath));
   ipcMain.handle("git:getCommitDetails", (_event, repositoryPath: string, hash: string) => gitService.getCommitDetails(repositoryPath, hash));
   ipcMain.handle("git:getCommitDiff", (_event, repositoryPath: string, hash: string, filePath?: string) => gitService.getCommitDiff(repositoryPath, hash, filePath));
   ipcMain.handle("git:getWorktree", (_event, repositoryPath: string) => gitService.getWorktree(repositoryPath));

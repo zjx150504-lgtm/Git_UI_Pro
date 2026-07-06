@@ -5,6 +5,8 @@ import type {
   CommitInput,
   CommitNode,
   DiffLine,
+  GitHistoryFilter,
+  GitHistoryRef,
   GitOperationResult,
   GitProject,
   GitResetMode,
@@ -41,7 +43,8 @@ export interface GitUIBridge {
   setProjectFavorite: (projectId: string, favorite: boolean) => Promise<GitProject | undefined>;
   removeProject: (projectId: string) => Promise<boolean>;
   getProjectStatus: (repositoryPath: string) => Promise<GitStatusSummary>;
-  getHistory: (repositoryPath: string) => Promise<CommitNode[]>;
+  getHistory: (repositoryPath: string, filter?: GitHistoryFilter) => Promise<CommitNode[]>;
+  getHistoryRefs: (repositoryPath: string) => Promise<GitHistoryRef[]>;
   getCommitDetails: (repositoryPath: string, hash: string) => Promise<CommitNode>;
   getCommitDiff: (repositoryPath: string, hash: string, filePath?: string) => Promise<DiffLine[]>;
   getWorktree: (repositoryPath: string) => Promise<WorktreeState>;

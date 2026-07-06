@@ -4255,7 +4255,9 @@ button {
 }
 
 .graph-ref-row .ref-chip.primaryBranch,
-.commit-hover-footer .ref-chip.primaryBranch {
+.commit-hover-footer .ref-chip.primaryBranch,
+.graph-ref-row .ref-chip.selectedRef,
+.commit-hover-footer .ref-chip.selectedRef {
   background: #a94f00;
   color: #fff1d6;
 }
@@ -4658,6 +4660,32 @@ button {
   min-height: 26px;
 }
 
+.graph-ref-filter-button {
+  display: inline-flex;
+  flex: 0 1 auto;
+  gap: 4px;
+  align-items: center;
+  max-width: 92px;
+  min-height: 26px;
+  border-radius: 5px;
+  padding: 0 6px;
+  color: var(--muted-strong);
+  background: transparent;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.graph-ref-filter-button span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.graph-ref-filter-button:hover,
+.graph-ref-filter-button.active {
+  color: var(--text);
+  background: var(--surface);
+}
+
 .graph-view-menu {
   top: 30px;
   right: 0;
@@ -4693,6 +4721,124 @@ button {
 
 .graph-view-menu button:hover {
   background: var(--surface);
+}
+
+.graph-refs-menu {
+  position: fixed;
+  z-index: 320;
+  width: min(360px, calc(100vw - 20px));
+  max-height: min(460px, calc(100vh - 80px));
+  overflow: hidden;
+}
+
+.graph-refs-menu-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+  min-height: 34px;
+  border-bottom: 1px solid var(--border);
+  padding: 4px 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.graph-refs-menu .graph-refs-apply {
+  display: inline-flex;
+  width: auto;
+  min-height: 24px;
+  border-radius: 4px;
+  padding: 0 9px;
+  color: #ffffff;
+  background: var(--accent);
+  font-size: 12px;
+}
+
+.graph-refs-menu .graph-refs-apply:hover {
+  background: var(--accent-strong);
+}
+
+.graph-refs-search {
+  margin: 6px;
+}
+
+.graph-refs-static {
+  display: grid;
+  gap: 1px;
+  padding: 0 4px 4px;
+}
+
+.graph-refs-list {
+  max-height: 322px;
+  overflow: auto;
+  padding: 0 4px 6px;
+}
+
+.graph-refs-group-title {
+  padding: 7px 8px 3px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.graph-refs-menu button {
+  display: grid;
+  grid-template-columns: 18px 16px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  width: 100%;
+  min-height: 34px;
+  border-radius: 4px;
+  padding: 3px 7px;
+  text-align: left;
+}
+
+.graph-refs-menu .graph-refs-apply {
+  display: inline-flex;
+  width: auto;
+  min-height: 24px;
+  padding: 0 9px;
+  text-align: center;
+}
+
+.graph-refs-static button {
+  grid-template-columns: 18px minmax(0, 1fr);
+}
+
+.graph-refs-menu button:hover,
+.graph-refs-menu button.active {
+  background: var(--surface);
+}
+
+.graph-ref-picker-text,
+.graph-refs-static button > span:last-child {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.graph-ref-picker-text strong,
+.graph-refs-static strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-ref-picker-text small,
+.graph-refs-static small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-refs-empty {
+  padding: 10px;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .graph-commit-menu {

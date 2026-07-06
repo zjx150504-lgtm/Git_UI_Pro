@@ -6,6 +6,8 @@ import type {
   CommitInput,
   CommitNode,
   DiffLine,
+  GitHistoryFilter,
+  GitHistoryRef,
   GitOperationResult,
   GitProject,
   GitResetMode,
@@ -187,13 +189,26 @@ export const apiClient = {
     return project.status;
   },
 
-  async getHistory(project: GitProject): Promise<CommitNode[]> {
+  async getHistory(project: GitProject, filter: GitHistoryFilter = { mode: "auto" }): Promise<CommitNode[]> {
     if (window.gitUI) {
-      return window.gitUI.getHistory(project.path);
+      return window.gitUI.getHistory(project.path, filter);
     }
 
     await wait(mockDelay);
     return mockCommits;
+  },
+
+  async getHistoryRefs(project: GitProject): Promise<GitHistoryRef[]> {
+    if (window.gitUI) {
+      return window.gitUI.getHistoryRefs(project.path);
+    }
+
+    await wait(mockDelay);
+    return [
+      { id: "refs/heads/master", name: "master", type: "branch", revision: mockCommits[0]?.hash ?? "", category: "branches", current: true },
+      { id: "refs/remotes/origin/master", name: "origin/master", type: "remoteBranch", revision: mockCommits[0]?.hash ?? "", category: "remote branches", upstream: true },
+      { id: "refs/tags/v0.1-prd", name: "v0.1-prd", type: "tag", revision: mockCommits[1]?.hash ?? "", category: "tags" }
+    ];
   },
 
   async getCommitDetails(project: GitProject, hash: string): Promise<CommitNode> {

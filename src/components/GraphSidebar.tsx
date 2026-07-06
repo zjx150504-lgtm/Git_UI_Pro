@@ -16,19 +16,23 @@ import {
   RefreshCw,
   RotateCcw,
   Search,
+  Tag,
   Undo2
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type UIEvent as ReactUIEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type RefObject, type UIEvent as ReactUIEvent } from "react";
 import { createPortal } from "react-dom";
 import { apiClient } from "../api/client";
 import { PathTooltip } from "./PathTooltip";
-import type { ChangedFile, CommitGraphAction, CommitNode, CommitRef, GitOperationState, GitProject } from "../types/domain";
+import type { ChangedFile, CommitGraphAction, CommitNode, CommitRef, GitHistoryFilter, GitHistoryRef, GitOperationState, GitProject } from "../types/domain";
 import { fileIconInfo } from "../utils/fileIcon";
 import { absoluteFilePath } from "../utils/filePath";
 
 interface GraphSidebarProps {
   project?: GitProject;
   commits: CommitNode[];
+  historyRefs: GitHistoryRef[];
+  historyFilter: GitHistoryFilter;
+  onHistoryFilterChange: (filter: GitHistoryFilter) => void;
   selectedHash: string;
   onSelectCommit: (hash: string) => void;
   onSelectCommitFile: (commit: CommitNode, file: ChangedFile) => void;
@@ -110,7 +114,8 @@ type CommitContextMenuState = {
 type GraphBranchContext = {
   currentBranch?: string;
   upstream?: string;
-  primaryBranches: Set<string>;
+  visibleRefIds: Set<string>;
+  showAllRefs: boolean;
 };
 
 const GRAPH_TOOLBAR_ICON_SIZE = 16;
@@ -124,10 +129,15 @@ const GRAPH_VIRTUAL_THRESHOLD = 140;
 const GRAPH_VIRTUAL_OVERSCAN = 20;
 const GRAPH_OPERATION_ROW_HEIGHT = 28;
 const GRAPH_SYNC_ROW_HEIGHT = 26;
+const GRAPH_REFS_MENU_WIDTH = 360;
+const GRAPH_REFS_MENU_ESTIMATED_HEIGHT = 360;
 
 export function GraphSidebar({
   project,
   commits,
+  historyRefs,
+  historyFilter,
+  onHistoryFilterChange,
   selectedHash,
   onSelectCommit,
   onSelectCommitFile,
@@ -142,6 +152,10 @@ export function GraphSidebar({
   const [commitQuery, setCommitQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [fileViewMode, setFileViewMode] = useState<GraphFileViewMode>("list");
+  const [refsMenuOpen, setRefsMenuOpen] = useState(false);
+  const [refsMenuPosition, setRefsMenuPosition] = useState<{ top: number; left: number } | null>(null);
+  const [refsQuery, setRefsQuery] = useState("");
+  const [refsDraftFilter, setRefsDraftFilter] = useState<GitHistoryFilter | null>(null);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [viewMenuPosition, setViewMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [commitContextMenu, setCommitContextMenu] = useState<CommitContextMenuState | null>(null);
@@ -156,6 +170,8 @@ export function GraphSidebar({
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const searchRowRef = useRef<HTMLDivElement>(null);
   const graphListRef = useRef<HTMLDivElement>(null);
+  const refsButtonRef = useRef<HTMLButtonElement>(null);
+  const refsMenuRef = useRef<HTMLDivElement>(null);
   const viewMenuButtonRef = useRef<HTMLButtonElement>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const commitContextMenuRef = useRef<HTMLDivElement>(null);
@@ -172,7 +188,8 @@ export function GraphSidebar({
 
     return commits.filter((commit) => `${commit.hash} ${commit.subject} ${commit.authorName} ${commit.authorEmail}`.toLowerCase().includes(keyword));
   }, [commits, commitQuery]);
-  const graphContext = useMemo(() => buildGraphBranchContext(project), [project?.status?.currentBranch, project?.status?.upstream]);
+  const graphContext = useMemo(() => buildGraphBranchContext(project, historyRefs, historyFilter), [project, historyRefs, historyFilter]);
+  const historyFilterLabel = graphHistoryFilterLabel(historyFilter, historyRefs);
   const rowTones = useMemo(() => buildGraphTones(filteredCommits, graphContext), [filteredCommits, graphContext]);
   const graphLayouts = useMemo(() => buildGraphLayouts(filteredCommits, rowTones, graphContext), [filteredCommits, rowTones, graphContext]);
   const operationProject = project && (project.status?.operationState || project.status?.hasConflicts) ? project : undefined;
@@ -257,6 +274,33 @@ export function GraphSidebar({
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
   }, [searchOpen]);
+
+  useEffect(() => {
+    if (!refsMenuOpen) {
+      return;
+    }
+
+    const onPointerDown = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (refsMenuRef.current?.contains(target) || refsButtonRef.current?.contains(target)) {
+        return;
+      }
+
+      closeRefsMenu();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        closeRefsMenu();
+      }
+    };
+
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [refsMenuOpen]);
 
   useEffect(() => {
     if (!viewMenuOpen) {
@@ -390,6 +434,52 @@ export function GraphSidebar({
     setViewMenuOpen(false);
   }
 
+  function closeRefsMenu() {
+    setRefsMenuOpen(false);
+    setRefsDraftFilter(null);
+  }
+
+  function toggleRefsMenu() {
+    const rect = refsButtonRef.current?.getBoundingClientRect();
+    if (rect) {
+      const opensUp = rect.bottom + GRAPH_REFS_MENU_ESTIMATED_HEIGHT > window.innerHeight - 8;
+      setRefsMenuPosition({
+        top: opensUp ? Math.max(8, rect.top - GRAPH_REFS_MENU_ESTIMATED_HEIGHT - 4) : rect.bottom + 4,
+        left: Math.max(8, Math.min(rect.left, window.innerWidth - GRAPH_REFS_MENU_WIDTH - 8))
+      });
+    }
+
+    setSearchOpen(false);
+    setViewMenuOpen(false);
+    setRefsMenuOpen((value) => {
+      const nextOpen = !value;
+      setRefsDraftFilter(nextOpen ? cloneHistoryFilter(historyFilter) : null);
+      return nextOpen;
+    });
+  }
+
+  function selectHistoryFilterMode(mode: Exclude<GitHistoryFilter["mode"], "custom">) {
+    setRefsQuery("");
+    setRefsDraftFilter({ mode });
+  }
+
+  function toggleHistoryRef(ref: GitHistoryRef) {
+    const draftFilter = refsDraftFilter ?? historyFilter;
+    const currentRefIds = draftFilter.mode === "custom" ? draftFilter.refIds ?? [] : [];
+    const nextRefIds = currentRefIds.includes(ref.id) ? currentRefIds.filter((id) => id !== ref.id) : [...currentRefIds, ref.id];
+    if (nextRefIds.length === 0) {
+      setRefsDraftFilter({ mode: "auto" });
+      return;
+    }
+
+    setRefsDraftFilter({ mode: "custom", refIds: nextRefIds });
+  }
+
+  function applyHistoryRefFilter() {
+    onHistoryFilterChange(refsDraftFilter ?? historyFilter);
+    closeRefsMenu();
+  }
+
   function toggleViewMenu() {
     const rect = viewMenuButtonRef.current?.getBoundingClientRect();
     if (rect) {
@@ -509,6 +599,20 @@ export function GraphSidebar({
         </PathTooltip>
         {panelOpen ? (
           <div className="graph-toolbar" aria-label="图表操作">
+            <PathTooltip content="选择图表引用" className="graph-toolbar-tooltip">
+              <button
+                ref={refsButtonRef}
+                type="button"
+                className={`graph-ref-filter-button ${refsMenuOpen ? "active" : ""}`}
+                aria-label="选择图表引用"
+                aria-haspopup="menu"
+                aria-expanded={refsMenuOpen}
+                onClick={toggleRefsMenu}
+              >
+                <GitBranch size={14} />
+                <span>{historyFilterLabel}</span>
+              </button>
+            </PathTooltip>
             <PathTooltip content="搜索提交" className="graph-toolbar-tooltip">
               <button
                 ref={searchButtonRef}
@@ -546,6 +650,22 @@ export function GraphSidebar({
                 <MoreHorizontal size={GRAPH_TOOLBAR_ICON_SIZE} />
               </button>
             </PathTooltip>
+            {refsMenuOpen && refsMenuPosition && typeof document !== "undefined"
+              ? createPortal(
+                  <GraphHistoryRefsMenu
+                    refs={historyRefs}
+                    filter={refsDraftFilter ?? historyFilter}
+                    query={refsQuery}
+                    onQueryChange={setRefsQuery}
+                    onSelectMode={selectHistoryFilterMode}
+                    onToggleRef={toggleHistoryRef}
+                    onApply={applyHistoryRefFilter}
+                    menuRef={refsMenuRef}
+                    style={refsMenuPosition}
+                  />,
+                  document.querySelector(".app-shell") ?? document.body
+                )
+              : null}
             {viewMenuOpen && viewMenuPosition && typeof document !== "undefined"
               ? createPortal(
                   <div className="floating-menu graph-view-menu graph-view-menu-portal" role="menu" style={viewMenuPosition} ref={viewMenuRef}>
@@ -705,6 +825,92 @@ export function GraphSidebar({
   );
 }
 
+function GraphHistoryRefsMenu({
+  refs,
+  filter,
+  query,
+  onQueryChange,
+  onSelectMode,
+  onToggleRef,
+  onApply,
+  menuRef,
+  style
+}: {
+  refs: GitHistoryRef[];
+  filter: GitHistoryFilter;
+  query: string;
+  onQueryChange: (query: string) => void;
+  onSelectMode: (mode: Exclude<GitHistoryFilter["mode"], "custom">) => void;
+  onToggleRef: (ref: GitHistoryRef) => void;
+  onApply: () => void;
+  menuRef: RefObject<HTMLDivElement>;
+  style: CSSProperties;
+}) {
+  const selectedRefIds = new Set(filter.mode === "custom" ? filter.refIds ?? [] : []);
+  const selectedCount = filter.mode === "all" || filter.mode === "auto" ? 1 : selectedRefIds.size;
+  const filteredRefs = filterHistoryRefs(refs, query);
+  const groups = groupHistoryRefs(filteredRefs);
+
+  return (
+    <div className="floating-menu graph-refs-menu graph-refs-menu-portal" role="menu" style={style} ref={menuRef} onPointerDown={(event) => event.stopPropagation()}>
+      <div className="graph-refs-menu-header">
+        <span>已选 {selectedCount} 项</span>
+        <button type="button" className="graph-refs-apply" onClick={onApply}>
+          确定
+        </button>
+      </div>
+      <label className="history-search graph-refs-search">
+        <Search size={14} />
+        <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="筛选分支或标签" />
+      </label>
+      <div className="graph-refs-static">
+        <button type="button" role="menuitemcheckbox" aria-checked={filter.mode === "all"} className={filter.mode === "all" ? "active" : ""} onClick={() => onSelectMode("all")}>
+          <span className="graph-view-menu-check" aria-hidden="true">
+            {filter.mode === "all" ? <Check size={14} /> : null}
+          </span>
+          <span>
+            <strong>全部</strong>
+            <small>所有历史记录项引用</small>
+          </span>
+        </button>
+        <button type="button" role="menuitemcheckbox" aria-checked={filter.mode === "auto"} className={filter.mode === "auto" ? "active" : ""} onClick={() => onSelectMode("auto")}>
+          <span className="graph-view-menu-check" aria-hidden="true">
+            {filter.mode === "auto" ? <Check size={14} /> : null}
+          </span>
+          <span>
+            <strong>自动</strong>
+            <small>当前历史记录项引用</small>
+          </span>
+        </button>
+      </div>
+      <div className="graph-refs-list">
+        {groups.map((group) => (
+          <div className="graph-refs-group" key={group.category}>
+            <div className="graph-refs-group-title">{historyRefCategoryLabel(group.category)}</div>
+            {group.refs.map((ref) => {
+              const selected = selectedRefIds.has(ref.id);
+              const Icon = ref.type === "remoteBranch" ? Cloud : ref.type === "tag" ? Tag : GitBranch;
+              return (
+                <button type="button" role="menuitemcheckbox" aria-checked={selected} className={selected ? "active" : ""} key={ref.id} onClick={() => onToggleRef(ref)}>
+                  <span className="graph-view-menu-check" aria-hidden="true">
+                    {selected ? <Check size={14} /> : null}
+                  </span>
+                  <Icon size={14} />
+                  <span className="graph-ref-picker-text">
+                    <strong>{ref.name}</strong>
+                    <small>{historyRefDescription(ref)}</small>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        ))}
+        {filteredRefs.length === 0 ? <div className="graph-refs-empty">没有匹配的引用。</div> : null}
+      </div>
+    </div>
+  );
+}
+
 function GraphCommitRow({
   commit,
   graphContext,
@@ -777,7 +983,15 @@ function GraphCommitRow({
             <span className="graph-ref-row">
               {visibleRefs.map((ref) => (
                 <span className={refChipClassName(ref, graphContext)} key={`${commit.hash}-${ref.type}-${ref.name}`}>
-                  {ref.type === "remoteBranch" ? <Cloud size={10} /> : ref.type === "localBranch" ? <GitBranch size={10} /> : null}
+                  {ref.type === "remoteBranch" ? (
+                    <Cloud size={10} />
+                  ) : ref.type === "localBranch" ? (
+                    <GitBranch size={10} />
+                  ) : ref.type === "tag" ? (
+                    <Tag size={10} />
+                  ) : (
+                    <GitCommitHorizontal size={10} />
+                  )}
                   <span className="ref-chip-label">{ref.name}</span>
                 </span>
               ))}
@@ -1170,27 +1384,32 @@ function directoryName(filePath: string): string {
   return parts.length > 0 ? parts.join("/") : "";
 }
 
-function buildGraphBranchContext(project?: GitProject): GraphBranchContext {
+function buildGraphBranchContext(project: GitProject | undefined, historyRefs: GitHistoryRef[], historyFilter: GitHistoryFilter): GraphBranchContext {
   const currentBranch = project?.status?.currentBranch ?? undefined;
   const upstream = project?.status?.upstream;
+  const visibleRefIds = new Set<string>();
+  const currentRef = historyRefs.find((ref) => ref.current) ?? (currentBranch ? { id: `refs/heads/${currentBranch}` } : undefined);
+  const upstreamRef = historyRefs.find((ref) => ref.upstream) ?? (upstream ? { id: `refs/remotes/${upstream}` } : undefined);
+
+  if (historyFilter.mode === "custom") {
+    for (const refId of historyFilter.refIds ?? []) {
+      visibleRefIds.add(refId);
+    }
+  } else if (historyFilter.mode === "auto") {
+    if (currentRef) {
+      visibleRefIds.add(currentRef.id);
+    }
+    if (upstreamRef) {
+      visibleRefIds.add(upstreamRef.id);
+    }
+  }
 
   return {
     currentBranch,
     upstream,
-    primaryBranches: primaryBranchNames(upstream)
+    visibleRefIds,
+    showAllRefs: historyFilter.mode === "all"
   };
-}
-
-function primaryBranchNames(upstream?: string): Set<string> {
-  const names = new Set(["master", "main", "origin/master", "origin/main"]);
-  const remoteName = upstream ? upstream.split("/")[0] : undefined;
-
-  if (remoteName) {
-    names.add(`${remoteName}/master`);
-    names.add(`${remoteName}/main`);
-  }
-
-  return names;
 }
 
 function visibleRefsForCommit(commit: CommitNode, graphContext: GraphBranchContext): CommitRef[] {
@@ -1200,11 +1419,19 @@ function visibleRefsForCommit(commit: CommitNode, graphContext: GraphBranchConte
 }
 
 function isVisibleGraphRef(ref: CommitRef, graphContext: GraphBranchContext): boolean {
-  if (ref.type === "head" || ref.name.endsWith("/HEAD")) {
+  if (ref.name.endsWith("/HEAD")) {
     return false;
   }
 
-  return isCurrentBranchRef(ref, graphContext) || isUpstreamBranchRef(ref, graphContext) || isPrimaryBranchRef(ref, graphContext);
+  if (ref.type === "head") {
+    return !graphContext.currentBranch;
+  }
+
+  if (graphContext.showAllRefs) {
+    return true;
+  }
+
+  return graphContext.visibleRefIds.has(commitRefId(ref)) || isCurrentBranchRef(ref, graphContext) || isUpstreamBranchRef(ref, graphContext);
 }
 
 function isCurrentBranchRef(ref: CommitRef, graphContext: GraphBranchContext): boolean {
@@ -1213,18 +1440,6 @@ function isCurrentBranchRef(ref: CommitRef, graphContext: GraphBranchContext): b
 
 function isUpstreamBranchRef(ref: CommitRef, graphContext: GraphBranchContext): boolean {
   return ref.type === "remoteBranch" && Boolean(graphContext.upstream) && ref.name === graphContext.upstream;
-}
-
-function isPrimaryBranchRef(ref: CommitRef, graphContext: GraphBranchContext): boolean {
-  if (ref.type !== "localBranch" && ref.type !== "remoteBranch") {
-    return false;
-  }
-
-  if (isCurrentBranchRef(ref, graphContext) || isUpstreamBranchRef(ref, graphContext)) {
-    return false;
-  }
-
-  return graphContext.primaryBranches.has(ref.name);
 }
 
 function graphRefPriority(ref: CommitRef, graphContext: GraphBranchContext): number {
@@ -1236,15 +1451,104 @@ function graphRefPriority(ref: CommitRef, graphContext: GraphBranchContext): num
     return 1;
   }
 
-  if (isPrimaryBranchRef(ref, graphContext)) {
-    return ref.type === "remoteBranch" ? 2 : 3;
+  if (graphContext.visibleRefIds.has(commitRefId(ref))) {
+    return 2;
   }
 
-  return 4;
+  if (ref.type === "tag") {
+    return 4;
+  }
+
+  return 3;
 }
 
 function refChipClassName(ref: CommitRef, graphContext: GraphBranchContext): string {
-  return `ref-chip ${ref.type} ${isPrimaryBranchRef(ref, graphContext) ? "primaryBranch" : ""}`;
+  return `ref-chip ${ref.type} ${graphContext.visibleRefIds.has(commitRefId(ref)) ? "selectedRef" : ""}`;
+}
+
+function commitRefId(ref: CommitRef): string {
+  switch (ref.type) {
+    case "localBranch":
+      return `refs/heads/${ref.name}`;
+    case "remoteBranch":
+      return `refs/remotes/${ref.name}`;
+    case "tag":
+      return `refs/tags/${ref.name}`;
+    case "head":
+      return "HEAD";
+  }
+}
+
+function graphHistoryFilterLabel(filter: GitHistoryFilter, refs: GitHistoryRef[]): string {
+  if (filter.mode === "all") {
+    return "全部";
+  }
+
+  if (filter.mode === "auto") {
+    return "自动";
+  }
+
+  const refIds = filter.refIds ?? [];
+  if (refIds.length === 1) {
+    return refs.find((ref) => ref.id === refIds[0])?.name ?? "1 项";
+  }
+
+  return `${refIds.length} 项`;
+}
+
+function cloneHistoryFilter(filter: GitHistoryFilter): GitHistoryFilter {
+  return filter.mode === "custom" ? { mode: "custom", refIds: [...(filter.refIds ?? [])] } : { mode: filter.mode };
+}
+
+function filterHistoryRefs(refs: GitHistoryRef[], query: string): GitHistoryRef[] {
+  const keyword = query.trim().toLowerCase();
+  if (!keyword) {
+    return refs;
+  }
+
+  return refs.filter((ref) => `${ref.name} ${ref.id} ${ref.category}`.toLowerCase().includes(keyword));
+}
+
+function groupHistoryRefs(refs: GitHistoryRef[]): Array<{ category: GitHistoryRef["category"]; refs: GitHistoryRef[] }> {
+  const categoryOrder: GitHistoryRef["category"][] = ["branches", "remote branches", "tags"];
+  return categoryOrder
+    .map((category) => ({
+      category,
+      refs: refs.filter((ref) => ref.category === category)
+    }))
+    .filter((group) => group.refs.length > 0);
+}
+
+function historyRefCategoryLabel(category: GitHistoryRef["category"]): string {
+  switch (category) {
+    case "branches":
+      return "分支";
+    case "remote branches":
+      return "远程分支";
+    case "tags":
+      return "标签";
+  }
+}
+
+function historyRefDescription(ref: GitHistoryRef): string {
+  const revision = ref.revision ? ref.revision.slice(0, 7) : "";
+  if (ref.current) {
+    return "当前分支";
+  }
+
+  if (ref.upstream) {
+    return revision ? `${revision} 处的远程分支` : "处的远程分支";
+  }
+
+  if (ref.type === "remoteBranch") {
+    return revision ? `${revision} 处的远程分支` : "远程分支";
+  }
+
+  if (ref.type === "tag") {
+    return revision ? `${revision} 处的标签` : "标签";
+  }
+
+  return revision;
 }
 
 function GraphOperationRow({ project }: { project: GitProject }) {
@@ -1347,7 +1651,15 @@ function CommitHoverCard({
           .slice(0, 4)
           .map((ref) => (
           <span className={refChipClassName(ref, graphContext)} key={`${commit.hash}-${ref.type}-${ref.name}`}>
-            {ref.type === "remoteBranch" ? <Cloud size={10} /> : ref.type === "localBranch" ? <GitBranch size={10} /> : null}
+            {ref.type === "remoteBranch" ? (
+              <Cloud size={10} />
+            ) : ref.type === "localBranch" ? (
+              <GitBranch size={10} />
+            ) : ref.type === "tag" ? (
+              <Tag size={10} />
+            ) : (
+              <GitCommitHorizontal size={10} />
+            )}
             <span className="ref-chip-label">{ref.name}</span>
           </span>
         ))}
@@ -1681,7 +1993,7 @@ function refTone(commit: CommitNode, graphContext: GraphBranchContext): GraphTon
   const visibleRefs = visibleRefsForCommit(commit, graphContext);
   const hasCurrent = visibleRefs.some((ref) => isCurrentBranchRef(ref, graphContext));
   const hasUpstream = visibleRefs.some((ref) => isUpstreamBranchRef(ref, graphContext));
-  const hasPrimary = visibleRefs.some((ref) => isPrimaryBranchRef(ref, graphContext));
+  const hasSelected = visibleRefs.some((ref) => graphContext.visibleRefIds.has(commitRefId(ref)));
 
   if (hasCurrent && hasUpstream) {
     return "synced";
@@ -1695,7 +2007,7 @@ function refTone(commit: CommitNode, graphContext: GraphBranchContext): GraphTon
     return "remote";
   }
 
-  if (hasPrimary) {
+  if (hasSelected) {
     return "primary";
   }
 

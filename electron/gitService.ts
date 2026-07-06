@@ -74,6 +74,23 @@ export interface BranchInfo {
   headHash: string;
 }
 
+export type GitHistoryFilterMode = "auto" | "all" | "custom";
+
+export interface GitHistoryFilter {
+  mode: GitHistoryFilterMode;
+  refIds?: string[];
+}
+
+export interface GitHistoryRef {
+  id: string;
+  name: string;
+  type: "branch" | "remoteBranch" | "tag";
+  revision: string;
+  category: "branches" | "remote branches" | "tags";
+  current?: boolean;
+  upstream?: boolean;
+}
+
 export interface CommitInput {
   subject: string;
   body?: string;
@@ -237,9 +254,9 @@ export class GitService {
     return undefined;
   }
 
-  async getHistory(repositoryPath: string, maxCount = 300): Promise<CommitNode[]> {
+  async getHistory(repositoryPath: string, filter: GitHistoryFilter = { mode: "auto" }, maxCount = 300): Promise<CommitNode[]> {
     const status = await this.getStatus(repositoryPath).catch(() => undefined);
-    const revisions = await this.getHistoryRevisions(repositoryPath, status);
+    const revisions = await this.getHistoryRevisions(repositoryPath, status, filter);
     const format = [
       "%H",
       "%P",
@@ -272,6 +289,65 @@ export class GitService {
     }
 
     return parseCommitLog(result.stdout);
+  }
+
+  async getHistoryRefs(repositoryPath: string): Promise<GitHistoryRef[]> {
+    const [status, refsResult] = await Promise.all([
+      this.getStatus(repositoryPath).catch(() => undefined),
+      this.run(repositoryPath, [
+        "for-each-ref",
+        "refs/heads",
+        "refs/remotes",
+        "refs/tags",
+        `--format=%(refname)${fieldSeparator}%(refname:short)${fieldSeparator}%(objectname)`
+      ])
+    ]);
+
+    if (!refsResult.ok) {
+      throw new Error(refsResult.messageZh ?? "无法读取图表引用列表。");
+    }
+
+    return refsResult.stdout
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line): GitHistoryRef | null => {
+        const [fullName, shortName, revision] = line.split(fieldSeparator);
+        if (!fullName || !shortName || fullName === "refs/remotes/origin/HEAD" || shortName.endsWith("/HEAD")) {
+          return null;
+        }
+
+        if (fullName.startsWith("refs/remotes/")) {
+          return {
+            id: fullName,
+            name: shortName,
+            type: "remoteBranch",
+            revision: revision ?? "",
+            category: "remote branches",
+            upstream: shortName === status?.upstream
+          };
+        }
+
+        if (fullName.startsWith("refs/tags/")) {
+          return {
+            id: fullName,
+            name: shortName,
+            type: "tag",
+            revision: revision ?? "",
+            category: "tags"
+          };
+        }
+
+        return {
+          id: fullName,
+          name: shortName,
+          type: "branch",
+          revision: revision ?? "",
+          category: "branches",
+          current: shortName === status?.currentBranch
+        };
+      })
+      .filter((ref): ref is GitHistoryRef => Boolean(ref))
+      .sort(compareHistoryRefs);
   }
 
   async getCommitDetails(repositoryPath: string, hash: string): Promise<CommitNode> {
@@ -597,35 +673,25 @@ export class GitService {
     return lastResult!;
   }
 
-  private async getHistoryRevisions(repositoryPath: string, status?: GitStatusSummary): Promise<string[]> {
-    const revisions = new Set(["HEAD"]);
-    const availableRefs = await this.getAvailableHistoryRefs(repositoryPath);
-
-    if (status?.upstream) {
-      revisions.add(status.upstream);
+  private async getHistoryRevisions(repositoryPath: string, status?: GitStatusSummary, filter: GitHistoryFilter = { mode: "auto" }): Promise<string[]> {
+    if (filter.mode === "all") {
+      const refs = await this.getHistoryRefs(repositoryPath).catch(() => []);
+      return refs.length > 0 ? refs.map((ref) => ref.id) : ["HEAD"];
     }
 
-    for (const candidate of primaryBranchCandidates(status)) {
-      if (availableRefs.has(candidate)) {
-        revisions.add(candidate);
-      }
+    if (filter.mode === "custom") {
+      const refIds = Array.from(new Set((filter.refIds ?? []).map((ref) => ref.trim()).filter(Boolean)));
+      return refIds.length > 0 ? refIds : ["HEAD"];
+    }
+
+    const revisions = new Set<string>();
+    revisions.add(status?.currentBranch ? `refs/heads/${status.currentBranch}` : "HEAD");
+
+    if (status?.upstream) {
+      revisions.add(`refs/remotes/${status.upstream}`);
     }
 
     return Array.from(revisions);
-  }
-
-  private async getAvailableHistoryRefs(repositoryPath: string): Promise<Set<string>> {
-    const result = await this.run(repositoryPath, ["for-each-ref", "--format=%(refname:short)", "refs/heads", "refs/remotes"]);
-    if (!result.ok) {
-      return new Set();
-    }
-
-    return new Set(
-      result.stdout
-        .split(/\r?\n/)
-        .map((line) => line.trim())
-        .filter((name) => name && !name.endsWith("/HEAD"))
-    );
   }
 
   private async getSingleCommit(repositoryPath: string, hash: string): Promise<CommitNode[]> {
@@ -727,18 +793,6 @@ async function pathExists(filePath: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function primaryBranchCandidates(status?: GitStatusSummary): string[] {
-  const candidates: string[] = [];
-  const remoteName = status?.upstream ? status.upstream.split("/")[0] : undefined;
-
-  if (remoteName) {
-    candidates.push(`${remoteName}/master`, `${remoteName}/main`);
-  }
-
-  candidates.push("origin/master", "origin/main", "master", "main");
-  return Array.from(new Set(candidates));
 }
 
 function parseCommitLog(output: string): CommitNode[] {
@@ -911,6 +965,27 @@ function compareBranches(left: BranchInfo, right: BranchInfo): number {
 
   if (left.type !== right.type) {
     return left.type === "local" ? -1 : 1;
+  }
+
+  return left.name.localeCompare(right.name, "zh-CN", { sensitivity: "base" });
+}
+
+function compareHistoryRefs(left: GitHistoryRef, right: GitHistoryRef): number {
+  if (left.current !== right.current) {
+    return left.current ? -1 : 1;
+  }
+
+  if (left.upstream !== right.upstream) {
+    return left.upstream ? -1 : 1;
+  }
+
+  const typeOrder: Record<GitHistoryRef["type"], number> = {
+    branch: 0,
+    remoteBranch: 1,
+    tag: 2
+  };
+  if (typeOrder[left.type] !== typeOrder[right.type]) {
+    return typeOrder[left.type] - typeOrder[right.type];
   }
 
   return left.name.localeCompare(right.name, "zh-CN", { sensitivity: "base" });
