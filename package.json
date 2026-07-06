@@ -101,7 +101,7 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": "always",
+      "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "Git UI Pro",
       "artifactName": "Git-UI-Pro-Setup-${version}-${arch}.${ext}"

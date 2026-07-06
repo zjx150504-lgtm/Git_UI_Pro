@@ -11,6 +11,8 @@
 
 Windows 安装包使用辅助安装向导，默认按当前用户安装，并允许用户选择安装目录。
 
+安装向导会在开始安装前显示桌面快捷方式选项，默认勾选“创建桌面快捷方式”，用户可以取消。
+
 打包后的 Windows 应用会保留 `contextIsolation` 并关闭 renderer sandbox，以规避部分自定义安装目录下 Electron renderer 子进程启动失败导致的黑屏问题。
 
 ## Windows 签名
