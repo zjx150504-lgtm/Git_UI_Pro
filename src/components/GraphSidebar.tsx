@@ -54,7 +54,8 @@ const graphRowHeight = 28;
 const graphNodeCenterY = 14;
 const graphNodeRadius = 4.2;
 const graphMergeRingRadius = 5.2;
-const graphNodeCurveControl = 6;
+const graphNodeCurveControl = 3.2;
+const graphLaneCurveControl = 5;
 
 type GraphBranchTone = (typeof graphBranchTones)[number];
 type GraphTone = "local" | "remote" | "primary" | "secondary" | "synced" | "plain" | GraphBranchTone;
@@ -1540,7 +1541,7 @@ function graphCurvePath(segment: Extract<GraphSegment, { type: "curve" }>): stri
   const direction = graphCurveDirection(segment.x2, segment.x1);
   const nodeX = segment.x1 + direction * graphMergeRingRadius;
   const nodeControlX = nodeX + direction * graphNodeCurveControl;
-  return `M ${nodeX} ${segment.y1} C ${nodeControlX} ${segment.y1} ${segment.x2} ${midY} ${segment.x2} ${segment.y2}`;
+  return `M ${nodeX} ${segment.y1} C ${nodeControlX} ${segment.y1} ${segment.x2} ${segment.y2 - graphLaneCurveControl} ${segment.x2} ${segment.y2}`;
 }
 
 function graphCurveDirection(targetX: number, originX: number): number {
