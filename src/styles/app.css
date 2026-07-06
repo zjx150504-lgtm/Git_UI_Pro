@@ -4956,6 +4956,7 @@ button {
 
 .graph-commit-expansion {
   position: relative;
+  --graph-file-gutter: 44px;
   margin: -1px 0 0;
   border-left: 0;
   padding: 0;
@@ -4984,7 +4985,7 @@ button {
 
 .graph-commit-file-row {
   position: relative;
-  grid-template-columns: calc(24px + var(--graph-file-indent, 0px)) 20px minmax(0, 1fr) 18px;
+  grid-template-columns: calc(var(--graph-file-gutter) + var(--graph-file-indent, 0px)) 20px minmax(0, 1fr) 18px;
   width: 100%;
   color: var(--text);
   text-align: left;
@@ -5003,7 +5004,7 @@ button {
   top: 1px;
   right: 0;
   bottom: 1px;
-  left: calc(24px + var(--graph-file-indent, 0px));
+  left: calc(var(--graph-file-gutter) + var(--graph-file-indent, 0px));
   border-radius: 3px;
   background: transparent;
   pointer-events: none;
@@ -5015,7 +5016,7 @@ button {
 
 .graph-commit-folder-row {
   display: grid;
-  grid-template-columns: calc(24px + var(--graph-file-indent, 0px)) 20px minmax(0, 1fr);
+  grid-template-columns: calc(var(--graph-file-gutter) + var(--graph-file-indent, 0px)) 20px minmax(0, 1fr);
   gap: 6px;
   align-items: center;
   width: 100%;
