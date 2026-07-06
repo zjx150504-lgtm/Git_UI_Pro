@@ -22,7 +22,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperti
 import { createPortal } from "react-dom";
 import { apiClient } from "../api/client";
 import { PathTooltip } from "./PathTooltip";
-import type { ChangedFile, CommitGraphAction, CommitNode, CommitRef, GitProject } from "../types/domain";
+import type { ChangedFile, CommitGraphAction, CommitNode, CommitRef, GitOperationState, GitProject } from "../types/domain";
 import { fileIconInfo } from "../utils/fileIcon";
 import { absoluteFilePath } from "../utils/filePath";
 
@@ -122,6 +122,7 @@ const COMMIT_HOVER_ARROW_SIZE = 8;
 const COMMIT_DETAILS_PREFETCH_LIMIT = 8;
 const GRAPH_VIRTUAL_THRESHOLD = 140;
 const GRAPH_VIRTUAL_OVERSCAN = 20;
+const GRAPH_OPERATION_ROW_HEIGHT = 28;
 const GRAPH_SYNC_ROW_HEIGHT = 26;
 
 export function GraphSidebar({
@@ -174,6 +175,7 @@ export function GraphSidebar({
   const graphContext = useMemo(() => buildGraphBranchContext(project), [project?.status?.currentBranch, project?.status?.upstream]);
   const rowTones = useMemo(() => buildGraphTones(filteredCommits, graphContext), [filteredCommits, graphContext]);
   const graphLayouts = useMemo(() => buildGraphLayouts(filteredCommits, rowTones, graphContext), [filteredCommits, rowTones, graphContext]);
+  const operationProject = project && (project.status?.operationState || project.status?.hasConflicts) ? project : undefined;
   const syncProject = project && ((project.status?.ahead ?? 0) > 0 || (project.status?.behind ?? 0) > 0) ? project : undefined;
   const localOnlyCount = project?.status?.upstream ? project.status.ahead : commits.length;
   const virtualGraphEnabled = filteredCommits.length > GRAPH_VIRTUAL_THRESHOLD && !expandedHash;
@@ -187,9 +189,9 @@ export function GraphSidebar({
       };
     }
 
-    const syncOffset = syncProject ? GRAPH_SYNC_ROW_HEIGHT : 0;
-    const viewportStart = Math.max(0, graphListScrollTop - syncOffset);
-    const viewportEnd = Math.max(viewportStart, graphListScrollTop + graphListHeight - syncOffset);
+    const fixedRowsOffset = (operationProject ? GRAPH_OPERATION_ROW_HEIGHT : 0) + (syncProject ? GRAPH_SYNC_ROW_HEIGHT : 0);
+    const viewportStart = Math.max(0, graphListScrollTop - fixedRowsOffset);
+    const viewportEnd = Math.max(viewportStart, graphListScrollTop + graphListHeight - fixedRowsOffset);
     const startIndex = clampNumber(Math.floor(viewportStart / graphRowHeight) - GRAPH_VIRTUAL_OVERSCAN, 0, filteredCommits.length);
     const endIndex = clampNumber(Math.ceil(viewportEnd / graphRowHeight) + GRAPH_VIRTUAL_OVERSCAN, startIndex, filteredCommits.length);
 
@@ -199,7 +201,7 @@ export function GraphSidebar({
       topPadding: startIndex * graphRowHeight,
       bottomPadding: (filteredCommits.length - endIndex) * graphRowHeight
     };
-  }, [filteredCommits.length, graphListHeight, graphListScrollTop, syncProject, virtualGraphEnabled]);
+  }, [filteredCommits.length, graphListHeight, graphListScrollTop, operationProject, syncProject, virtualGraphEnabled]);
   const visibleCommits = virtualGraphEnabled ? filteredCommits.slice(graphVirtualRange.startIndex, graphVirtualRange.endIndex) : filteredCommits;
 
   useEffect(
@@ -602,6 +604,7 @@ export function GraphSidebar({
 
           <div className="graph-commit-list" role="list" aria-label="提交图" ref={graphListRef} onScroll={handleGraphListScroll}>
             {filteredCommits.length === 0 ? <div className="empty-state graph-empty">当前仓库没有可显示的提交。</div> : null}
+            {operationProject ? <GraphOperationRow project={operationProject} /> : null}
             {syncProject ? <GraphSyncRow project={syncProject} /> : null}
             {virtualGraphEnabled && graphVirtualRange.topPadding > 0 ? <div className="graph-virtual-spacer" style={{ height: graphVirtualRange.topPadding }} aria-hidden="true" /> : null}
             {visibleCommits.map((commit, visibleIndex) => {
@@ -1244,13 +1247,51 @@ function refChipClassName(ref: CommitRef, graphContext: GraphBranchContext): str
   return `ref-chip ${ref.type} ${isPrimaryBranchRef(ref, graphContext) ? "primaryBranch" : ""}`;
 }
 
+function GraphOperationRow({ project }: { project: GitProject }) {
+  const state = project.status?.operationState;
+  const hasConflicts = Boolean(project.status?.hasConflicts);
+  const branch = project.status?.currentBranch ?? "分离 HEAD";
+  const copy = graphOperationCopy(state, hasConflicts);
+
+  return (
+    <div className={`graph-operation-row ${hasConflicts ? "conflict" : state ?? "status"}`}>
+      <span className="graph-operation-icon">{hasConflicts ? <AlertTriangle size={13} /> : <GitCommitHorizontal size={13} />}</span>
+      <span className="graph-operation-label">{copy.label}</span>
+      <span className="graph-operation-detail">{copy.detail ?? branch}</span>
+    </div>
+  );
+}
+
+function graphOperationCopy(state: GitOperationState | undefined, hasConflicts: boolean): { label: string; detail?: string } {
+  if (!state) {
+    return {
+      label: hasConflicts ? "存在冲突" : "Git 操作进行中",
+      detail: hasConflicts ? "先处理冲突文件" : undefined
+    };
+  }
+
+  const conflictSuffix = hasConflicts ? "，解决冲突后继续" : "";
+  switch (state) {
+    case "merge":
+      return { label: "正在合并", detail: `合并操作进行中${conflictSuffix}` };
+    case "rebase":
+      return { label: "正在变基", detail: `变基操作进行中${conflictSuffix}` };
+    case "cherry-pick":
+      return { label: "正在 Cherry-pick", detail: `摘取提交进行中${conflictSuffix}` };
+    case "revert":
+      return { label: "正在还原", detail: `还原提交进行中${conflictSuffix}` };
+    case "bisect":
+      return { label: "正在二分定位", detail: "Git bisect 操作进行中" };
+  }
+}
+
 function GraphSyncRow({ project }: { project: GitProject }) {
   const branch = project.status?.currentBranch ?? "当前分支";
   const ahead = project.status?.ahead ?? 0;
   const behind = project.status?.behind ?? 0;
   const label =
     ahead > 0 && behind > 0
-      ? `待同步 ${ahead + behind} 个提交`
+      ? `待推送 ${ahead} / 待拉取 ${behind}`
       : ahead > 0
         ? `待推送 ${ahead} 个提交`
         : `待拉取 ${behind} 个提交`;

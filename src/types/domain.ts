@@ -19,8 +19,10 @@ export interface GitStatusSummary {
   unstagedCount: number;
   untrackedCount: number;
   hasConflicts: boolean;
-  operationState?: "merge" | "rebase" | "cherry-pick" | "revert";
+  operationState?: GitOperationState;
 }
+
+export type GitOperationState = "merge" | "rebase" | "cherry-pick" | "revert" | "bisect";
 
 export interface CommitNode {
   hash: string;

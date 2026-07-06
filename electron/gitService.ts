@@ -20,7 +20,7 @@ export interface GitStatusSummary {
   unstagedCount: number;
   untrackedCount: number;
   hasConflicts: boolean;
-  operationState?: "merge" | "rebase" | "cherry-pick" | "revert";
+  operationState?: GitOperationState;
 }
 
 export interface ChangedFile {
@@ -87,12 +87,21 @@ export interface CommitMessageInput {
 }
 
 export type GitResetMode = "soft" | "mixed" | "hard";
+export type GitOperationState = "merge" | "rebase" | "cherry-pick" | "revert" | "bisect";
 
 const fieldSeparator = "\x1f";
 const recordSeparator = "\x1e";
 const resetCommandTimeoutMs = 30_000;
 
 const graphColors = ["#51c2a9", "#7aa7ff", "#d69cff", "#f0c36b", "#ef6b73", "#8bd38b"];
+const gitOperationMarkers: Array<{ path: string; state: GitOperationState }> = [
+  { path: "rebase-merge", state: "rebase" },
+  { path: "rebase-apply", state: "rebase" },
+  { path: "MERGE_HEAD", state: "merge" },
+  { path: "CHERRY_PICK_HEAD", state: "cherry-pick" },
+  { path: "REVERT_HEAD", state: "revert" },
+  { path: "BISECT_LOG", state: "bisect" }
+];
 
 const skippedDirectoryNames = new Set([
   ".git",
@@ -200,7 +209,32 @@ export class GitService {
     if (!result.ok) {
       throw new Error(result.messageZh ?? "无法读取仓库状态。");
     }
-    return parseStatus(result.stdout);
+
+    const summary = parseStatus(result.stdout);
+    summary.operationState = await this.getOperationState(repositoryPath);
+    return summary;
+  }
+
+  private async getOperationState(repositoryPath: string): Promise<GitOperationState | undefined> {
+    const result = await this.run(repositoryPath, ["rev-parse", ...gitOperationMarkers.flatMap((marker) => ["--git-path", marker.path])]);
+    if (!result.ok) {
+      return undefined;
+    }
+
+    const markerPaths = result.stdout.split(/\r?\n/).filter(Boolean);
+    for (const [index, marker] of gitOperationMarkers.entries()) {
+      const markerPath = markerPaths[index];
+      if (!markerPath) {
+        continue;
+      }
+
+      const absoluteMarkerPath = path.isAbsolute(markerPath) ? markerPath : path.resolve(repositoryPath, markerPath);
+      if (await pathExists(absoluteMarkerPath)) {
+        return marker.state;
+      }
+    }
+
+    return undefined;
   }
 
   async getHistory(repositoryPath: string, maxCount = 300): Promise<CommitNode[]> {
@@ -684,6 +718,15 @@ function parseStatus(output: string): GitStatusSummary {
   }
 
   return summary;
+}
+
+async function pathExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function primaryBranchCandidates(status?: GitStatusSummary): string[] {

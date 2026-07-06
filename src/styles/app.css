@@ -4051,6 +4051,46 @@ button {
   flex: 0 0 24px;
 }
 
+.graph-operation-row {
+  display: grid;
+  grid-template-columns: 24px auto minmax(0, 1fr);
+  gap: 7px;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.graph-operation-icon {
+  display: inline-grid;
+  width: 16px;
+  height: 16px;
+  margin-left: 0;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.graph-operation-row.conflict .graph-operation-icon {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
+}
+
+.graph-operation-label {
+  color: var(--text);
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.graph-operation-detail {
+  overflow: hidden;
+  color: var(--muted-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .graph-sync-row {
   display: grid;
   grid-template-columns: 24px auto minmax(0, 1fr);
