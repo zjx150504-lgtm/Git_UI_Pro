@@ -2478,7 +2478,7 @@ button {
 
 .source-control-pane .graph-section-title {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-columns: max-content minmax(0, 1fr);
   gap: 8px;
   min-height: 34px;
   border-top: 0;
@@ -2527,7 +2527,7 @@ button {
 }
 
 .source-control-pane .graph-commit-list {
-  padding: 2px 8px 10px;
+  padding: 2px 4px 10px;
 }
 
 .source-control-pane .graph-commit-row {
@@ -2966,7 +2966,7 @@ button {
 }
 
 .source-control-pane .graph-section-title {
-  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-columns: max-content minmax(0, 1fr);
 }
 
 .source-control-pane .graph-section-title > .graph-title-toggle {
@@ -4593,7 +4593,7 @@ button {
 
 .source-control-pane .graph-section-title {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) max-content;
+  grid-template-columns: max-content minmax(0, 1fr);
   gap: 6px;
   padding: 0 10px;
   overflow: visible;
@@ -4604,6 +4604,7 @@ button {
   gap: 4px;
   align-items: center;
   min-width: 0;
+  white-space: nowrap;
 }
 
 .graph-title-toggle {
@@ -4652,7 +4653,11 @@ button {
 .graph-toolbar {
   position: relative;
   z-index: 30;
-  overflow: visible;
+  display: flex;
+  flex-wrap: nowrap;
+  min-width: 0;
+  justify-content: flex-end;
+  overflow: hidden;
 }
 
 .graph-toolbar .compact-icon {
@@ -4667,25 +4672,48 @@ button {
   flex: 0 1 auto;
   gap: 4px;
   align-items: center;
-  max-width: 92px;
+  justify-content: flex-start;
+  width: auto;
+  min-width: 0;
+  max-width: 128px;
   min-height: 26px;
   border-radius: 5px;
-  padding: 0 6px;
+  padding: 0 2px;
   color: var(--muted-strong);
-  background: transparent;
+  background: transparent !important;
   font-size: 12px;
   white-space: nowrap;
+  box-shadow: none;
+  appearance: none;
+}
+
+.graph-ref-filter-button svg {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
 }
 
 .graph-ref-filter-button span {
+  display: block;
+  flex: 0 1 auto;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  margin: 0;
+  place-items: initial;
+  border-radius: 0;
+  color: inherit;
+  background: transparent !important;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .graph-ref-filter-button:hover,
-.graph-ref-filter-button.active {
+.graph-ref-filter-button.active,
+.graph-ref-filter-button:active {
   color: var(--text);
-  background: transparent;
+  background: transparent !important;
+  box-shadow: none;
 }
 
 .graph-view-menu {
@@ -4725,122 +4753,112 @@ button {
   background: var(--surface);
 }
 
-.graph-refs-menu {
-  position: fixed;
+.graph-refs-dialog-backdrop {
   z-index: 320;
-  width: min(360px, calc(100vw - 20px));
-  max-height: min(460px, calc(100vh - 80px));
-  overflow: hidden;
+  padding-top: 72px;
 }
 
-.graph-refs-menu-header {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  justify-content: flex-end;
-  min-height: 34px;
-  border-bottom: 1px solid var(--border);
-  padding: 4px 6px;
+.graph-refs-dialog {
+  width: min(440px, calc(100vw - 48px));
+  max-height: min(620px, calc(100vh - 96px));
+}
+
+.graph-refs-dialog .branch-dialog-title small {
+  overflow: hidden;
   color: var(--muted);
   font-size: 12px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.graph-refs-menu .graph-refs-apply {
-  display: inline-flex;
-  width: auto;
-  min-height: 24px;
-  border-radius: 4px;
-  padding: 0 9px;
-  color: #ffffff;
-  background: var(--accent);
-  font-size: 12px;
-}
-
-.graph-refs-menu .graph-refs-apply:hover {
-  background: var(--accent-strong);
+.graph-refs-switch-panel {
+  gap: 8px;
+  padding: 10px;
 }
 
 .graph-refs-search {
-  margin: 6px;
-}
-
-.graph-refs-static {
-  display: grid;
-  gap: 1px;
-  padding: 0 4px 4px;
+  margin: 0;
 }
 
 .graph-refs-list {
-  max-height: 322px;
-  overflow: auto;
-  padding: 0 4px 6px;
+  gap: 1px;
+  max-height: min(470px, calc(100vh - 210px));
+  padding-right: 2px;
+}
+
+.graph-refs-group {
+  display: grid;
+  gap: 1px;
 }
 
 .graph-refs-group-title {
-  padding: 7px 8px 3px;
+  padding: 8px 8px 3px;
   color: var(--muted);
   font-size: 11px;
 }
 
-.graph-refs-menu button {
-  display: grid;
-  grid-template-columns: 18px 16px minmax(0, 1fr);
-  gap: 6px;
-  align-items: center;
-  width: 100%;
+.graph-ref-mode-item,
+.graph-ref-list-item {
   min-height: 34px;
-  border-radius: 4px;
-  padding: 3px 7px;
-  text-align: left;
 }
 
-.graph-refs-menu .graph-refs-apply {
-  display: inline-flex;
-  width: auto;
-  min-height: 24px;
-  padding: 0 9px;
-  text-align: center;
-}
-
-.graph-refs-static button {
-  grid-template-columns: 18px minmax(0, 1fr);
-}
-
-.graph-refs-menu button:hover,
-.graph-refs-menu button.active {
-  background: var(--surface);
-}
-
-.graph-ref-picker-text,
-.graph-refs-static button > span:last-child {
-  display: grid;
-  gap: 1px;
+.graph-ref-main {
+  display: flex;
+  gap: 7px;
+  align-items: center;
   min-width: 0;
+  overflow: hidden;
 }
 
-.graph-ref-picker-text strong,
-.graph-refs-static strong {
+.graph-ref-list-check {
+  display: inline-grid !important;
+  flex: 0 0 16px;
+  width: 16px;
+  min-width: 16px;
+  place-items: center;
+}
+
+.graph-ref-mode-item .graph-ref-list-check,
+.graph-ref-list-item.local .graph-ref-list-check {
+  color: var(--blue);
+}
+
+.graph-ref-list-item.remote .graph-ref-list-check {
+  color: #8b5cf6;
+}
+
+.graph-ref-list-item.tag .graph-ref-list-check {
+  color: var(--warning);
+}
+
+.graph-ref-mode-item strong,
+.graph-ref-list-item strong {
   overflow: hidden;
-  color: var(--text);
   font-size: 12px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.graph-ref-picker-text small,
-.graph-refs-static small {
+.graph-ref-mode-item small,
+.graph-ref-list-item small {
   overflow: hidden;
-  color: var(--muted);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.graph-ref-list-item.remote.current small {
+  color: #8b5cf6;
+}
+
+.graph-ref-list-item.tag.current small {
+  color: var(--warning);
+}
+
 .graph-refs-empty {
-  padding: 10px;
-  color: var(--muted);
-  font-size: 12px;
+  padding: 12px 8px;
 }
 
 .graph-commit-menu {
@@ -4882,7 +4900,7 @@ button {
 .source-control-pane .graph-commit-list {
   display: grid;
   gap: 0;
-  padding: 2px 8px 10px;
+  padding: 2px 4px 10px;
   scrollbar-color: transparent transparent;
 }
 
@@ -6095,6 +6113,22 @@ code,
   border-radius: 0;
   color: inherit;
   background: transparent;
+}
+
+.source-control-pane .graph-section-title .graph-ref-filter-tooltip {
+  flex: 0 1 auto;
+  justify-content: flex-start;
+  width: auto;
+  min-width: 0;
+  max-width: 128px;
+  border-radius: 0;
+  background: transparent !important;
+  overflow: hidden;
+}
+
+.source-control-pane .graph-section-title .graph-ref-filter-tooltip:hover,
+.source-control-pane .graph-section-title .graph-ref-filter-tooltip:active {
+  background: transparent !important;
 }
 
 .source-control-pane .graph-section-title .graph-toolbar-tooltip .compact-icon {

@@ -17,7 +17,8 @@ import {
   RotateCcw,
   Search,
   Tag,
-  Undo2
+  Undo2,
+  X
 } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type RefObject, type UIEvent as ReactUIEvent } from "react";
 import { createPortal } from "react-dom";
@@ -49,8 +50,7 @@ const graphOperations = [
   { label: "fetch", title: "抓取远程更新", icon: RefreshCw },
   { label: "pull", title: "拉取当前分支", icon: CloudDownload },
   { label: "push", title: "推送当前分支", icon: CloudUpload },
-  { label: "新建分支", title: "新建分支", icon: Plus },
-  { label: "切换分支", title: "切换分支", icon: GitBranch }
+  { label: "新建分支", title: "新建分支", icon: Plus }
 ];
 
 const graphBranchTones = ["branch-rose", "branch-cyan", "branch-violet", "branch-amber", "branch-green"] as const;
@@ -129,8 +129,6 @@ const GRAPH_VIRTUAL_THRESHOLD = 140;
 const GRAPH_VIRTUAL_OVERSCAN = 20;
 const GRAPH_OPERATION_ROW_HEIGHT = 28;
 const GRAPH_SYNC_ROW_HEIGHT = 26;
-const GRAPH_REFS_MENU_WIDTH = 360;
-const GRAPH_REFS_MENU_MAX_HEIGHT = 460;
 
 export function GraphSidebar({
   project,
@@ -153,9 +151,8 @@ export function GraphSidebar({
   const [searchOpen, setSearchOpen] = useState(false);
   const [fileViewMode, setFileViewMode] = useState<GraphFileViewMode>("list");
   const [refsMenuOpen, setRefsMenuOpen] = useState(false);
-  const [refsMenuPosition, setRefsMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [refsQuery, setRefsQuery] = useState("");
-  const [refsDraftFilter, setRefsDraftFilter] = useState<GitHistoryFilter | null>(null);
+  const [refsMenuFilter, setRefsMenuFilter] = useState<GitHistoryFilter | null>(null);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const [viewMenuPosition, setViewMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [commitContextMenu, setCommitContextMenu] = useState<CommitContextMenuState | null>(null);
@@ -302,20 +299,11 @@ export function GraphSidebar({
     };
   }, [refsMenuOpen]);
 
-  useLayoutEffect(() => {
-    if (!refsMenuOpen || !refsMenuRef.current || !refsButtonRef.current) {
-      return;
+  useEffect(() => {
+    if (refsMenuOpen) {
+      setRefsMenuFilter(cloneHistoryFilter(historyFilter));
     }
-
-    const buttonRect = refsButtonRef.current.getBoundingClientRect();
-    const menuRect = refsMenuRef.current.getBoundingClientRect();
-    const menuHeight = Math.min(menuRect.height, GRAPH_REFS_MENU_MAX_HEIGHT, window.innerHeight - 16);
-    const canOpenDown = buttonRect.bottom + menuHeight + 4 <= window.innerHeight - 8;
-    setRefsMenuPosition({
-      top: canOpenDown ? buttonRect.bottom + 4 : Math.max(8, buttonRect.top - menuHeight - 4),
-      left: Math.max(8, Math.min(buttonRect.left, window.innerWidth - GRAPH_REFS_MENU_WIDTH - 8))
-    });
-  }, [refsMenuOpen, refsQuery, historyRefs.length, refsDraftFilter]);
+  }, [historyFilter, refsMenuOpen]);
 
   useEffect(() => {
     if (!viewMenuOpen) {
@@ -451,47 +439,34 @@ export function GraphSidebar({
 
   function closeRefsMenu() {
     setRefsMenuOpen(false);
-    setRefsDraftFilter(null);
+    setRefsMenuFilter(null);
   }
 
   function toggleRefsMenu() {
-    const rect = refsButtonRef.current?.getBoundingClientRect();
-    if (rect) {
-      setRefsMenuPosition({
-        top: rect.bottom + 4,
-        left: Math.max(8, Math.min(rect.left, window.innerWidth - GRAPH_REFS_MENU_WIDTH - 8))
-      });
-    }
-
     setSearchOpen(false);
     setViewMenuOpen(false);
     setRefsMenuOpen((value) => {
       const nextOpen = !value;
-      setRefsDraftFilter(nextOpen ? cloneHistoryFilter(historyFilter) : null);
+      setRefsMenuFilter(nextOpen ? cloneHistoryFilter(historyFilter) : null);
       return nextOpen;
     });
   }
 
   function selectHistoryFilterMode(mode: Exclude<GitHistoryFilter["mode"], "custom">) {
+    const nextFilter: GitHistoryFilter = { mode };
     setRefsQuery("");
-    setRefsDraftFilter({ mode });
+    setRefsMenuFilter(nextFilter);
+    onHistoryFilterChange(nextFilter);
+    closeRefsMenu();
   }
 
   function toggleHistoryRef(ref: GitHistoryRef) {
-    const draftFilter = refsDraftFilter ?? historyFilter;
-    const currentRefIds = draftFilter.mode === "custom" ? draftFilter.refIds ?? [] : [];
+    const activeFilter = refsMenuFilter ?? historyFilter;
+    const currentRefIds = activeFilter.mode === "custom" ? activeFilter.refIds ?? [] : [];
     const nextRefIds = currentRefIds.includes(ref.id) ? currentRefIds.filter((id) => id !== ref.id) : [...currentRefIds, ref.id];
-    if (nextRefIds.length === 0) {
-      setRefsDraftFilter({ mode: "auto" });
-      return;
-    }
-
-    setRefsDraftFilter({ mode: "custom", refIds: nextRefIds });
-  }
-
-  function applyHistoryRefFilter() {
-    onHistoryFilterChange(refsDraftFilter ?? historyFilter);
-    closeRefsMenu();
+    const nextFilter: GitHistoryFilter = nextRefIds.length === 0 ? { mode: "auto" } : { mode: "custom", refIds: nextRefIds };
+    setRefsMenuFilter(nextFilter);
+    onHistoryFilterChange(nextFilter);
   }
 
   function toggleViewMenu() {
@@ -613,7 +588,7 @@ export function GraphSidebar({
         </PathTooltip>
         {panelOpen ? (
           <div className="graph-toolbar" aria-label="图表操作">
-            <PathTooltip content="选择图表引用" className="graph-toolbar-tooltip">
+            <PathTooltip content="选择图表引用" className="graph-toolbar-tooltip graph-ref-filter-tooltip">
               <button
                 ref={refsButtonRef}
                 type="button"
@@ -623,7 +598,7 @@ export function GraphSidebar({
                 aria-expanded={refsMenuOpen}
                 onClick={toggleRefsMenu}
               >
-                <GitBranch size={14} />
+                <GitBranch size={16} />
                 <span>{historyFilterLabel}</span>
               </button>
             </PathTooltip>
@@ -664,18 +639,17 @@ export function GraphSidebar({
                 <MoreHorizontal size={GRAPH_TOOLBAR_ICON_SIZE} />
               </button>
             </PathTooltip>
-            {refsMenuOpen && refsMenuPosition && typeof document !== "undefined"
+            {refsMenuOpen && typeof document !== "undefined"
               ? createPortal(
                   <GraphHistoryRefsMenu
                     refs={historyRefs}
-                    filter={refsDraftFilter ?? historyFilter}
+                    filter={refsMenuFilter ?? historyFilter}
                     query={refsQuery}
                     onQueryChange={setRefsQuery}
                     onSelectMode={selectHistoryFilterMode}
                     onToggleRef={toggleHistoryRef}
-                    onApply={applyHistoryRefFilter}
+                    onClose={closeRefsMenu}
                     menuRef={refsMenuRef}
-                    style={refsMenuPosition}
                   />,
                   document.querySelector(".app-shell") ?? document.body
                 )
@@ -846,9 +820,8 @@ function GraphHistoryRefsMenu({
   onQueryChange,
   onSelectMode,
   onToggleRef,
-  onApply,
-  menuRef,
-  style
+  onClose,
+  menuRef
 }: {
   refs: GitHistoryRef[];
   filter: GitHistoryFilter;
@@ -856,9 +829,8 @@ function GraphHistoryRefsMenu({
   onQueryChange: (query: string) => void;
   onSelectMode: (mode: Exclude<GitHistoryFilter["mode"], "custom">) => void;
   onToggleRef: (ref: GitHistoryRef) => void;
-  onApply: () => void;
+  onClose: () => void;
   menuRef: RefObject<HTMLDivElement>;
-  style: CSSProperties;
 }) {
   const selectedRefIds = new Set(filter.mode === "custom" ? filter.refIds ?? [] : []);
   const selectedCount = filter.mode === "all" || filter.mode === "auto" ? 1 : selectedRefIds.size;
@@ -866,61 +838,95 @@ function GraphHistoryRefsMenu({
   const groups = groupHistoryRefs(filteredRefs);
 
   return (
-    <div className="floating-menu graph-refs-menu graph-refs-menu-portal" role="menu" style={style} ref={menuRef} onPointerDown={(event) => event.stopPropagation()}>
-      <div className="graph-refs-menu-header">
-        <span>已选 {selectedCount} 项</span>
-        <button type="button" className="graph-refs-apply" onClick={onApply}>
-          确定
-        </button>
-      </div>
-      <label className="history-search graph-refs-search">
-        <Search size={14} />
-        <input value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="筛选分支或标签" />
-      </label>
-      <div className="graph-refs-static">
-        <button type="button" role="menuitemcheckbox" aria-checked={filter.mode === "all"} className={filter.mode === "all" ? "active" : ""} onClick={() => onSelectMode("all")}>
-          <span className="graph-view-menu-check" aria-hidden="true">
-            {filter.mode === "all" ? <Check size={14} /> : null}
+    <div className="branch-dialog-backdrop graph-refs-dialog-backdrop" role="presentation" onMouseDown={onClose}>
+      <section
+        className="branch-dialog graph-refs-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="选择图表引用"
+        ref={menuRef}
+        onMouseDown={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+      >
+        <header className="branch-dialog-header">
+          <span className="branch-dialog-title">
+            <GitBranch size={15} />
+            选择图表引用
+            <small>已选 {selectedCount} 项</small>
           </span>
-          <span>
-            <strong>全部</strong>
-            <small>所有历史记录项引用</small>
-          </span>
-        </button>
-        <button type="button" role="menuitemcheckbox" aria-checked={filter.mode === "auto"} className={filter.mode === "auto" ? "active" : ""} onClick={() => onSelectMode("auto")}>
-          <span className="graph-view-menu-check" aria-hidden="true">
-            {filter.mode === "auto" ? <Check size={14} /> : null}
-          </span>
-          <span>
-            <strong>自动</strong>
-            <small>当前历史记录项引用</small>
-          </span>
-        </button>
-      </div>
-      <div className="graph-refs-list">
-        {groups.map((group) => (
-          <div className="graph-refs-group" key={group.category}>
-            <div className="graph-refs-group-title">{historyRefCategoryLabel(group.category)}</div>
-            {group.refs.map((ref) => {
-              const selected = selectedRefIds.has(ref.id);
-              const Icon = ref.type === "remoteBranch" ? Cloud : ref.type === "tag" ? Tag : GitBranch;
-              return (
-                <button type="button" role="menuitemcheckbox" aria-checked={selected} className={selected ? "active" : ""} key={ref.id} onClick={() => onToggleRef(ref)}>
-                  <span className="graph-view-menu-check" aria-hidden="true">
-                    {selected ? <Check size={14} /> : null}
-                  </span>
-                  <Icon size={14} />
-                  <span className="graph-ref-picker-text">
-                    <strong>{ref.name}</strong>
-                    <small>{historyRefDescription(ref)}</small>
-                  </span>
-                </button>
-              );
-            })}
+          <button type="button" className="icon-button compact-icon" title="关闭" onClick={onClose}>
+            <X size={14} />
+          </button>
+        </header>
+
+        <div className="branch-switch-panel graph-refs-switch-panel">
+          <label className="branch-search graph-refs-search">
+            <Search size={14} />
+            <input value={query} autoFocus onChange={(event) => onQueryChange(event.target.value)} placeholder="搜索分支或标签" />
+          </label>
+          <div className="branch-list graph-refs-list" role="list">
+            <button
+              type="button"
+              role="menuitemradio"
+              aria-checked={filter.mode === "auto"}
+              className={`branch-list-item graph-ref-mode-item ${filter.mode === "auto" ? "current" : ""}`}
+              onClick={() => onSelectMode("auto")}
+            >
+              <span className="graph-ref-main">
+                <span className="graph-ref-list-check" aria-hidden="true">
+                  {filter.mode === "auto" ? <Check size={14} /> : <GitBranch size={14} />}
+                </span>
+                <strong>自动</strong>
+              </span>
+              <small>当前历史记录项引用</small>
+            </button>
+            <button
+              type="button"
+              role="menuitemradio"
+              aria-checked={filter.mode === "all"}
+              className={`branch-list-item graph-ref-mode-item ${filter.mode === "all" ? "current" : ""}`}
+              onClick={() => onSelectMode("all")}
+            >
+              <span className="graph-ref-main">
+                <span className="graph-ref-list-check" aria-hidden="true">
+                  {filter.mode === "all" ? <Check size={14} /> : <GitBranch size={14} />}
+                </span>
+                <strong>全部</strong>
+              </span>
+              <small>所有历史记录项引用</small>
+            </button>
+            {groups.map((group) => (
+              <div className="graph-refs-group" key={group.category}>
+                <div className="graph-refs-group-title">{historyRefCategoryLabel(group.category)}</div>
+                {group.refs.map((ref) => {
+                  const selected = selectedRefIds.has(ref.id);
+                  const Icon = ref.type === "remoteBranch" ? Cloud : ref.type === "tag" ? Tag : GitBranch;
+                  const toneClass = ref.type === "remoteBranch" ? "remote" : ref.type === "tag" ? "tag" : "local";
+                  return (
+                    <button
+                      type="button"
+                      role="menuitemcheckbox"
+                      aria-checked={selected}
+                      className={`branch-list-item graph-ref-list-item ${toneClass} ${selected ? "current" : ""}`}
+                      key={ref.id}
+                      onClick={() => onToggleRef(ref)}
+                    >
+                      <span className="graph-ref-main">
+                        <span className="graph-ref-list-check" aria-hidden="true">
+                          {selected ? <Check size={14} /> : <Icon size={14} />}
+                        </span>
+                        <strong>{ref.name}</strong>
+                      </span>
+                      <small>{historyRefDescription(ref)}</small>
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+            {filteredRefs.length === 0 ? <div className="empty-inline graph-refs-empty">没有匹配的引用。</div> : null}
           </div>
-        ))}
-        {filteredRefs.length === 0 ? <div className="graph-refs-empty">没有匹配的引用。</div> : null}
-      </div>
+        </div>
+      </section>
     </div>
   );
 }
