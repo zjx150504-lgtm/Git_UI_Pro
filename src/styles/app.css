@@ -1626,6 +1626,11 @@ button {
   white-space: pre;
 }
 
+.diff-virtual-spacer {
+  min-height: 0;
+  pointer-events: none;
+}
+
 .danger-note {
   display: flex;
   gap: 8px;
@@ -4778,6 +4783,12 @@ button {
 
 .source-control-pane .graph-commit-list:hover::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
+}
+
+.graph-virtual-spacer {
+  flex: 0 0 auto;
+  min-height: 0;
+  pointer-events: none;
 }
 
 .graph-commit-entry {

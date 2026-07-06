@@ -47,9 +47,9 @@ const DEFAULT_SOURCE_PANE_HEIGHT = 320;
 const DEFAULT_CONSOLE_HEIGHT = 240;
 const MIN_CONSOLE_HEIGHT = 80;
 const CONSOLE_TOP_SNAP_DISTANCE = 36;
-const SELECTED_PROJECT_REFRESH_INTERVAL_MS = 1600;
-const PROJECT_LIST_STATUS_REFRESH_INTERVAL_MS = 5000;
-const PROJECT_LIST_STATUS_BATCH_SIZE = 4;
+const SELECTED_PROJECT_REFRESH_INTERVAL_MS = 4000;
+const PROJECT_LIST_STATUS_REFRESH_INTERVAL_MS = 20000;
+const PROJECT_LIST_STATUS_BATCH_SIZE = 3;
 const RESET_OPERATION_TIMEOUT_MS = 45_000;
 const GIT_DOWNLOAD_URL = "https://git-scm.com/downloads";
 
@@ -237,7 +237,7 @@ export function App() {
 
     let disposed = false;
     const refresh = async () => {
-      if (disposed || autoRefreshBusyRef.current) {
+      if (disposed || document.hidden || autoRefreshBusyRef.current) {
         return;
       }
 
@@ -377,7 +377,19 @@ export function App() {
       ]);
 
       if (status) {
-        setProjects((current) => current.map((item) => (item.id === project.id ? { ...item, status } : item)));
+        setProjects((current) => {
+          let changed = false;
+          const nextProjects = current.map((item) => {
+            if (item.id !== project.id || statusSignature(item.status) === statusSignature(status)) {
+              return item;
+            }
+
+            changed = true;
+            return { ...item, status };
+          });
+
+          return changed ? nextProjects : current;
+        });
       }
 
       setCommits(history);
@@ -410,15 +422,23 @@ export function App() {
       const [status, worktreeState] = await Promise.all([apiClient.getProjectStatus(project), apiClient.getWorktree(project)]);
 
       if (status) {
-        setProjects((current) =>
-          current.map((item) => {
+        setProjects((current) => {
+          let changed = false;
+          const nextProjects = current.map((item) => {
             if (item.id !== project.id) {
               return item;
             }
 
-            return statusSignature(item.status) === statusSignature(status) ? item : { ...item, status };
-          })
-        );
+            if (statusSignature(item.status) === statusSignature(status)) {
+              return item;
+            }
+
+            changed = true;
+            return { ...item, status };
+          });
+
+          return changed ? nextProjects : current;
+        });
       }
 
       setWorktree((current) => (worktreeSignature(current) === worktreeSignature(worktreeState) ? current : worktreeState));
@@ -455,16 +475,20 @@ export function App() {
         return;
       }
 
-      setProjects((current) =>
-        current.map((project) => {
+      setProjects((current) => {
+        let changed = false;
+        const nextProjects = current.map((project) => {
           const nextStatus = statusUpdates.get(project.id);
           if (!nextStatus || statusSignature(project.status) === statusSignature(nextStatus)) {
             return project;
           }
 
+          changed = true;
           return { ...project, status: nextStatus };
-        })
-      );
+        });
+
+        return changed ? nextProjects : current;
+      });
     } finally {
       projectListRefreshBusyRef.current = false;
     }

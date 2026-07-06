@@ -18,7 +18,7 @@ import {
   Search,
   Undo2
 } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type UIEvent as ReactUIEvent } from "react";
 import { createPortal } from "react-dom";
 import { apiClient } from "../api/client";
 import { PathTooltip } from "./PathTooltip";
@@ -119,6 +119,10 @@ const COMMIT_HOVER_VIEWPORT_GAP = 12;
 const COMMIT_HOVER_SPLIT_GAP = 14;
 const COMMIT_HOVER_TOP_OFFSET = 20;
 const COMMIT_HOVER_ARROW_SIZE = 8;
+const COMMIT_DETAILS_PREFETCH_LIMIT = 8;
+const GRAPH_VIRTUAL_THRESHOLD = 140;
+const GRAPH_VIRTUAL_OVERSCAN = 20;
+const GRAPH_SYNC_ROW_HEIGHT = 26;
 
 export function GraphSidebar({
   project,
@@ -150,11 +154,15 @@ export function GraphSidebar({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchButtonRef = useRef<HTMLButtonElement>(null);
   const searchRowRef = useRef<HTMLDivElement>(null);
+  const graphListRef = useRef<HTMLDivElement>(null);
   const viewMenuButtonRef = useRef<HTMLButtonElement>(null);
   const viewMenuRef = useRef<HTMLDivElement>(null);
   const commitContextMenuRef = useRef<HTMLDivElement>(null);
   const hoverTimerRef = useRef<number | undefined>();
   const closeTimerRef = useRef<number | undefined>();
+  const graphScrollFrameRef = useRef<number | undefined>();
+  const [graphListHeight, setGraphListHeight] = useState(0);
+  const [graphListScrollTop, setGraphListScrollTop] = useState(0);
   const filteredCommits = useMemo(() => {
     const keyword = commitQuery.trim().toLowerCase();
     if (!keyword) {
@@ -168,14 +176,61 @@ export function GraphSidebar({
   const graphLayouts = useMemo(() => buildGraphLayouts(filteredCommits, rowTones, graphContext), [filteredCommits, rowTones, graphContext]);
   const syncProject = project && ((project.status?.ahead ?? 0) > 0 || (project.status?.behind ?? 0) > 0) ? project : undefined;
   const localOnlyCount = project?.status?.upstream ? project.status.ahead : commits.length;
+  const virtualGraphEnabled = filteredCommits.length > GRAPH_VIRTUAL_THRESHOLD && !expandedHash;
+  const graphVirtualRange = useMemo(() => {
+    if (!virtualGraphEnabled) {
+      return {
+        startIndex: 0,
+        endIndex: filteredCommits.length,
+        topPadding: 0,
+        bottomPadding: 0
+      };
+    }
+
+    const syncOffset = syncProject ? GRAPH_SYNC_ROW_HEIGHT : 0;
+    const viewportStart = Math.max(0, graphListScrollTop - syncOffset);
+    const viewportEnd = Math.max(viewportStart, graphListScrollTop + graphListHeight - syncOffset);
+    const startIndex = clampNumber(Math.floor(viewportStart / graphRowHeight) - GRAPH_VIRTUAL_OVERSCAN, 0, filteredCommits.length);
+    const endIndex = clampNumber(Math.ceil(viewportEnd / graphRowHeight) + GRAPH_VIRTUAL_OVERSCAN, startIndex, filteredCommits.length);
+
+    return {
+      startIndex,
+      endIndex,
+      topPadding: startIndex * graphRowHeight,
+      bottomPadding: (filteredCommits.length - endIndex) * graphRowHeight
+    };
+  }, [filteredCommits.length, graphListHeight, graphListScrollTop, syncProject, virtualGraphEnabled]);
+  const visibleCommits = virtualGraphEnabled ? filteredCommits.slice(graphVirtualRange.startIndex, graphVirtualRange.endIndex) : filteredCommits;
 
   useEffect(
     () => () => {
       window.clearTimeout(hoverTimerRef.current);
       window.clearTimeout(closeTimerRef.current);
+      window.cancelAnimationFrame(graphScrollFrameRef.current ?? 0);
     },
     []
   );
+
+  useLayoutEffect(() => {
+    const list = graphListRef.current;
+    if (!list) {
+      return;
+    }
+
+    const measure = () => setGraphListHeight(list.clientHeight);
+    measure();
+
+    const resizeObserver = new ResizeObserver(measure);
+    resizeObserver.observe(list);
+    return () => resizeObserver.disconnect();
+  }, [panelOpen]);
+
+  useEffect(() => {
+    setGraphListScrollTop(0);
+    if (graphListRef.current) {
+      graphListRef.current.scrollTop = 0;
+    }
+  }, [project?.id, commitQuery]);
 
   useEffect(() => {
     if (searchOpen) {
@@ -267,8 +322,8 @@ export function GraphSidebar({
     let cancelled = false;
 
     const prefetch = async () => {
-      for (const commit of commits.slice(0, 40)) {
-        if (cancelled) {
+      for (const commit of commits.slice(0, COMMIT_DETAILS_PREFETCH_LIMIT)) {
+        if (cancelled || document.hidden) {
           return;
         }
 
@@ -281,6 +336,14 @@ export function GraphSidebar({
       cancelled = true;
     };
   }, [project?.id, commits]);
+
+  function handleGraphListScroll(event: ReactUIEvent<HTMLDivElement>) {
+    const scrollTop = event.currentTarget.scrollTop;
+    window.cancelAnimationFrame(graphScrollFrameRef.current ?? 0);
+    graphScrollFrameRef.current = window.requestAnimationFrame(() => {
+      setGraphListScrollTop(scrollTop);
+    });
+  }
 
   function scheduleHover(commit: CommitNode, row: HTMLElement) {
     setHoveredDotHash(commit.hash);
@@ -537,10 +600,12 @@ export function GraphSidebar({
             </div>
           ) : null}
 
-          <div className="graph-commit-list" role="list" aria-label="提交图">
+          <div className="graph-commit-list" role="list" aria-label="提交图" ref={graphListRef} onScroll={handleGraphListScroll}>
             {filteredCommits.length === 0 ? <div className="empty-state graph-empty">当前仓库没有可显示的提交。</div> : null}
             {syncProject ? <GraphSyncRow project={syncProject} /> : null}
-            {filteredCommits.map((commit, index) => {
+            {virtualGraphEnabled && graphVirtualRange.topPadding > 0 ? <div className="graph-virtual-spacer" style={{ height: graphVirtualRange.topPadding }} aria-hidden="true" /> : null}
+            {visibleCommits.map((commit, visibleIndex) => {
+              const index = virtualGraphEnabled ? graphVirtualRange.startIndex + visibleIndex : visibleIndex;
               const graphLayout = graphLayouts.get(commit.hash) ?? fallbackGraphLayout(commit, rowTones.get(commit.hash) ?? "local");
               const tone = graphLayout.nodeTone;
 
@@ -570,6 +635,7 @@ export function GraphSidebar({
                 />
               );
             })}
+            {virtualGraphEnabled && graphVirtualRange.bottomPadding > 0 ? <div className="graph-virtual-spacer" style={{ height: graphVirtualRange.bottomPadding }} aria-hidden="true" /> : null}
           </div>
         </>
       ) : null}
@@ -843,6 +909,10 @@ function GraphExpansionLines({ lines }: { lines: GraphExpansionLine[] }) {
 function graphFileGutter(lines: GraphExpansionLine[]): number {
   const maxLineX = lines.reduce((max, line) => Math.max(max, line.x), 0);
   return Math.max(graphFileBaseGutter, maxLineX + graphFileLanePadding);
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 type GraphFileTreeEntry =

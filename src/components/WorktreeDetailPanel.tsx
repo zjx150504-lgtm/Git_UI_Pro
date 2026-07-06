@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type UIEvent as ReactUIEvent } from "react";
 import { Copy, FileText, X } from "lucide-react";
 import { PathTooltip } from "./PathTooltip";
 import type { ChangedFile, DiffLine } from "../types/domain";
@@ -32,16 +32,80 @@ interface SplitDiffRow {
   type: SplitDiffRowType;
 }
 
+const DIFF_ROW_HEIGHT = 24;
+const DIFF_VIRTUAL_THRESHOLD = 500;
+const DIFF_VIRTUAL_OVERSCAN = 36;
+
 export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelectTab, onCloseTab, onPinTab }: WorktreeDetailPanelProps) {
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+  const diffPanelRef = useRef<HTMLElement>(null);
   const splitDiffRef = useRef<HTMLDivElement>(null);
   const splitScrollRef = useRef<HTMLDivElement>(null);
+  const diffScrollFrameRef = useRef<number | undefined>();
   const prefersSplitDiff = useSplitDiffLayout();
   const activeDiffLines = activeTab?.diffLines ?? [];
   const splitDiffRows = useMemo(() => buildSplitDiffRows(activeDiffLines), [activeDiffLines]);
   const showSplitDiff = Boolean(prefersSplitDiff && activeTab && canUseSplitDiff(activeTab.file.status) && splitDiffRows.length > 0);
   const [splitMaxScroll, setSplitMaxScroll] = useState(0);
   const [splitScrollX, setSplitScrollX] = useState(0);
+  const [diffPanelHeight, setDiffPanelHeight] = useState(0);
+  const [diffScrollTop, setDiffScrollTop] = useState(0);
+  const virtualRowCount = showSplitDiff ? splitDiffRows.length : activeDiffLines.length;
+  const diffVirtualEnabled = virtualRowCount > DIFF_VIRTUAL_THRESHOLD;
+  const diffVirtualRange = useMemo(() => {
+    if (!diffVirtualEnabled) {
+      return {
+        startIndex: 0,
+        endIndex: virtualRowCount,
+        topPadding: 0,
+        bottomPadding: 0
+      };
+    }
+
+    const startIndex = clampNumber(Math.floor(diffScrollTop / DIFF_ROW_HEIGHT) - DIFF_VIRTUAL_OVERSCAN, 0, virtualRowCount);
+    const endIndex = clampNumber(Math.ceil((diffScrollTop + diffPanelHeight) / DIFF_ROW_HEIGHT) + DIFF_VIRTUAL_OVERSCAN, startIndex, virtualRowCount);
+
+    return {
+      startIndex,
+      endIndex,
+      topPadding: startIndex * DIFF_ROW_HEIGHT,
+      bottomPadding: (virtualRowCount - endIndex) * DIFF_ROW_HEIGHT
+    };
+  }, [diffPanelHeight, diffScrollTop, diffVirtualEnabled, virtualRowCount]);
+  const visibleDiffLines = diffVirtualEnabled ? activeDiffLines.slice(diffVirtualRange.startIndex, diffVirtualRange.endIndex) : activeDiffLines;
+  const visibleSplitDiffRows = diffVirtualEnabled ? splitDiffRows.slice(diffVirtualRange.startIndex, diffVirtualRange.endIndex) : splitDiffRows;
+
+  useLayoutEffect(() => {
+    const panel = diffPanelRef.current;
+    if (!panel) {
+      return;
+    }
+
+    const measure = () => setDiffPanelHeight(panel.clientHeight);
+    measure();
+
+    const resizeObserver = new ResizeObserver(measure);
+    resizeObserver.observe(panel);
+    return () => resizeObserver.disconnect();
+  }, [activeTab?.id]);
+
+  useEffect(() => {
+    setDiffScrollTop(0);
+    setSplitScrollX(0);
+    if (diffPanelRef.current) {
+      diffPanelRef.current.scrollTop = 0;
+    }
+    if (splitScrollRef.current) {
+      splitScrollRef.current.scrollLeft = 0;
+    }
+  }, [activeTab?.id, showSplitDiff]);
+
+  useEffect(
+    () => () => {
+      window.cancelAnimationFrame(diffScrollFrameRef.current ?? 0);
+    },
+    []
+  );
 
   useLayoutEffect(() => {
     if (!showSplitDiff) {
@@ -84,9 +148,17 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
       resizeObserver.disconnect();
       window.removeEventListener("resize", measure);
     };
-  }, [showSplitDiff, splitDiffRows]);
+  }, [diffVirtualRange.endIndex, diffVirtualRange.startIndex, showSplitDiff, splitDiffRows.length]);
 
   const splitDiffStyle = showSplitDiff ? ({ "--split-scroll-x": `${splitScrollX}px` } as CSSProperties) : undefined;
+
+  function handleDiffPanelScroll(event: ReactUIEvent<HTMLElement>) {
+    const scrollTop = event.currentTarget.scrollTop;
+    window.cancelAnimationFrame(diffScrollFrameRef.current ?? 0);
+    diffScrollFrameRef.current = window.requestAnimationFrame(() => {
+      setDiffScrollTop(scrollTop);
+    });
+  }
 
   if (!activeTab) {
     return (
@@ -160,7 +232,7 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
       </div>
 
       <div className="editor-diff-shell" style={splitDiffStyle}>
-        <section className={`diff-panel editor-diff-panel ${showSplitDiff ? "split-mode" : ""}`}>
+        <section className={`diff-panel editor-diff-panel ${showSplitDiff ? "split-mode" : ""}`} ref={diffPanelRef} onScroll={handleDiffPanelScroll}>
           {showSplitDiff ? (
             <div className="split-diff-grid" role="table" aria-label="左右文件对比" ref={splitDiffRef}>
               <div className="split-diff-header" role="row">
@@ -168,24 +240,34 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
                 <span>当前文件</span>
               </div>
               <div className="split-diff-lines">
-                {splitDiffRows.map((row, index) => (
+                {diffVirtualEnabled && diffVirtualRange.topPadding > 0 ? <div className="diff-virtual-spacer" style={{ height: diffVirtualRange.topPadding }} aria-hidden="true" /> : null}
+                {visibleSplitDiffRows.map((row, visibleIndex) => {
+                  const index = diffVirtualEnabled ? diffVirtualRange.startIndex + visibleIndex : visibleIndex;
+                  return (
                   <div className={`split-diff-row ${row.type}`} role="row" key={`${row.type}-${index}-${row.left?.oldLineNumber ?? ""}-${row.right?.newLineNumber ?? ""}`}>
                     <DiffCell side="old" line={row.left} />
                     <DiffCell side="new" line={row.right} />
                   </div>
-                ))}
+                  );
+                })}
+                {diffVirtualEnabled && diffVirtualRange.bottomPadding > 0 ? <div className="diff-virtual-spacer" style={{ height: diffVirtualRange.bottomPadding }} aria-hidden="true" /> : null}
               </div>
             </div>
           ) : (
             <div className="diff-lines">
               {diffLines.length === 0 ? <div className="empty-inline">没有可显示的文本 diff。</div> : null}
-              {diffLines.map((line, index) => (
+              {diffVirtualEnabled && diffVirtualRange.topPadding > 0 ? <div className="diff-virtual-spacer" style={{ height: diffVirtualRange.topPadding }} aria-hidden="true" /> : null}
+              {visibleDiffLines.map((line, visibleIndex) => {
+                const index = diffVirtualEnabled ? diffVirtualRange.startIndex + visibleIndex : visibleIndex;
+                return (
                 <div className={`diff-line ${line.type}`} key={`${line.type}-${index}`}>
                   <span className="line-number">{line.oldLineNumber ?? ""}</span>
                   <span className="line-number">{line.newLineNumber ?? ""}</span>
                   <code>{line.content || " "}</code>
                 </div>
-              ))}
+                );
+              })}
+              {diffVirtualEnabled && diffVirtualRange.bottomPadding > 0 ? <div className="diff-virtual-spacer" style={{ height: diffVirtualRange.bottomPadding }} aria-hidden="true" /> : null}
             </div>
           )}
         </section>
@@ -296,6 +378,10 @@ function buildSplitDiffRows(lines: DiffLine[]): SplitDiffRow[] {
   }
 
   return rows;
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
 }
 
 function statusLabel(status: ChangedFile["status"]): string {
