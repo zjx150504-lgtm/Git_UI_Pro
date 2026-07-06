@@ -4796,7 +4796,7 @@ button {
 .source-control-pane .graph-commit-row {
   position: relative;
   z-index: 1;
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: var(--graph-row-gutter, 24px) minmax(0, 1fr);
   gap: 4px;
   min-height: 28px;
   border-radius: 4px;
@@ -4960,7 +4960,7 @@ button {
 
 .graph-commit-expansion {
   position: relative;
-  --graph-file-gutter: 44px;
+  --graph-file-gutter: 24px;
   margin: -1px 0 0;
   border-left: 0;
   padding: 0;

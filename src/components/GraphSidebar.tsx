@@ -56,6 +56,8 @@ const graphNodeRadius = 4.2;
 const graphMergeRingRadius = 5.2;
 const graphNodeCurveControl = 3.2;
 const graphLaneCurveControl = 5;
+const graphFileBaseGutter = 24;
+const graphFileLanePadding = 10;
 
 type GraphBranchTone = (typeof graphBranchTones)[number];
 type GraphTone = "local" | "remote" | "primary" | "secondary" | "synced" | "plain" | GraphBranchTone;
@@ -678,12 +680,16 @@ function GraphCommitRow({
   onHoverEnd: () => void;
 }) {
   const visibleRefs = visibleRefsForCommit(commit, graphContext);
+  const rowStyle = {
+    "--graph-row-gutter": `${graphFileGutter(graphLayout.expansionLines)}px`
+  } as CSSProperties;
 
   return (
     <div role="listitem" className={`graph-commit-entry graph-tone-${tone} ${expanded ? "expanded" : ""} ${isLast ? "last" : ""}`}>
       <button
         type="button"
         className={`graph-commit-row graph-tone-${tone} ${selected ? "active" : ""}`}
+        style={rowStyle}
         aria-expanded={expanded}
         onClick={onSelect}
         onContextMenu={onContextMenu}
@@ -748,11 +754,13 @@ function GraphCommitExpansion({
   onSelectFile: (file: ChangedFile) => void;
   onPinFile: (file: ChangedFile) => void;
 }) {
+  const expansionLines = graphLayout.expansionLines;
+  const fileGutter = graphFileGutter(expansionLines);
   const expansionStyle = {
     "--graph-expansion-x": `${graphLayout.nodeX}px`,
-    "--graph-expansion-color": graphToneColor(graphLayout.nodeTone)
+    "--graph-expansion-color": graphToneColor(graphLayout.nodeTone),
+    "--graph-file-gutter": `${fileGutter}px`
   } as CSSProperties;
-  const expansionLines = graphLayout.expansionLines;
 
   if (loading) {
     return (
@@ -830,6 +838,11 @@ function GraphExpansionLines({ lines }: { lines: GraphExpansionLine[] }) {
       ))}
     </div>
   );
+}
+
+function graphFileGutter(lines: GraphExpansionLine[]): number {
+  const maxLineX = lines.reduce((max, line) => Math.max(max, line.x), 0);
+  return Math.max(graphFileBaseGutter, maxLineX + graphFileLanePadding);
 }
 
 type GraphFileTreeEntry =
