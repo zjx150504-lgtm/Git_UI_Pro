@@ -52,6 +52,9 @@ const graphOperations = [
 const graphBranchTones = ["branch-rose", "branch-cyan", "branch-violet", "branch-amber", "branch-green"] as const;
 const graphRowHeight = 28;
 const graphNodeCenterY = 14;
+const graphNodeRadius = 4.2;
+const graphMergeRingRadius = 5.2;
+const graphNodeCurveControl = 6;
 
 type GraphBranchTone = (typeof graphBranchTones)[number];
 type GraphTone = "local" | "remote" | "primary" | "secondary" | "synced" | "plain" | GraphBranchTone;
@@ -1510,11 +1513,11 @@ function CompactGraphCell({ layout, isFirst }: { layout: GraphRowLayout; isFirst
       )}
       {layout.merge ? (
         <>
-          <circle cx={layout.nodeX} cy={graphNodeCenterY} r="5.2" className={`graph-merge-ring graph-node-${layout.nodeTone}`} />
+          <circle cx={layout.nodeX} cy={graphNodeCenterY} r={graphMergeRingRadius} className={`graph-merge-ring graph-node-${layout.nodeTone}`} />
           <circle cx={layout.nodeX} cy={graphNodeCenterY} r="2.3" className={`graph-merge-dot graph-node-${layout.nodeTone}`} />
         </>
       ) : (
-        <circle cx={layout.nodeX} cy={graphNodeCenterY} r="4.2" className={`graph-node graph-node-${layout.nodeTone}`} />
+        <circle cx={layout.nodeX} cy={graphNodeCenterY} r={graphNodeRadius} className={`graph-node graph-node-${layout.nodeTone}`} />
       )}
     </svg>
   );
@@ -1523,7 +1526,10 @@ function CompactGraphCell({ layout, isFirst }: { layout: GraphRowLayout; isFirst
 function graphCurvePath(segment: Extract<GraphSegment, { type: "curve" }>): string {
   if (segment.connectToNode) {
     const midY = (segment.y1 + segment.y2) / 2;
-    return `M ${segment.x1} ${segment.y1} C ${segment.x1} ${midY} ${segment.x2} ${midY} ${segment.x2} ${segment.y2}`;
+    const direction = graphCurveDirection(segment.x1, segment.x2);
+    const nodeX = segment.x2 + direction * graphMergeRingRadius;
+    const nodeControlX = nodeX + direction * graphNodeCurveControl;
+    return `M ${segment.x1} ${segment.y1} C ${segment.x1} ${midY} ${nodeControlX} ${segment.y2} ${nodeX} ${segment.y2}`;
   }
 
   if (!segment.merge) {
@@ -1531,7 +1537,14 @@ function graphCurvePath(segment: Extract<GraphSegment, { type: "curve" }>): stri
   }
 
   const midY = (segment.y1 + segment.y2) / 2;
-  return `M ${segment.x1} ${segment.y1} C ${segment.x1} ${midY} ${segment.x2} ${midY} ${segment.x2} ${segment.y2}`;
+  const direction = graphCurveDirection(segment.x2, segment.x1);
+  const nodeX = segment.x1 + direction * graphMergeRingRadius;
+  const nodeControlX = nodeX + direction * graphNodeCurveControl;
+  return `M ${nodeX} ${segment.y1} C ${nodeControlX} ${segment.y1} ${segment.x2} ${midY} ${segment.x2} ${segment.y2}`;
+}
+
+function graphCurveDirection(targetX: number, originX: number): number {
+  return targetX >= originX ? 1 : -1;
 }
 
 function refTone(commit: CommitNode, graphContext: GraphBranchContext): GraphTone | undefined {
