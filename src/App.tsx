@@ -50,6 +50,7 @@ const CONSOLE_TOP_SNAP_DISTANCE = 36;
 const SELECTED_PROJECT_REFRESH_INTERVAL_MS = 4000;
 const PROJECT_LIST_STATUS_REFRESH_INTERVAL_MS = 20000;
 const PROJECT_LIST_STATUS_BATCH_SIZE = 3;
+const PROJECT_SELECTION_LOAD_DELAY_MS = 180;
 const RESET_OPERATION_TIMEOUT_MS = 45_000;
 const GIT_DOWNLOAD_URL = "https://git-scm.com/downloads";
 
@@ -104,8 +105,11 @@ export function App() {
   const [commitMessageDialog, setCommitMessageDialog] = useState<CommitMessageDialogState | null>(null);
   const [commitMessageDialogBusy, setCommitMessageDialogBusy] = useState(false);
   const projectsRef = useRef<GitProject[]>([]);
+  const selectedProjectIdRef = useRef<string | null>(null);
   const autoRefreshBusyRef = useRef(false);
   const projectListRefreshBusyRef = useRef(false);
+  const selectedProjectLoadTimerRef = useRef<number | undefined>();
+  const projectLoadRequestRef = useRef(0);
   const detailStackRef = useRef<HTMLElement | null>(null);
   const restoreConsoleHeightRef = useRef(DEFAULT_CONSOLE_HEIGHT);
 
@@ -176,6 +180,18 @@ export function App() {
   }, [projects]);
 
   useEffect(() => {
+    selectedProjectIdRef.current = selectedProjectId;
+  }, [selectedProjectId]);
+
+  useEffect(
+    () => () => {
+      window.clearTimeout(selectedProjectLoadTimerRef.current);
+      projectLoadRequestRef.current += 1;
+    },
+    []
+  );
+
+  useEffect(() => {
     if (!consoleOpen) {
       return;
     }
@@ -213,6 +229,9 @@ export function App() {
   );
 
   useEffect(() => {
+    window.clearTimeout(selectedProjectLoadTimerRef.current);
+    const requestId = nextProjectLoadRequestId();
+
     if (!selectedProject) {
       return;
     }
@@ -225,9 +244,17 @@ export function App() {
       return;
     }
 
-    setCommits([]);
-    setSelectedCommitHash("");
-    void loadProjectData(selectedProject);
+    selectedProjectLoadTimerRef.current = window.setTimeout(() => {
+      if (projectLoadRequestRef.current !== requestId) {
+        return;
+      }
+
+      setCommits([]);
+      setSelectedCommitHash("");
+      void loadProjectData(selectedProject, requestId);
+    }, PROJECT_SELECTION_LOAD_DELAY_MS);
+
+    return () => window.clearTimeout(selectedProjectLoadTimerRef.current);
   }, [selectedProject?.id, gitDependency.status]);
 
   useEffect(() => {
@@ -367,14 +394,30 @@ export function App() {
     return false;
   }
 
-  async function loadProjectData(project: GitProject) {
+  function nextProjectLoadRequestId(): number {
+    projectLoadRequestRef.current += 1;
+    return projectLoadRequestRef.current;
+  }
+
+  function isCurrentProjectLoad(requestId: number): boolean {
+    return projectLoadRequestRef.current === requestId;
+  }
+
+  async function loadProjectData(project: GitProject, requestId = nextProjectLoadRequestId()) {
     try {
-      rememberStatus(`正在加载 ${project.name} 的 Git 状态...`);
+      if (isCurrentProjectLoad(requestId)) {
+        rememberStatus(`正在加载 ${project.name} 的 Git 状态...`);
+      }
+
       const [status, history, worktreeState] = await Promise.all([
         apiClient.getProjectStatus(project),
         apiClient.getHistory(project),
         apiClient.getWorktree(project)
       ]);
+
+      if (!isCurrentProjectLoad(requestId)) {
+        return;
+      }
 
       if (status) {
         setProjects((current) => {
@@ -398,6 +441,10 @@ export function App() {
       setSelectedCommitHash("");
       rememberStatus(history.length > 0 ? `已加载 ${history.length} 条提交。` : "当前仓库还没有提交历史。");
     } catch (error) {
+      if (!isCurrentProjectLoad(requestId)) {
+        return;
+      }
+
       setCommits([]);
       setWorktree(emptyWorktree);
       clearWorktreeEditorTabs();
@@ -420,6 +467,10 @@ export function App() {
   async function refreshProjectChanges(project: GitProject) {
     try {
       const [status, worktreeState] = await Promise.all([apiClient.getProjectStatus(project), apiClient.getWorktree(project)]);
+
+      if (selectedProjectIdRef.current !== project.id) {
+        return;
+      }
 
       if (status) {
         setProjects((current) => {
