@@ -1,9 +1,13 @@
 {
   "name": "git-ui-pro",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "description": "中文桌面 Git 可视化管理软件",
-  "author": "Git UI Pro",
+  "author": {
+    "name": "Git UI Pro",
+    "email": "zjx150504-lgtm@users.noreply.github.com",
+    "url": "https://github.com/zjx150504-lgtm"
+  },
   "license": "MIT",
   "keywords": [
     "git",
@@ -155,6 +159,7 @@
       ],
       "icon": "build/icons",
       "category": "Development",
+      "maintainer": "Git UI Pro <zjx150504-lgtm@users.noreply.github.com>",
       "artifactName": "Git-UI-Pro-${version}-${os}-${arch}.${ext}"
     }
   }
