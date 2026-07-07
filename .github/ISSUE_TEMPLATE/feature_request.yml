@@ -1,0 +1,45 @@
+name: 功能建议
+description: 提出新的 Git 能力、UI 优化或使用体验改进。
+title: "feat: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: 使用场景
+      description: 这个建议想解决什么问题？
+      placeholder: 例如：我希望在提交图中更清晰地看到 rebase 进行中状态。
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望方案
+      description: 你希望软件如何表现？
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 备选方案
+      description: 是否考虑过其它交互方式、已有工具或命令行方案？
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: 影响区域
+      multiple: true
+      options:
+        - 项目管理
+        - 源代码管理
+        - 提交图
+        - 分支/远程操作
+        - Diff 查看
+        - 控制台
+        - 打包/安装
+        - 性能/卡顿
+        - 其它
+    validations:
+      required: true

@@ -1,0 +1,89 @@
+name: Bug 反馈
+description: 反馈可复现的问题、崩溃、卡顿或 Git 行为异常。
+title: "bug: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请尽量提供清晰的复现步骤，涉及私有仓库时请先隐藏敏感路径和凭据。
+  - type: textarea
+    id: summary
+    attributes:
+      label: 问题描述
+      description: 简要说明你遇到的问题。
+      placeholder: 例如：切换项目后提交图一直显示加载状态。
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 请按顺序写出如何触发问题。
+      placeholder: |
+        1. 打开项目...
+        2. 点击...
+        3. 出现...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期结果
+      description: 正常情况下你期望看到什么。
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际结果
+      description: 实际发生了什么。可以附截图或录屏。
+    validations:
+      required: true
+  - type: input
+    id: app-version
+    attributes:
+      label: Git UI Pro 版本
+      placeholder: 例如：v0.1.0
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: 操作系统
+      placeholder: 例如：Windows 11 23H2 / macOS 14 / Ubuntu 24.04
+    validations:
+      required: true
+  - type: input
+    id: git-version
+    attributes:
+      label: Git 版本
+      placeholder: 例如：git version 2.53.0.windows.2
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: 影响区域
+      multiple: true
+      options:
+        - 项目管理
+        - 源代码管理
+        - 提交图
+        - 分支/远程操作
+        - Diff 查看
+        - 控制台
+        - 打包/安装
+        - 性能/卡顿
+        - 其它
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志或 Git 输出
+      description: 请先删除 token、密码、私钥、内部仓库地址等敏感信息。
+      render: shell
+    validations:
+      required: false

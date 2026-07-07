@@ -67,6 +67,8 @@ Windows 安装包使用辅助安装向导，默认按当前用户安装，并允
 - `git-ui-pro-linux-x64`
 - `git-ui-pro-macos-x64`
 
+当工作流由 `v*` 格式 tag 触发时，会在所有平台构建完成后自动创建 GitHub Release，并把三个平台的安装包上传到该 Release。
+
 首次运行时，electron-builder 可能会下载对应系统的打包工具链，耗时会比本地构建更长。
 
 ## 远程仓库
@@ -84,3 +86,12 @@ git push github master
 git push origin master
 git push github master
 ```
+
+正式发布版本时，同时推送 tag 到两个远程：
+
+```bash
+git push github v0.1.0
+git push origin v0.1.0
+```
+
+GitHub 会通过 Actions 自动生成 Release。Gitee 的发行版需要在 Gitee 页面手动创建，并上传同一批安装包。
