@@ -5,7 +5,7 @@ import zlib from "node:zlib";
 const rootDir = process.cwd();
 const buildDir = path.join(rootDir, "build");
 const iconsDir = path.join(buildDir, "icons");
-const sizes = [16, 24, 32, 48, 64, 128, 256, 512];
+const sizes = [16, 24, 32, 48, 64, 128, 256, 512, 1024];
 const crcTable = Array.from({ length: 256 }, (_, index) => {
   let value = index;
   for (let bit = 0; bit < 8; bit += 1) {
@@ -25,6 +25,18 @@ for (const size of sizes) {
 
 await writeFile(path.join(buildDir, "icon.png"), pngBySize.get(512));
 await writeFile(path.join(buildDir, "icon.ico"), encodeIco([16, 24, 32, 48, 64, 128, 256].map((size) => ({ size, png: pngBySize.get(size) }))));
+await writeFile(
+  path.join(buildDir, "icon.icns"),
+  encodeIcns([
+    { type: "icp4", png: pngBySize.get(16) },
+    { type: "icp5", png: pngBySize.get(32) },
+    { type: "icp6", png: pngBySize.get(64) },
+    { type: "ic07", png: pngBySize.get(128) },
+    { type: "ic08", png: pngBySize.get(256) },
+    { type: "ic09", png: pngBySize.get(512) },
+    { type: "ic10", png: pngBySize.get(1024) }
+  ])
+);
 
 function renderIcon(size) {
   const pixels = Buffer.alloc(size * size * 4);
@@ -196,6 +208,20 @@ function encodeIco(images) {
   }
 
   return Buffer.concat([header, directory, ...images.map((image) => image.png)]);
+}
+
+function encodeIcns(images) {
+  const chunks = images.map((image) => {
+    const header = Buffer.alloc(8);
+    header.write(image.type, 0, 4, "ascii");
+    header.writeUInt32BE(image.png.length + header.length, 4);
+    return Buffer.concat([header, image.png]);
+  });
+  const header = Buffer.alloc(8);
+  const totalLength = header.length + chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  header.write("icns", 0, 4, "ascii");
+  header.writeUInt32BE(totalLength, 4);
+  return Buffer.concat([header, ...chunks]);
 }
 
 function crc32(buffer) {

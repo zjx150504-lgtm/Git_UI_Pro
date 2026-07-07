@@ -5,6 +5,8 @@
 - `npm run icons`: 生成 `build/icon.ico`、`build/icon.png` 和 Linux PNG 图标集。
 - `npm run dist:dir`: 生成未安装目录包到 `release/win-unpacked`，用于快速验证打包内容。
 - `npm run dist:win`: 生成未签名 Windows NSIS 安装包和 portable 包到 `release/`。
+- `npm run dist:linux`: 生成 Linux AppImage 和 deb 包到 `release/`。
+- `npm run dist:mac`: 生成 macOS dmg 和 zip 包到 `release/`，建议在 macOS 环境执行。
 - `npm run dist:win:signed`: 生成签名 Windows 包，需先配置代码签名证书环境变量。
 
 所有正式和验证打包产物统一输出到 `release/`，不要使用 `release-*` 临时输出目录。
@@ -43,3 +45,42 @@ Windows 安装包使用辅助安装向导，默认按当前用户安装，并允
 `build.electronDist` 指向 `node_modules/electron/dist`，打包时复用本地已安装的 Electron runtime，避免发布验证阶段重复从 GitHub 下载 Electron。
 
 首次生成 NSIS 安装包时，electron-builder 仍可能需要下载 NSIS 工具链并缓存到本机；缓存完成后后续构建会复用。
+
+## GitHub Actions 多平台构建
+
+项目已提供 `.github/workflows/build-installers.yml`，支持手动构建和 tag 构建：
+
+- 手动构建：GitHub 仓库页面进入 `Actions` -> `Build Installers` -> `Run workflow`。
+- tag 构建：推送 `v*` 格式 tag，例如 `v0.1.0`。
+
+工作流会分别在以下环境执行：
+
+- `windows-latest`: `npm run dist:win`
+- `ubuntu-latest`: `npm run dist:linux`
+- `macos-13`: `npm run dist:mac`
+
+每个系统都会独立执行 `npm ci`，避免复用其它系统的 `node_modules`，这对 `node-pty` 这类原生依赖很重要。
+
+构建产物会作为 GitHub Actions artifacts 上传，名称分别是：
+
+- `git-ui-pro-windows-x64`
+- `git-ui-pro-linux-x64`
+- `git-ui-pro-macos-x64`
+
+首次运行时，electron-builder 可能会下载对应系统的打包工具链，耗时会比本地构建更长。
+
+## 远程仓库
+
+Gitee 和 GitHub 远程仓库可以同时存在，不冲突。推荐保留 Gitee 为 `origin`，新增 GitHub 为 `github`：
+
+```bash
+git remote add github https://github.com/zjx150504-lgtm/Git_UI_Pro.git
+git push github master
+```
+
+以后可以按需分别推送：
+
+```bash
+git push origin master
+git push github master
+```
