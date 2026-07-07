@@ -105,8 +105,7 @@ export const apiClient = {
 
   async getProjects(): Promise<GitProject[]> {
     if (window.gitUI) {
-      const projects = await window.gitUI.getProjects();
-      return projects.length > 0 ? projects : mockProjects.slice(0, 1);
+      return window.gitUI.getProjects();
     }
 
     await wait(mockDelay);

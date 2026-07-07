@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { access, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { TextDecoder } from "node:util";
 
 export interface GitOperationResult {
   ok: boolean;
@@ -121,6 +122,8 @@ const maxPreviewImageBytes = 25 * 1024 * 1024;
 const maxPreviewVideoBytes = 80 * 1024 * 1024;
 
 const graphColors = ["#51c2a9", "#7aa7ff", "#d69cff", "#f0c36b", "#ef6b73", "#8bd38b"];
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+const fallbackPathDecoder = new TextDecoder("gb18030");
 const gitOperationMarkers: Array<{ path: string; state: GitOperationState }> = [
   { path: "rebase-merge", state: "rebase" },
   { path: "rebase-apply", state: "rebase" },
@@ -141,6 +144,50 @@ const skippedDirectoryNames = new Set([
   ".turbo"
 ]);
 
+function createGitEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_PAGER: "cat",
+    LC_ALL: "C.UTF-8",
+    LANG: "C.UTF-8",
+    LESSCHARSET: "utf-8",
+    OUTPUT_CHARSET: "UTF-8"
+  };
+
+  return appendGitConfig(env, [
+    ["core.quotepath", "false"],
+    ["i18n.commitEncoding", "utf-8"],
+    ["i18n.logOutputEncoding", "utf-8"]
+  ]);
+}
+
+function appendGitConfig(env: NodeJS.ProcessEnv, entries: Array<[string, string]>): NodeJS.ProcessEnv {
+  const existingCount = Number(env.GIT_CONFIG_COUNT);
+  const baseIndex = Number.isInteger(existingCount) && existingCount >= 0 ? existingCount : 0;
+
+  entries.forEach(([key, value], index) => {
+    const slot = baseIndex + index;
+    env[`GIT_CONFIG_KEY_${slot}`] = key;
+    env[`GIT_CONFIG_VALUE_${slot}`] = value;
+  });
+  env.GIT_CONFIG_COUNT = String(baseIndex + entries.length);
+
+  return env;
+}
+
+function decodeGitOutput(buffer: Buffer): string {
+  if (buffer.byteLength === 0) {
+    return "";
+  }
+
+  try {
+    return utf8Decoder.decode(buffer);
+  } catch {
+    return process.platform === "win32" ? fallbackPathDecoder.decode(buffer) : buffer.toString("utf8");
+  }
+}
+
 export class GitService {
   async run(cwd: string, args: string[], options: { timeoutMs?: number } = {}): Promise<GitOperationResult> {
     return new Promise((resolve) => {
@@ -148,17 +195,13 @@ export class GitService {
       let settled = false;
       const child = spawn("git", args, {
         cwd,
-        env: {
-          ...process.env,
-          GIT_TERMINAL_PROMPT: "0",
-          GIT_PAGER: "cat"
-        },
+        env: createGitEnv(),
         shell: false,
         windowsHide: true
       });
 
-      let stdout = "";
-      let stderr = "";
+      const stdoutChunks: Buffer[] = [];
+      const stderrChunks: Buffer[] = [];
       const finish = (result: GitOperationResult) => {
         if (settled) {
           return;
@@ -173,7 +216,9 @@ export class GitService {
       const timeoutId = options.timeoutMs
         ? setTimeout(() => {
             const timeoutText = `Git command timed out after ${Math.round((options.timeoutMs ?? 0) / 1000)}s.`;
-            stderr = stderr ? `${stderr}\n${timeoutText}` : timeoutText;
+            const stdout = decodeGitOutput(Buffer.concat(stdoutChunks));
+            const stderrText = decodeGitOutput(Buffer.concat(stderrChunks));
+            const stderr = stderrText ? `${stderrText}\n${timeoutText}` : timeoutText;
             child.kill();
             finish({
               ok: false,
@@ -186,19 +231,19 @@ export class GitService {
           }, options.timeoutMs)
         : undefined;
 
-      child.stdout.on("data", (chunk) => {
-        stdout += chunk.toString();
+      child.stdout.on("data", (chunk: Buffer) => {
+        stdoutChunks.push(chunk);
       });
 
-      child.stderr.on("data", (chunk) => {
-        stderr += chunk.toString();
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderrChunks.push(chunk);
       });
 
       child.on("error", (error) => {
         finish({
           ok: false,
           command,
-          stdout,
+          stdout: decodeGitOutput(Buffer.concat(stdoutChunks)),
           stderr: error.message,
           exitCode: -1,
           messageZh: "无法执行 Git 命令，请确认本机已安装 Git 并加入 PATH。"
@@ -207,6 +252,8 @@ export class GitService {
 
       child.on("close", (code) => {
         const exitCode = code ?? -1;
+        const stdout = decodeGitOutput(Buffer.concat(stdoutChunks));
+        const stderr = decodeGitOutput(Buffer.concat(stderrChunks));
         finish({
           ok: exitCode === 0,
           command,
@@ -225,17 +272,13 @@ export class GitService {
       let settled = false;
       const child = spawn("git", args, {
         cwd,
-        env: {
-          ...process.env,
-          GIT_TERMINAL_PROMPT: "0",
-          GIT_PAGER: "cat"
-        },
+        env: createGitEnv(),
         shell: false,
         windowsHide: true
       });
 
       const stdoutChunks: Buffer[] = [];
-      let stderr = "";
+      const stderrChunks: Buffer[] = [];
       const finish = (result: Omit<GitOperationResult, "stdout"> & { stdout: Buffer }) => {
         if (settled) {
           return;
@@ -250,7 +293,8 @@ export class GitService {
       const timeoutId = options.timeoutMs
         ? setTimeout(() => {
             const timeoutText = `Git command timed out after ${Math.round((options.timeoutMs ?? 0) / 1000)}s.`;
-            stderr = stderr ? `${stderr}\n${timeoutText}` : timeoutText;
+            const stderrText = decodeGitOutput(Buffer.concat(stderrChunks));
+            const stderr = stderrText ? `${stderrText}\n${timeoutText}` : timeoutText;
             child.kill();
             finish({
               ok: false,
@@ -267,8 +311,8 @@ export class GitService {
         stdoutChunks.push(chunk);
       });
 
-      child.stderr.on("data", (chunk) => {
-        stderr += chunk.toString();
+      child.stderr.on("data", (chunk: Buffer) => {
+        stderrChunks.push(chunk);
       });
 
       child.on("error", (error) => {
@@ -285,6 +329,7 @@ export class GitService {
       child.on("close", (code) => {
         const exitCode = code ?? -1;
         const stdout = Buffer.concat(stdoutChunks);
+        const stderr = decodeGitOutput(Buffer.concat(stderrChunks));
         finish({
           ok: exitCode === 0,
           command,
