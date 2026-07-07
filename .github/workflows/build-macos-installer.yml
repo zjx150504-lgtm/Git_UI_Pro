@@ -38,7 +38,7 @@ jobs:
         with:
           name: git-ui-pro-macos-x64
           path: |
-            release/**
-            !release/**/builder-debug.yml
-            !release/**/builder-effective-config.yaml
+            release/*.dmg
+            release/*.dmg.blockmap
+            release/*.zip
           if-no-files-found: error

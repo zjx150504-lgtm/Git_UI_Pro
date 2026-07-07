@@ -65,6 +65,8 @@ Windows 安装包使用辅助安装向导，默认按当前用户安装，并允
 - `git-ui-pro-windows-x64`
 - `git-ui-pro-linux-x64`
 
+Actions 只上传安装包和必要的 blockmap 文件，不上传 `win-unpacked`、`linux-unpacked` 等解包目录，避免 Release 阶段上传过多文件触发 GitHub secondary rate limit。
+
 当工作流由 `v*` 格式 tag 触发时，会在 Windows 和 Linux 构建完成后自动创建 GitHub Release，并把安装包上传到该 Release。
 
 macOS runner 在免费 GitHub Actions 中经常长时间排队，因此 macOS 构建拆分到 `.github/workflows/build-macos-installer.yml`，需要时进入 `Actions` -> `Build macOS Installer` -> `Run workflow` 手动触发。macOS artifacts 生成后，可手动上传到对应 GitHub Release。

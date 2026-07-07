@@ -59,9 +59,10 @@ jobs:
         with:
           name: git-ui-pro-${{ matrix.artifact }}
           path: |
-            release/**
-            !release/**/builder-debug.yml
-            !release/**/builder-effective-config.yaml
+            release/*.exe
+            release/*.exe.blockmap
+            release/*.AppImage
+            release/*.deb
           if-no-files-found: error
 
   publish-github-release:

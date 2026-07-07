@@ -2,6 +2,12 @@
 
 本项目遵循语义化版本思路记录重要变更。
 
+## v0.1.5 - 2026-07-07
+
+### Fixed
+
+- 收窄 GitHub Actions artifacts 上传范围，仅发布安装包文件，避免上传解包目录触发 GitHub secondary rate limit。
+
 ## v0.1.4 - 2026-07-07
 
 ### Changed
