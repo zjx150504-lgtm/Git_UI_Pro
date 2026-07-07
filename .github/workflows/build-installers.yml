@@ -28,10 +28,6 @@ jobs:
             os: ubuntu-latest
             script: dist:linux
             artifact: linux-x64
-          - name: macOS x64
-            os: macos-13
-            script: dist:mac
-            artifact: macos-x64
 
     steps:
       - name: Checkout

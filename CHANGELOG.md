@@ -2,6 +2,13 @@
 
 本项目遵循语义化版本思路记录重要变更。
 
+## v0.1.4 - 2026-07-07
+
+### Changed
+
+- 将主发布 workflow 调整为 Windows/Linux 构建完成后即可发布，避免 macOS runner 长时间排队阻塞 Release。
+- 将 macOS 安装包拆分为单独手动 workflow，便于后续按需补充 macOS artifacts。
+
 ## v0.1.3 - 2026-07-07
 
 ### Fixed
