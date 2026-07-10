@@ -2,6 +2,7 @@
 
 ## 常用命令
 
+- `npm run release:win`: 启动本地发布控制台，在浏览器中完成版本更新、Windows 打包、版本提交、tag 和 GitHub/Gitee 双远端推送。
 - `npm run icons`: 生成 `build/icon.ico`、`build/icon.png` 和 Linux PNG 图标集。
 - `npm run dist:dir`: 生成未安装目录包到 `release/win-unpacked`，用于快速验证打包内容。
 - `npm run dist:win`: 生成未签名 Windows NSIS 安装包和 portable 包到 `release/`。
@@ -10,6 +11,26 @@
 - `npm run dist:win:signed`: 生成签名 Windows 包，需先配置代码签名证书环境变量。
 
 所有正式和验证打包产物统一输出到 `release/`，不要使用 `release-*` 临时输出目录。
+
+## 本地发布控制台
+
+执行以下命令后，脚本会监听随机的本机回环端口并自动打开浏览器：
+
+```bash
+npm run release:win
+```
+
+控制台会读取 `package.json` 当前版本和本地 `v*` tag 历史，并根据两者中的最高稳定版本推荐补丁、次版本和主版本号。确认发布后依次执行：
+
+1. 检查当前分支、Git 身份、进行中的 Git 操作、目标 tag 和双远端分支状态。
+2. 使用 `npm version --no-git-tag-version` 同步更新 `package.json` 与 `package-lock.json`。
+3. 执行 `npm run dist:win -- --publish never`，确认 `release/` 中已生成对应版本的 Windows 安装包。
+4. 按项目提交规范提交当前全部改动，创建带说明的 `v*` tag。
+5. 分别向 Gitee 和 GitHub 原子推送当前分支与 tag。GitHub 收到 tag 后会触发 Actions 并创建 GitHub Release。
+
+发布控制台默认识别指向 `gitee.com` 的现有远端。若尚未配置 GitHub 远端，会使用 `package.json` 的 `repository.url` 添加名为 `github` 的远端。HTTPS 远端需要提前通过 Git Credential Manager 配置凭据；脚本不会读取或保存访问令牌。
+
+发布前必须显式勾选确认项。构建失败且尚未暂存时，脚本会恢复两个版本文件；本地提交或 tag 已生成后不会自动回滚，远端推送失败时可在当前页面重试。
 
 Windows 安装包使用辅助安装向导，默认按当前用户安装，并允许用户选择安装目录。
 

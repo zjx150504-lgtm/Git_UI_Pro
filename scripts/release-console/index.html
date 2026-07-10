@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="release-token" content="{{RELEASE_TOKEN}}" />
+    <title>Git UI Pro 发布控制台</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="app-bar">
+      <div class="brand-lockup">
+        <span class="brand-mark">{{icon:GitBranch}}</span>
+        <div>
+          <strong>Git UI Pro</strong>
+          <span>发布控制台</span>
+        </div>
+      </div>
+      <div class="header-context">
+        <span id="branchBadge" class="branch-badge">{{icon:GitBranch}}<span>读取中</span></span>
+        <button id="refreshButton" class="icon-button" type="button" title="刷新仓库状态" aria-label="刷新仓库状态">
+          {{icon:RefreshCw}}
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <section class="release-workspace" aria-labelledby="releaseHeading">
+        <div class="release-form-pane">
+          <div class="section-heading">
+            <div>
+              <span class="section-kicker">WINDOWS RELEASE</span>
+              <h1 id="releaseHeading">准备新版本</h1>
+            </div>
+            <span id="readinessBadge" class="status-badge loading">{{icon:LoaderCircle}} 检查中</span>
+          </div>
+
+          <div class="version-rail" aria-label="版本变更">
+            <div class="version-node current">
+              <span>当前版本</span>
+              <strong id="currentVersion">--</strong>
+              <small id="latestTag">最新标签 --</small>
+            </div>
+            <div class="version-connector" aria-hidden="true">
+              <span></span>
+              <i></i>
+            </div>
+            <div class="version-node target">
+              <label for="versionInput">目标版本</label>
+              <input id="versionInput" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="0.1.6" />
+              <small id="versionValidation">使用 x.y.z 格式</small>
+            </div>
+          </div>
+
+          <div class="version-presets" aria-label="推荐版本">
+            <span>推荐</span>
+            <button type="button" data-version-kind="patch">补丁 <strong>--</strong></button>
+            <button type="button" data-version-kind="minor">次版本 <strong>--</strong></button>
+            <button type="button" data-version-kind="major">主版本 <strong>--</strong></button>
+          </div>
+
+          <div class="form-grid">
+            <div class="field field-wide">
+              <label for="releaseNotes">版本说明</label>
+              <textarea id="releaseNotes" rows="5" maxlength="2400" placeholder="每行一条变更说明"></textarea>
+              <span class="field-meta"><span id="noteCount">0 条</span><span>最多 12 条</span></span>
+            </div>
+
+            <fieldset class="field build-mode-field">
+              <legend>Windows 包</legend>
+              <div class="segmented-control">
+                <label>
+                  <input type="radio" name="buildMode" value="unsigned" checked />
+                  <span>常规包</span>
+                </label>
+                <label>
+                  <input type="radio" name="buildMode" value="signed" />
+                  <span>签名包</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <div class="field commit-preview-field">
+              <span class="field-label">提交标题</span>
+              <code id="commitTitle">chore(release): 发布 v--</code>
+            </div>
+          </div>
+
+          <div class="remote-strip" aria-label="发布远端">
+            <div class="remote-target">
+              <span class="remote-icon gitee">{{icon:GitFork}}</span>
+              <div>
+                <strong>Gitee</strong>
+                <small id="giteeRemote">检查中</small>
+              </div>
+              <span id="giteeState" class="remote-state pending">待检查</span>
+            </div>
+            <div class="remote-target">
+              <span class="remote-icon github">{{icon:GitFork}}</span>
+              <div>
+                <strong>GitHub</strong>
+                <small id="githubRemote">检查中</small>
+              </div>
+              <span id="githubState" class="remote-state pending">待检查</span>
+            </div>
+          </div>
+
+          <div id="blockerBox" class="blocker-box" hidden>
+            <div class="blocker-title">{{icon:CircleAlert}} 发布已阻断</div>
+            <ul id="blockerList"></ul>
+          </div>
+
+          <label class="release-confirmation">
+            <input id="confirmCheckbox" type="checkbox" />
+            <span>确认提交当前全部改动，并把分支与版本标签推送到 Gitee 和 GitHub</span>
+          </label>
+
+          <div class="primary-actions">
+            <button id="publishButton" class="publish-button" type="button" disabled>
+              {{icon:Rocket}}
+              <span>发布新版本</span>
+            </button>
+            <span id="publishHint">等待仓库检查完成</span>
+          </div>
+        </div>
+
+        <aside class="activity-pane" aria-labelledby="activityHeading">
+          <div class="activity-heading">
+            <div>
+              <span class="section-kicker">PIPELINE</span>
+              <h2 id="activityHeading">发布进度</h2>
+            </div>
+            <span id="jobState" class="job-state idle">空闲</span>
+          </div>
+
+          <ol id="stageList" class="stage-list">
+            <li data-stage="preflight"><i></i><span>远端预检</span><small>等待</small></li>
+            <li data-stage="version"><i></i><span>更新版本</span><small>等待</small></li>
+            <li data-stage="build"><i></i><span>Windows 打包</span><small>等待</small></li>
+            <li data-stage="commit"><i></i><span>提交与标签</span><small>等待</small></li>
+            <li data-stage="gitee"><i></i><span>推送 Gitee</span><small>等待</small></li>
+            <li data-stage="github"><i></i><span>推送 GitHub</span><small>等待</small></li>
+          </ol>
+
+          <div class="console-heading">
+            <span>{{icon:SquareTerminal}} 实时日志</span>
+            <button id="copyLogsButton" class="text-icon-button" type="button" title="复制日志">{{icon:Copy}} 复制</button>
+          </div>
+          <pre id="logOutput" class="log-output" aria-live="polite"><span class="log-placeholder">发布开始后将在这里显示命令输出</span></pre>
+
+          <div id="artifactBox" class="artifact-box" hidden>
+            <span>{{icon:Package}} 本地产物</span>
+            <ul id="artifactList"></ul>
+          </div>
+
+          <button id="retryButton" class="retry-button" type="button" hidden>
+            {{icon:RefreshCw}} 重试双远端推送
+          </button>
+        </aside>
+      </section>
+
+      <section class="repository-band" aria-labelledby="changesHeading">
+        <div class="changes-column">
+          <div class="band-heading">
+            <div>
+              <span class="section-kicker">WORKTREE</span>
+              <h2 id="changesHeading">本次涉及改动</h2>
+            </div>
+            <span id="changeCount" class="count-label">--</span>
+          </div>
+          <ul id="changeList" class="change-list">
+            <li class="empty-row">读取工作区状态...</li>
+          </ul>
+        </div>
+
+        <div class="history-column">
+          <div class="band-heading">
+            <div>
+              <span class="section-kicker">TAGS</span>
+              <h2>历史版本</h2>
+            </div>
+            <span id="historyCount" class="count-label">--</span>
+          </div>
+          <ol id="historyList" class="history-list">
+            <li class="empty-row">读取版本记录...</li>
+          </ol>
+        </div>
+      </section>
+    </main>
+
+    <dialog id="releaseDialog" class="release-dialog">
+      <form method="dialog">
+        <div class="dialog-icon">{{icon:ShieldCheck}}</div>
+        <h2>确认发布 <span id="dialogVersion">v--</span></h2>
+        <dl>
+          <div><dt>分支</dt><dd id="dialogBranch">--</dd></div>
+          <div><dt>构建</dt><dd id="dialogBuild">Windows 常规包</dd></div>
+          <div><dt>远端</dt><dd>Gitee + GitHub</dd></div>
+        </dl>
+        <p>发布开始后将生成版本提交和标签，推送前不会再次暂停。</p>
+        <div class="dialog-actions">
+          <button value="cancel" class="secondary-button">取消</button>
+          <button id="dialogPublishButton" value="default" class="publish-button">{{icon:Rocket}} 开始发布</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script src="/app.js" defer></script>
+  </body>
+</html>

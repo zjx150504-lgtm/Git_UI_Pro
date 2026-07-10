@@ -43,6 +43,7 @@ npm run dev
 npm run dev:web
 npm run typecheck
 npm run build
+npm run release:win
 npm run dist:win
 npm run dist:linux
 npm run dist:mac
@@ -51,6 +52,16 @@ npm run dist:mac
 更多打包说明见 [docs/PACKAGING.md](docs/PACKAGING.md)。
 
 ## 发布流程
+
+推荐运行本地发布控制台：
+
+```bash
+npm run release:win
+```
+
+控制台会显示当前版本、推荐版本和历史 tag，并完成版本文件更新、Windows 打包、规范化版本提交、tag 以及 Gitee/GitHub 双远端推送。GitHub 收到 tag 后会自动执行多平台构建并创建 Release。详细约束和失败恢复方式见 [docs/PACKAGING.md](docs/PACKAGING.md)。
+
+需要手动发布时：
 
 1. 确认本地校验通过：
 
