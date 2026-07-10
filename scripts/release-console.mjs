@@ -35,7 +35,6 @@ const packagePath = path.join(rootDir, "package.json");
 const packageLockPath = path.join(rootDir, "package-lock.json");
 const releaseDir = path.join(rootDir, "release");
 const gitCommand = "git";
-const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const maxLogEntries = 2_000;
 
 const iconComponents = {
@@ -159,6 +158,30 @@ export function detectProvider(remoteUrl) {
   return "other";
 }
 
+export function resolveNpmInvocation(options = {}) {
+  const platform = options.platform ?? process.platform;
+  if (platform !== "win32") {
+    return { command: "npm", prefixArgs: [] };
+  }
+
+  const execPath = options.execPath ?? process.execPath;
+  const npmExecPath = options.npmExecPath ?? process.env.npm_execpath;
+  const fileExists = options.fileExists ?? existsSync;
+  const candidates = [
+    npmExecPath,
+    path.win32.join(path.win32.dirname(execPath), "node_modules", "npm", "bin", "npm-cli.js")
+  ].filter((candidate) => candidate && /\.(?:c?js|mjs)$/i.test(candidate));
+  const npmCliPath = candidates.find((candidate) => fileExists(candidate));
+  if (npmCliPath) {
+    return { command: execPath, prefixArgs: [npmCliPath] };
+  }
+
+  return {
+    command: options.comSpec ?? process.env.ComSpec ?? "cmd.exe",
+    prefixArgs: ["/d", "/s", "/c", "npm"]
+  };
+}
+
 function cleanMessageLine(value) {
   return String(value ?? "").replace(/[\r\n]+/g, " ").trim();
 }
@@ -240,9 +263,9 @@ function commandLabel(command, args) {
 }
 
 async function runProcess(command, args, options = {}) {
-  const { job, displayArgs = args, allowFailure = false, env = {} } = options;
+  const { job, displayCommand = command, displayArgs = args, allowFailure = false, env = {} } = options;
   if (job) {
-    addLog(job, "command", `$ ${commandLabel(command, displayArgs)}`);
+    addLog(job, "command", `$ ${commandLabel(displayCommand, displayArgs)}`);
   }
 
   return new Promise((resolve, reject) => {
@@ -297,7 +320,7 @@ async function runProcess(command, args, options = {}) {
       }
 
       const detail = result.stderr.trim() || result.stdout.trim() || `退出码 ${result.code}`;
-      reject(new Error(`${commandLabel(command, displayArgs)} 执行失败：${detail}`));
+      reject(new Error(`${commandLabel(displayCommand, displayArgs)} 执行失败：${detail}`));
     });
   });
 }
@@ -307,7 +330,12 @@ async function runGit(args, options = {}) {
 }
 
 async function runNpm(args, options = {}) {
-  return runProcess(npmCommand, args, options);
+  const invocation = resolveNpmInvocation();
+  return runProcess(invocation.command, [...invocation.prefixArgs, ...args], {
+    ...options,
+    displayCommand: "npm",
+    displayArgs: options.displayArgs ?? args
+  });
 }
 
 async function gitOutput(args, options = {}) {
@@ -754,8 +782,8 @@ async function executeRelease(job) {
     setStage(job, "version", "running");
     originalPackage = await readFile(packagePath);
     originalPackageLock = await readFile(packageLockPath);
-    await runNpm(["version", job.version, "--no-git-tag-version"], { job });
     versionChanged = true;
+    await runNpm(["version", job.version, "--no-git-tag-version"], { job });
     const updatedPackage = JSON.parse(await readFile(packagePath, "utf8"));
     if (updatedPackage.version !== job.version) {
       throw new Error(`版本更新后仍为 ${updatedPackage.version}，预期为 ${job.version}`);

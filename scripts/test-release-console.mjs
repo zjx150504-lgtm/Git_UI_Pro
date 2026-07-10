@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
 import {
   buildCommitMessage,
@@ -8,6 +9,7 @@ import {
   parseStatusPorcelain,
   parseVersion,
   recommendVersions,
+  resolveNpmInvocation,
   startReleaseConsole
 } from "./release-console.mjs";
 
@@ -57,6 +59,30 @@ test("识别 GitHub 与 Gitee 远端", () => {
   assert.equal(detectProvider("https://github.com/example/repo.git"), "github");
   assert.equal(detectProvider("git@gitee.com:example/repo.git"), "gitee");
   assert.equal(detectProvider("https://git.example.com/repo.git"), "other");
+});
+
+test("Windows 通过 Node 执行 npm CLI，避免直接 spawn npm.cmd", () => {
+  const invocation = resolveNpmInvocation({
+    platform: "win32",
+    execPath: "C:\\node\\node.exe",
+    npmExecPath: "C:\\node\\node_modules\\npm\\bin\\npm-cli.js",
+    fileExists: (candidate) => candidate.endsWith("npm-cli.js")
+  });
+  assert.deepEqual(invocation, {
+    command: "C:\\node\\node.exe",
+    prefixArgs: ["C:\\node\\node_modules\\npm\\bin\\npm-cli.js"]
+  });
+});
+
+test("当前环境解析出的 npm 调用可以正常启动", () => {
+  const invocation = resolveNpmInvocation();
+  const result = spawnSync(invocation.command, [...invocation.prefixArgs, "--version"], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    windowsHide: true
+  });
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
+  assert.match(result.stdout.trim(), /^\d+\.\d+\.\d+/);
 });
 
 test("发布控制台仅凭令牌返回仓库状态", async () => {
