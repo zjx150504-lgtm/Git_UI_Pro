@@ -10,6 +10,7 @@ import {
   GitBranch,
   GitBranchPlus,
   GitCommitHorizontal,
+  GitMerge,
   MessageSquareText,
   MoreHorizontal,
   Plus,
@@ -43,6 +44,8 @@ interface GraphSidebarProps {
   selectedCommitFilePath?: string;
   onOperation: (operation: string) => void;
   onCommitAction: (action: CommitGraphAction, commit: CommitNode) => void;
+  onContinueMerge: () => void;
+  onAbortMerge: () => void;
   panelOpen: boolean;
   onTogglePanel: () => void;
 }
@@ -51,6 +54,7 @@ const graphOperations = [
   { label: "fetch", title: "抓取远程更新", icon: RefreshCw },
   { label: "pull", title: "拉取当前分支", icon: CloudDownload },
   { label: "push", title: "推送当前分支", icon: CloudUpload },
+  { label: "合并到主分支", title: "切换到主分支并合并当前分支", icon: GitMerge },
   { label: "新建分支", title: "新建分支", icon: Plus }
 ];
 
@@ -146,6 +150,8 @@ export function GraphSidebar({
   selectedCommitFilePath,
   onOperation,
   onCommitAction,
+  onContinueMerge,
+  onAbortMerge,
   panelOpen,
   onTogglePanel
 }: GraphSidebarProps) {
@@ -719,7 +725,7 @@ export function GraphSidebar({
               </div>
             ) : null}
             {filteredCommits.length === 0 && !loading ? <div className="empty-state graph-empty">当前仓库没有可显示的提交。</div> : null}
-            {operationProject ? <GraphOperationRow project={operationProject} /> : null}
+            {operationProject ? <GraphOperationRow project={operationProject} onContinueMerge={onContinueMerge} onAbortMerge={onAbortMerge} /> : null}
             {syncProject ? <GraphSyncRow project={syncProject} /> : null}
             {virtualGraphEnabled && graphVirtualRange.topPadding > 0 ? <div className="graph-virtual-spacer" style={{ height: graphVirtualRange.topPadding }} aria-hidden="true" /> : null}
             {visibleCommits.map((commit, visibleIndex) => {
@@ -1578,17 +1584,36 @@ function historyRefDescription(ref: GitHistoryRef): string {
   return revision;
 }
 
-function GraphOperationRow({ project }: { project: GitProject }) {
+function GraphOperationRow({
+  project,
+  onContinueMerge,
+  onAbortMerge
+}: {
+  project: GitProject;
+  onContinueMerge: () => void;
+  onAbortMerge: () => void;
+}) {
   const state = project.status?.operationState;
   const hasConflicts = Boolean(project.status?.hasConflicts);
   const branch = project.status?.currentBranch ?? "分离 HEAD";
   const copy = graphOperationCopy(state, hasConflicts);
+  const showMergeActions = state === "merge";
 
   return (
-    <div className={`graph-operation-row ${hasConflicts ? "conflict" : state ?? "status"}`}>
+    <div className={`graph-operation-row ${showMergeActions ? "with-actions" : ""} ${hasConflicts ? "conflict" : state ?? "status"}`}>
       <span className="graph-operation-icon">{hasConflicts ? <AlertTriangle size={13} /> : <GitCommitHorizontal size={13} />}</span>
       <span className="graph-operation-label">{copy.label}</span>
       <span className="graph-operation-detail">{copy.detail ?? branch}</span>
+      {showMergeActions ? (
+        <span className="graph-operation-actions">
+          <button type="button" className="graph-operation-action" onClick={onContinueMerge}>
+            继续
+          </button>
+          <button type="button" className="graph-operation-action danger" onClick={onAbortMerge}>
+            终止
+          </button>
+        </span>
+      ) : null}
     </div>
   );
 }

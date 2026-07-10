@@ -64,6 +64,9 @@ export interface GitUIBridge {
   getBranches: (repositoryPath: string) => Promise<BranchInfo[]>;
   createBranch: (repositoryPath: string, branchName: string, checkout: boolean, startPoint?: string) => Promise<GitOperationResult>;
   switchBranch: (repositoryPath: string, branch: BranchInfo) => Promise<GitOperationResult>;
+  mergeCurrentBranchToMain: (repositoryPath: string) => Promise<GitOperationResult>;
+  continueMerge: (repositoryPath: string) => Promise<GitOperationResult>;
+  abortMerge: (repositoryPath: string) => Promise<GitOperationResult>;
   deleteBranch: (repositoryPath: string, branchName: string) => Promise<GitOperationResult>;
   amendLastCommitMessage: (repositoryPath: string, input: CommitMessageInput) => Promise<GitOperationResult>;
   resetLastCommit: (repositoryPath: string, mode: Exclude<GitResetMode, "hard">) => Promise<GitOperationResult>;

@@ -148,6 +148,9 @@ function registerIpc(): void {
     gitService.createBranch(repositoryPath, branchName, checkout, startPoint)
   );
   ipcMain.handle("git:switchBranch", (_event, repositoryPath: string, branch) => gitService.switchBranch(repositoryPath, branch));
+  ipcMain.handle("git:mergeCurrentBranchToMain", (_event, repositoryPath: string) => gitService.mergeCurrentBranchToMain(repositoryPath));
+  ipcMain.handle("git:continueMerge", (_event, repositoryPath: string) => gitService.continueMerge(repositoryPath));
+  ipcMain.handle("git:abortMerge", (_event, repositoryPath: string) => gitService.abortMerge(repositoryPath));
   ipcMain.handle("git:deleteBranch", (_event, repositoryPath: string, branchName: string) => gitService.deleteBranch(repositoryPath, branchName));
   ipcMain.handle("git:amendLastCommitMessage", (_event, repositoryPath: string, input: { subject: string; body?: string }) =>
     gitService.amendLastCommitMessage(repositoryPath, input)

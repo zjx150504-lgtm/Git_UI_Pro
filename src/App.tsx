@@ -994,6 +994,11 @@ export function App() {
       return;
     }
 
+    if (action === "合并到主分支") {
+      await mergeCurrentBranchToMain(selectedProject);
+      return;
+    }
+
     if (action === "新建分支") {
       await createBranchFromToolbar(selectedProject);
       return;
@@ -1056,6 +1061,98 @@ export function App() {
     }
 
     notifySuccess("同步完成", undefined, toastId);
+    await loadProjectData(project);
+  }
+
+  async function mergeCurrentBranchToMain(project: GitProject) {
+    if (!requireGitReady("合并到主分支")) {
+      return;
+    }
+
+    if (project.status?.operationState || project.status?.hasConflicts) {
+      notifyInfo("请先继续或终止当前 Git 操作");
+      return;
+    }
+
+    const currentBranch = project.status?.currentBranch;
+    if (!currentBranch) {
+      notifyInfo("当前是分离 HEAD 状态，无法自动合并到主分支");
+      return;
+    }
+
+    if (hasWorktreeChanges(project)) {
+      const confirmed = await requestConfirm({
+        title: "合并到主分支",
+        description: "将切换到主分支，并把当前分支合并进去。当前工作区存在未提交改动，切换或合并可能失败。",
+        detail: currentBranch,
+        confirmLabel: "继续合并",
+        tone: "warning"
+      });
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    const toastId = notifyLoading(`正在将 ${currentBranch} 合并到主分支...`);
+    const result = await apiClient.mergeCurrentBranchToMain(project);
+    if (!notifyGitResult(result, `已将 ${currentBranch} 合并到主分支`, "合并到主分支失败，请查看原始 Git 输出。", toastId)) {
+      await loadProjectData(project, nextProjectLoadRequestId(), graphHistoryFilter, { clearTabs: true });
+      return;
+    }
+
+    clearWorktreeEditorTabs();
+    await loadProjectData(project);
+  }
+
+  async function continueMerge(project: GitProject) {
+    if (!requireGitReady("继续合并")) {
+      return;
+    }
+
+    if (project.status?.operationState !== "merge") {
+      notifyInfo("当前没有正在进行的合并操作");
+      return;
+    }
+
+    const toastId = notifyLoading("正在继续合并...");
+    const result = await apiClient.continueMerge(project);
+    if (!notifyGitResult(result, "合并完成", "继续合并失败，请确认所有冲突已解决并暂存。", toastId)) {
+      await loadProjectData(project);
+      return;
+    }
+
+    clearWorktreeEditorTabs();
+    await loadProjectData(project);
+  }
+
+  async function abortMerge(project: GitProject) {
+    if (!requireGitReady("终止合并")) {
+      return;
+    }
+
+    if (project.status?.operationState !== "merge") {
+      notifyInfo("当前没有正在进行的合并操作");
+      return;
+    }
+
+    const confirmed = await requestConfirm({
+      title: "终止合并",
+      description: "将取消当前 merge，并尽量恢复合并开始前的主分支状态。",
+      confirmLabel: "终止合并",
+      tone: "danger"
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    const toastId = notifyLoading("正在终止合并...");
+    const result = await apiClient.abortMerge(project);
+    if (!notifyGitResult(result, "已终止合并", "终止合并失败，请查看原始 Git 输出。", toastId)) {
+      await loadProjectData(project);
+      return;
+    }
+
+    clearWorktreeEditorTabs();
     await loadProjectData(project);
   }
 
@@ -1939,6 +2036,8 @@ export function App() {
                 selectedCommitFilePath={activeWorktreeTab?.sourceType === "commit" ? activeWorktreeTab.file.path : undefined}
                 onOperation={handleOperation}
                 onCommitAction={(action, commit) => void handleCommitGraphAction(action, commit)}
+                onContinueMerge={() => (selectedProject ? void continueMerge(selectedProject) : undefined)}
+                onAbortMerge={() => (selectedProject ? void abortMerge(selectedProject) : undefined)}
                 panelOpen={graphPanelOpen}
                 onTogglePanel={() => setGraphPanelOpen((value) => !value)}
               />

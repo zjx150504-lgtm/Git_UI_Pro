@@ -4230,6 +4230,10 @@ button {
   font-size: 12px;
 }
 
+.graph-operation-row.with-actions {
+  grid-template-columns: 24px auto minmax(0, 1fr) max-content;
+}
+
 .graph-operation-icon {
   display: inline-grid;
   width: 16px;
@@ -4257,6 +4261,31 @@ button {
   color: var(--muted-strong);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.graph-operation-actions {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.graph-operation-action {
+  min-height: 22px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0 7px;
+  color: var(--text);
+  background: var(--surface-2);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.graph-operation-action:hover {
+  background: var(--surface-hover);
+}
+
+.graph-operation-action.danger {
+  color: var(--danger);
 }
 
 .graph-sync-row {

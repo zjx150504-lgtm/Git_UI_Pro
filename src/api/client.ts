@@ -409,6 +409,34 @@ export const apiClient = {
     return okResult(branch.type === "remote" ? `git switch --track ${branch.name}` : `git switch ${branch.name}`);
   },
 
+  async mergeCurrentBranchToMain(project: GitProject): Promise<GitOperationResult> {
+    if (window.gitUI) {
+      return window.gitUI.mergeCurrentBranchToMain(project.path);
+    }
+
+    await wait(mockDelay);
+    const currentBranch = project.status?.currentBranch ?? "feature/current";
+    return okResult(`git switch master && git merge --no-edit ${currentBranch}`);
+  },
+
+  async continueMerge(project: GitProject): Promise<GitOperationResult> {
+    if (window.gitUI) {
+      return window.gitUI.continueMerge(project.path);
+    }
+
+    await wait(mockDelay);
+    return okResult("git commit --no-edit");
+  },
+
+  async abortMerge(project: GitProject): Promise<GitOperationResult> {
+    if (window.gitUI) {
+      return window.gitUI.abortMerge(project.path);
+    }
+
+    await wait(mockDelay);
+    return okResult("git merge --abort");
+  },
+
   async deleteBranch(project: GitProject, branchName: string): Promise<GitOperationResult> {
     if (window.gitUI) {
       return window.gitUI.deleteBranch(project.path, branchName);

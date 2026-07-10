@@ -839,6 +839,75 @@ export class GitService {
     ]);
   }
 
+  async mergeCurrentBranchToMain(repositoryPath: string): Promise<GitOperationResult> {
+    const status = await this.getStatus(repositoryPath);
+    if (status.operationState || status.hasConflicts) {
+      return {
+        ok: false,
+        command: "git merge",
+        stdout: "",
+        stderr: "A Git operation is already in progress.",
+        exitCode: -1,
+        messageZh: "当前已有 Git 操作或冲突未完成，请先继续或终止当前操作。"
+      };
+    }
+
+    const sourceBranch = status.currentBranch;
+    if (!sourceBranch) {
+      throw new Error("当前是分离 HEAD 状态，无法自动合并到主分支。");
+    }
+
+    const mainBranch = await this.getMainBranchName(repositoryPath);
+    if (!mainBranch) {
+      return {
+        ok: false,
+        command: "git merge",
+        stdout: "",
+        stderr: "No main branch could be determined.",
+        exitCode: -1,
+        messageZh: "无法识别主分支，请确认仓库存在 main 或 master 分支。"
+      };
+    }
+
+    if (sourceBranch === mainBranch) {
+      return {
+        ok: false,
+        command: "git merge",
+        stdout: "",
+        stderr: "The current branch is already the main branch.",
+        exitCode: -1,
+        messageZh: `当前已经在主分支 ${mainBranch}，无需合并到主分支。`
+      };
+    }
+
+    const switchResult = await this.switchToMainBranch(repositoryPath, mainBranch);
+    if (!switchResult.ok) {
+      return {
+        ...switchResult,
+        messageZh: switchResult.messageZh ?? `无法切换到主分支 ${mainBranch}，请检查工作区是否有未提交改动。`
+      };
+    }
+
+    const mergeResult = await this.run(repositoryPath, ["merge", "--no-edit", sourceBranch]);
+    return {
+      ...mergeResult,
+      command: `${switchResult.command} && ${mergeResult.command}`,
+      stdout: [switchResult.stdout, mergeResult.stdout].filter(Boolean).join("\n"),
+      stderr: [switchResult.stderr, mergeResult.stderr].filter(Boolean).join("\n")
+    };
+  }
+
+  async continueMerge(repositoryPath: string): Promise<GitOperationResult> {
+    return this.run(repositoryPath, ["commit", "--no-edit"]);
+  }
+
+  async abortMerge(repositoryPath: string): Promise<GitOperationResult> {
+    return this.runWithFallbacks(repositoryPath, [
+      ["merge", "--abort"],
+      ["reset", "--merge"]
+    ]);
+  }
+
   async deleteBranch(repositoryPath: string, branchName: string): Promise<GitOperationResult> {
     const name = branchName.trim();
     if (!name) {
@@ -906,6 +975,53 @@ export class GitService {
     }
 
     return result.stdout.trim() || undefined;
+  }
+
+  private async getMainBranchName(repositoryPath: string): Promise<string | undefined> {
+    const localBranchesResult = await this.run(repositoryPath, ["for-each-ref", "refs/heads", "--format=%(refname:short)"]);
+    const localBranches = new Set(
+      localBranchesResult.ok
+        ? localBranchesResult.stdout
+            .split(/\r?\n/)
+            .map((branch) => branch.trim())
+            .filter(Boolean)
+        : []
+    );
+
+    const defaultRemoteBranch = await this.getDefaultRemoteHeadBranch(repositoryPath);
+    if (defaultRemoteBranch && localBranches.has(defaultRemoteBranch)) {
+      return defaultRemoteBranch;
+    }
+
+    if (localBranches.has("main")) {
+      return "main";
+    }
+
+    if (localBranches.has("master")) {
+      return "master";
+    }
+
+    return defaultRemoteBranch;
+  }
+
+  private async getDefaultRemoteHeadBranch(repositoryPath: string): Promise<string | undefined> {
+    const result = await this.run(repositoryPath, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]);
+    if (!result.ok) {
+      return undefined;
+    }
+
+    const remoteHead = result.stdout.trim();
+    const branchStart = remoteHead.indexOf("/");
+    return branchStart >= 0 ? remoteHead.slice(branchStart + 1) : remoteHead || undefined;
+  }
+
+  private async switchToMainBranch(repositoryPath: string, mainBranch: string): Promise<GitOperationResult> {
+    return this.runWithFallbacks(repositoryPath, [
+      ["switch", mainBranch],
+      ["checkout", mainBranch],
+      ["switch", "--track", `origin/${mainBranch}`],
+      ["checkout", "-t", `origin/${mainBranch}`]
+    ]);
   }
 
   private async getHistoryRevisions(repositoryPath: string, status?: GitStatusSummary, filter: GitHistoryFilter = { mode: "auto" }): Promise<string[]> {
@@ -1507,6 +1623,10 @@ function toChineseGitError(stdout: string, stderr: string): string {
 
   if (text.includes("non-fast-forward")) {
     return "远程分支包含本地没有的提交，请先 pull 或 fetch 后处理差异。";
+  }
+
+  if (text.includes("not possible because you have unmerged files") || text.includes("unmerged files")) {
+    return "仍有冲突文件未解决或未暂存，请处理所有冲突并暂存后再继续。";
   }
 
   if (text.includes("has no upstream branch")) {
