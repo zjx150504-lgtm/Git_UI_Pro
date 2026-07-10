@@ -695,7 +695,24 @@ export class GitService {
   }
 
   async push(repositoryPath: string): Promise<GitOperationResult> {
-    return this.run(repositoryPath, ["push"]);
+    const status = await this.getStatus(repositoryPath).catch(() => undefined);
+    if (status?.upstream || !status?.currentBranch) {
+      return this.run(repositoryPath, ["push"]);
+    }
+
+    const remote = await this.getPushRemote(repositoryPath, status.currentBranch);
+    if (!remote) {
+      return {
+        ok: false,
+        command: "git push",
+        stdout: "",
+        stderr: "Current branch has no upstream branch and no default push remote could be determined.",
+        exitCode: -1,
+        messageZh: "当前分支还没有关联远程分支，且无法确定默认远程仓库。请先配置 remote.pushDefault 或手动设置 upstream。"
+      };
+    }
+
+    return this.run(repositoryPath, ["push", "--set-upstream", remote, status.currentBranch]);
   }
 
   async getBranches(repositoryPath: string): Promise<BranchInfo[]> {
@@ -849,6 +866,46 @@ export class GitService {
     }
 
     return lastResult!;
+  }
+
+  private async getPushRemote(repositoryPath: string, branchName: string): Promise<string | undefined> {
+    const configuredRemote = await this.getConfiguredPushRemote(repositoryPath, branchName);
+    if (configuredRemote) {
+      return configuredRemote;
+    }
+
+    const remotesResult = await this.run(repositoryPath, ["remote"]);
+    if (!remotesResult.ok) {
+      return undefined;
+    }
+
+    const remotes = Array.from(new Set(remotesResult.stdout.split(/\r?\n/).map((remote) => remote.trim()).filter(Boolean)));
+    if (remotes.includes("origin")) {
+      return "origin";
+    }
+
+    return remotes.length === 1 ? remotes[0] : undefined;
+  }
+
+  private async getConfiguredPushRemote(repositoryPath: string, branchName: string): Promise<string | undefined> {
+    const configuredKeys = [`branch.${branchName}.pushRemote`, "remote.pushDefault", `branch.${branchName}.remote`];
+    for (const key of configuredKeys) {
+      const remote = await this.getGitConfigValue(repositoryPath, key);
+      if (remote && remote !== ".") {
+        return remote;
+      }
+    }
+
+    return undefined;
+  }
+
+  private async getGitConfigValue(repositoryPath: string, key: string): Promise<string | undefined> {
+    const result = await this.run(repositoryPath, ["config", "--get", key]);
+    if (!result.ok) {
+      return undefined;
+    }
+
+    return result.stdout.trim() || undefined;
   }
 
   private async getHistoryRevisions(repositoryPath: string, status?: GitStatusSummary, filter: GitHistoryFilter = { mode: "auto" }): Promise<string[]> {
@@ -1450,6 +1507,10 @@ function toChineseGitError(stdout: string, stderr: string): string {
 
   if (text.includes("non-fast-forward")) {
     return "远程分支包含本地没有的提交，请先 pull 或 fetch 后处理差异。";
+  }
+
+  if (text.includes("has no upstream branch")) {
+    return "当前分支还没有关联远程分支，请先执行首次推送并设置 upstream。";
   }
 
   if (text.includes("merge conflict") || text.includes("conflict")) {
