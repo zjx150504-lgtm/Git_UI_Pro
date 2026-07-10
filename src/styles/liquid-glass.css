@@ -1046,6 +1046,20 @@ input[type="radio"]:focus-visible {
   min-height: 26px;
 }
 
+.sidebar-bottom-controls.collapsed {
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+}
+
+.sidebar-bottom-controls.collapsed .sidebar-control-tooltip,
+.sidebar-bottom-controls.collapsed .icon-button {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+}
+
 /* Unified project controls and text-input focus states. */
 
 .project-rail-filterbar {
