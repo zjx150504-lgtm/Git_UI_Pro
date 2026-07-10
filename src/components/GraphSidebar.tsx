@@ -127,7 +127,7 @@ type GraphBranchContext = {
 const GRAPH_TOOLBAR_ICON_SIZE = 16;
 const COMMIT_HOVER_CARD_WIDTH = 400;
 const COMMIT_HOVER_VIEWPORT_GAP = 12;
-const COMMIT_HOVER_SPLIT_GAP = 10;
+const COMMIT_HOVER_PANEL_GAP = 8;
 const COMMIT_HOVER_TOP_OFFSET = 20;
 const COMMIT_HOVER_ARROW_SIZE = 8;
 const COMMIT_DETAILS_PREFETCH_LIMIT = 8;
@@ -410,8 +410,10 @@ export function GraphSidebar({
     window.clearTimeout(closeTimerRef.current);
     window.clearTimeout(hoverTimerRef.current);
     const rowRect = row.getBoundingClientRect();
+    const sourcePaneRect = row.closest(".source-control-pane")?.getBoundingClientRect();
+    const dividerRect = row.closest(".main-grid")?.querySelector<HTMLElement>(".detail-resize")?.getBoundingClientRect();
     const nextPosition = {
-      x: rowRect.right + COMMIT_HOVER_SPLIT_GAP,
+      x: (dividerRect?.right ?? sourcePaneRect?.right ?? rowRect.right) + COMMIT_HOVER_PANEL_GAP,
       y: rowRect.top + rowRect.height / 2
     };
     const showHover = () => {
