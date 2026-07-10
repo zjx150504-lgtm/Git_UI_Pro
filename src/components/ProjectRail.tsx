@@ -35,8 +35,8 @@ type ProjectContextMenuState = {
 
 type ProjectStatusFilterId = "pinned" | "dirty" | "clean" | "conflict" | "ahead" | "behind" | "diverged" | "unloaded";
 
-const PROJECT_CONTEXT_MENU_WIDTH = 168;
-const PROJECT_CONTEXT_MENU_HEIGHT = 76;
+const PROJECT_CONTEXT_MENU_WIDTH = 184;
+const PROJECT_CONTEXT_MENU_HEIGHT = 96;
 const PROJECT_STATUS_FILTER_MENU_WIDTH = 248;
 const projectStatusFilterGroups: Array<{
   label: string;
@@ -196,8 +196,8 @@ export function ProjectRail({
     keepContextMenuOpen();
     setContextMenu({
       project,
-      x: Math.min(event.clientX, window.innerWidth - PROJECT_CONTEXT_MENU_WIDTH - 8),
-      y: Math.min(event.clientY, window.innerHeight - PROJECT_CONTEXT_MENU_HEIGHT - 8)
+      x: Math.max(8, Math.min(event.clientX, window.innerWidth - PROJECT_CONTEXT_MENU_WIDTH - 8)),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - PROJECT_CONTEXT_MENU_HEIGHT - 8))
     });
   }
 
@@ -460,41 +460,44 @@ export function ProjectRail({
         ))}
         {filteredProjects.length === 0 ? <div className="empty-inline project-rail-empty">没有匹配项目。</div> : null}
       </div>
-      {contextMenu ? (
-        <div
-          className="floating-menu project-context-menu"
-          role="menu"
-          style={{ left: contextMenu.x, top: contextMenu.y }}
-          onPointerDown={(event) => event.stopPropagation()}
-          onContextMenu={(event) => event.preventDefault()}
-          onMouseEnter={keepContextMenuOpen}
-          onMouseLeave={scheduleContextMenuClose}
-        >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              onToggleProjectPinned(contextMenu.project.id);
-              setContextMenu(null);
-            }}
-          >
-            {contextMenu.project.favorite ? <PinOff size={14} /> : <Pin size={14} />}
-            {contextMenu.project.favorite ? "取消置顶" : "置顶项目"}
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="danger"
-            onClick={() => {
-              onRemoveProject(contextMenu.project.id);
-              setContextMenu(null);
-            }}
-          >
-            <Trash2 size={14} />
-            移除项目记录
-          </button>
-        </div>
-      ) : null}
+      {contextMenu && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="floating-menu project-context-menu"
+              role="menu"
+              style={{ left: contextMenu.x, top: contextMenu.y }}
+              onPointerDown={(event) => event.stopPropagation()}
+              onContextMenu={(event) => event.preventDefault()}
+              onMouseEnter={keepContextMenuOpen}
+              onMouseLeave={scheduleContextMenuClose}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  onToggleProjectPinned(contextMenu.project.id);
+                  setContextMenu(null);
+                }}
+              >
+                {contextMenu.project.favorite ? <PinOff size={14} /> : <Pin size={14} />}
+                {contextMenu.project.favorite ? "取消置顶" : "置顶项目"}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="danger"
+                onClick={() => {
+                  onRemoveProject(contextMenu.project.id);
+                  setContextMenu(null);
+                }}
+              >
+                <Trash2 size={14} />
+                移除项目记录
+              </button>
+            </div>,
+            document.querySelector(".app-shell") ?? document.body
+          )
+        : null}
       {footer ? <div className="project-rail-footer">{footer}</div> : null}
     </aside>
   );
