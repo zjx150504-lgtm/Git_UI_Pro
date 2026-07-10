@@ -783,7 +783,7 @@ export function GraphSidebar({
       {hoveredCommit && typeof document !== "undefined"
         ? createPortal(
             <CommitHoverCard commit={hoveredCommit} graphContext={graphContext} x={hoverPosition.x} y={hoverPosition.y} onMouseEnter={keepHoverOpen} onMouseLeave={scheduleCloseHover} />,
-            document.body
+            document.querySelector(".app-shell") ?? document.body
           )
         : null}
       {commitContextMenu && typeof document !== "undefined"

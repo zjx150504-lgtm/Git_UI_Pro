@@ -600,6 +600,47 @@ textarea:focus-visible,
   color: #b9ccd5;
 }
 
+.theme-light .console-panel {
+  --sunken: #f4f9fc;
+  --text: #263d52;
+  --text-strong: #10263a;
+  --muted: #6b7d8f;
+  --muted-strong: #425a6d;
+  --surface: rgba(215, 230, 238, 0.72);
+  --surface-hover: rgba(202, 222, 232, 0.82);
+  --border: rgba(61, 88, 111, 0.14);
+  --border-strong: rgba(51, 78, 102, 0.24);
+  --accent: #087f6d;
+  border-color: rgba(255, 255, 255, 0.9);
+  background: rgba(244, 249, 252, 0.9);
+  box-shadow: 0 14px 34px rgba(48, 77, 99, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.96);
+  color: var(--text);
+}
+
+.theme-light .console-panel .console-title {
+  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.54);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.74);
+}
+
+.theme-light .console-panel .console-titlebar,
+.theme-light .console-panel .console-toolbar {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.54);
+  color: var(--text-strong);
+}
+
+.theme-light .console-panel .console-icon-button,
+.theme-light .console-panel .icon-button {
+  color: var(--muted-strong);
+}
+
+.theme-light .console-panel .console-terminal-stack,
+.theme-light .console-panel .console-terminal,
+.theme-light .console-panel .xterm {
+  background: var(--sunken) !important;
+}
+
 .floating-menu,
 .commit-menu,
 .graph-view-menu,
@@ -684,10 +725,37 @@ textarea:focus-visible,
 .commit-hover-card {
   border: 1px solid var(--glass-edge);
   border-radius: 18px;
-  background: var(--glass-fill-strong);
-  box-shadow: 0 16px 38px rgba(34, 58, 78, 0.14), inset 0 1px 0 var(--glass-edge);
-  backdrop-filter: blur(26px) saturate(160%);
-  -webkit-backdrop-filter: blur(26px) saturate(160%);
+  box-shadow: 0 18px 42px rgba(34, 58, 78, 0.16), inset 0 1px 0 var(--glass-edge);
+  backdrop-filter: blur(30px) saturate(175%);
+  -webkit-backdrop-filter: blur(30px) saturate(175%);
+}
+
+.theme-light > .commit-hover-card {
+  border-color: rgba(255, 255, 255, 0.9);
+  color: var(--text);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.34), rgba(211, 240, 247, 0.12) 48%, rgba(255, 225, 241, 0.16)),
+    rgba(244, 250, 253, 0.52);
+  box-shadow: 0 20px 46px rgba(44, 73, 96, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.96);
+}
+
+.theme-dark > .commit-hover-card {
+  border-color: rgba(222, 240, 249, 0.16);
+  color: var(--text);
+  background:
+    linear-gradient(135deg, rgba(80, 151, 158, 0.12), rgba(32, 66, 88, 0.08) 50%, rgba(137, 72, 123, 0.1)),
+    rgba(13, 29, 43, 0.68);
+  box-shadow: 0 22px 50px rgba(0, 8, 16, 0.34), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.theme-light > .commit-hover-card::before {
+  border-color: rgba(75, 100, 121, 0.22);
+  background: rgba(244, 250, 253, 0.7);
+}
+
+.theme-dark > .commit-hover-card::before {
+  border-color: rgba(222, 240, 249, 0.18);
+  background: rgba(13, 29, 43, 0.78);
 }
 
 @keyframes liquid-app-ribbon {
