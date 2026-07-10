@@ -477,12 +477,13 @@
 
 .scm-file-icon,
 .commit-file-icon {
-  width: 27px;
-  height: 27px;
-  border-radius: 9px;
+  width: 22px;
+  min-width: 22px;
+  height: 18px;
+  border-radius: 5px;
   background: var(--surface-3);
   box-shadow: inset 0 1px 0 var(--glass-edge);
-  font-size: 11px;
+  font-size: 9px;
 }
 
 .ref-chip,
@@ -1033,6 +1034,16 @@ input[type="radio"]:focus-visible {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+}
+
+.source-control-pane .graph-commit-file-tree {
+  gap: 2px;
+}
+
+.source-control-pane .graph-commit-file-row {
+  grid-template-columns: calc(var(--graph-file-gutter) + var(--graph-file-indent, 0px)) 22px minmax(0, 1fr) 18px;
+  gap: 7px;
+  min-height: 26px;
 }
 
 /* Unified project controls and text-input focus states. */
