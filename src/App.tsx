@@ -173,9 +173,10 @@ export function App() {
   }
 
   function notifyError(message: string, description?: string, id?: ToastId) {
-    const title = toastTitle(message);
+    const title = toastTitle(cleanElectronError(message));
+    const cleanDescription = description ? cleanElectronError(description) : undefined;
     rememberStatus(title);
-    toast.error(title, { description, id });
+    toast.error(title, { description: cleanDescription, id: id ?? `error:${title}` });
   }
 
   function notifyLoading(message: string): ToastId {
@@ -715,6 +716,18 @@ export function App() {
     }
   }
 
+  async function reloadProjectWorktree(project: GitProject): Promise<WorktreeState> {
+    const [status, worktreeState] = await Promise.all([apiClient.getProjectStatus(project), apiClient.getWorktree(project)]);
+    if (selectedProjectIdRef.current !== project.id) {
+      throw new Error("当前项目已切换，已取消刷新。");
+    }
+
+    invalidateProjectCaches(project.id);
+    applyProjectStatus(project.id, status);
+    setWorktree(worktreeState);
+    return worktreeState;
+  }
+
   async function refreshProjectListStatuses(projectSnapshot = projectsRef.current, isDisposed: () => boolean = () => false) {
     if (isDisposed() || projectListRefreshBusyRef.current || projectSnapshot.length === 0) {
       return;
@@ -778,20 +791,29 @@ export function App() {
     await openWorktreeFile(file, true);
   }
 
-  async function openWorktreeFile(file: ChangedFile, pinned: boolean) {
+  async function openWorktreeFile(file: ChangedFile, pinned: boolean, forceReload = false): Promise<boolean> {
     if (!selectedProject) {
-      return;
+      return false;
     }
 
     const tabId = worktreeTabId(file);
     const existingTab = worktreeTabs.find((tab) => tab.id === tabId);
-    if (existingTab && pinned) {
+    if (existingTab && pinned && !forceReload) {
       setWorktreeTabs((current) => current.map((tab) => (tab.id === tabId ? { ...tab, pinned: true } : tab)));
       setActiveWorktreeTabId(tabId);
-      return;
+      return true;
     }
 
-    const pendingTab: WorktreeEditorTab = { id: tabId, file, diffLines: [], pinned, sourceType: "worktree", loading: true };
+    const pendingTab: WorktreeEditorTab = {
+      id: tabId,
+      file,
+      diffLines: [],
+      pinned,
+      sourceType: "worktree",
+      conflict: undefined,
+      loadError: undefined,
+      loading: true
+    };
     setWorktreeTabs((current) => upsertWorktreeTab(current, pendingTab, pinned));
     setActiveWorktreeTabId(tabId);
 
@@ -802,27 +824,95 @@ export function App() {
           current.map((tab) =>
             tab.id === tabId ? { ...tab, file, diffLines: [], preview: null, conflict, loading: false, pinned: tab.pinned || pinned } : tab
           )
-        );
-        rememberStatus(`正在解决冲突：${file.path}`);
-        return;
-      }
+          );
+          rememberStatus(`正在解决冲突：${file.path}`);
+          return true;
+        }
 
       const preview = await apiClient.getWorktreeFilePreview(selectedProject, file);
       if (preview) {
         setWorktreeTabs((current) =>
           current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines: [], preview, loading: false, pinned: tab.pinned || pinned } : tab))
-        );
-        rememberStatus(`正在查看媒体：${file.path}`);
-        return;
-      }
+          );
+          rememberStatus(`正在查看媒体：${file.path}`);
+          return true;
+        }
 
       const diffLines = await apiClient.getWorktreeDiff(selectedProject, file.path, file.staged);
       setWorktreeTabs((current) =>
         current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines, preview: null, loading: false, pinned: tab.pinned || pinned } : tab))
       );
+      return true;
     } catch (error) {
-      setWorktreeTabs((current) => current.map((tab) => (tab.id === tabId ? { ...tab, loading: false } : tab)));
-      notifyError(error instanceof Error ? error.message : "加载工作区文件失败");
+      const message = errorText(error, file.status === "conflicted" ? "无法读取冲突详情。" : "加载工作区文件失败。");
+      setWorktreeTabs((current) =>
+        current.map((tab) => (tab.id === tabId ? { ...tab, conflict: undefined, loadError: message, loading: false } : tab))
+      );
+      if (file.status === "conflicted") {
+        notifyError("无法读取冲突详情", message);
+      } else {
+        notifyError(message);
+      }
+      return false;
+    }
+  }
+
+  async function handleRetryWorktreeLoad(tab: WorktreeEditorTab): Promise<void> {
+    if (!selectedProject) {
+      return;
+    }
+
+    if (tab.file.status !== "conflicted") {
+      await openWorktreeFile(tab.file, tab.pinned, true);
+      return;
+    }
+
+    setWorktreeTabs((current) =>
+      current.map((item) => (item.id === tab.id ? { ...item, loadError: undefined, loading: true } : item))
+    );
+    rememberStatus("正在刷新冲突状态...");
+
+    try {
+      const refreshedWorktree = await reloadProjectWorktree(selectedProject);
+      const refreshedFile = [...refreshedWorktree.unstagedFiles, ...refreshedWorktree.stagedFiles].find((file) =>
+        matchesWorktreePath(tab.file.path, file.path)
+      );
+
+      if (!refreshedFile) {
+        handleCloseWorktreeTab(tab.id);
+        notifyInfo("工作区已刷新", "该文件已不在更改列表中。");
+        return;
+      }
+
+      if (tab.id !== worktreeTabId(refreshedFile)) {
+        setWorktreeTabs((current) => current.filter((item) => item.id !== tab.id));
+      }
+      const loaded = await openWorktreeFile(refreshedFile, tab.pinned, true);
+      if (loaded && refreshedFile.status !== "conflicted") {
+        notifyInfo("工作区已刷新", "该文件已不再冲突，已切换到普通变更视图。");
+      }
+    } catch (error) {
+      const message = errorText(error, "刷新工作区失败。");
+      setWorktreeTabs((current) =>
+        current.map((item) => (item.id === tab.id ? { ...item, loadError: message, loading: false } : item))
+      );
+      notifyError("刷新工作区失败", message);
+    }
+  }
+
+  async function handleRefreshWorktree(): Promise<void> {
+    if (!selectedProject) {
+      return;
+    }
+
+    const toastId = notifyLoading("正在刷新工作区...");
+    try {
+      const refreshedWorktree = await reloadProjectWorktree(selectedProject);
+      clearWorktreeEditorTabs();
+      const conflictCount = refreshedWorktree.unstagedFiles.filter((file) => file.status === "conflicted").length;
+      notifySuccess(conflictCount > 0 ? `已刷新，剩余 ${conflictCount} 个冲突文件` : "工作区已刷新，没有待解决冲突", undefined, toastId);
+    } catch (error) {
+      notifyError(errorText(error, "刷新工作区失败。"), undefined, toastId);
     }
   }
 
@@ -2132,6 +2222,7 @@ export function App() {
                 onUnstageAll={handleUnstageAll}
                 onDiscardFile={handleDiscardFile}
                 onDiscardAll={handleDiscardAll}
+                onRefreshWorktree={() => void handleRefreshWorktree()}
                 onSelectFile={handleSelectWorktreeFile}
                 onPinFile={handlePinWorktreeFile}
                 selectedFilePath={activeWorktreeTab?.file.path}
@@ -2185,6 +2276,7 @@ export function App() {
                   onCloseTab={handleCloseWorktreeTab}
                   onPinTab={handlePinWorktreeTab}
                   onResolveConflict={handleResolveConflict}
+                  onRetryLoad={handleRetryWorktreeLoad}
                 />
                 <div className="console-resize" hidden={!consoleOpen} onMouseDown={(event) => beginResize("console", event)} />
                 <ConsolePanel
@@ -2579,7 +2671,18 @@ function gitOutputPreview(result: GitOperationResult): string | undefined {
 }
 
 function errorText(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message.trim() ? error.message : fallback;
+  return cleanElectronError(error instanceof Error && error.message.trim() ? error.message : fallback);
+}
+
+function cleanElectronError(message: string): string {
+  return message
+    .trim()
+    .replace(/^Error invoking remote method ['"][^'"]+['"]:\s*(?:Error:\s*)?/i, "")
+    .trim();
+}
+
+function matchesWorktreePath(previousPath: string, currentPath: string): boolean {
+  return previousPath === currentPath || previousPath.endsWith(` ${currentPath}`);
 }
 
 function mergeResultLabel(preview: GitMergePreview, strategy: GitMergeStrategy): string {

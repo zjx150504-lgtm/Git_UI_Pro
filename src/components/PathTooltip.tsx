@@ -153,7 +153,7 @@ export function PathTooltip({ path, content, className, placement, children }: P
         ? createPortal(
             <span
               ref={popoverRef}
-              className="path-tooltip-popover"
+              className={`path-tooltip-popover ${resolvedPlacement === "control" ? "control-tooltip" : ""}`}
               role="tooltip"
               style={{ left: position.left, top: position.top, maxWidth: position.maxWidth }}
               onMouseEnter={showTooltipNow}

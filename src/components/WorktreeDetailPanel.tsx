@@ -10,7 +10,7 @@ import {
   type UIEvent as ReactUIEvent,
   type WheelEvent as ReactWheelEvent
 } from "react";
-import { Check, Copy, FileText, GitMerge, Maximize2, RotateCcw, Save, X, ZoomIn, ZoomOut } from "lucide-react";
+import { AlertTriangle, Check, Copy, FileText, GitMerge, Maximize2, RefreshCw, RotateCcw, Save, X, ZoomIn, ZoomOut } from "lucide-react";
 import { PathTooltip } from "./PathTooltip";
 import type { ChangedFile, ConflictFileDetails, ConflictResolutionInput, DiffLine, FilePreview } from "../types/domain";
 import { absoluteFilePath } from "../utils/filePath";
@@ -27,6 +27,7 @@ export interface WorktreeEditorTab {
   subtitle?: string;
   conflict?: ConflictFileDetails;
   loading?: boolean;
+  loadError?: string;
 }
 
 interface WorktreeDetailPanelProps {
@@ -37,6 +38,7 @@ interface WorktreeDetailPanelProps {
   onCloseTab: (tabId: string) => void;
   onPinTab: (tabId: string) => void;
   onResolveConflict: (tab: WorktreeEditorTab, input: ConflictResolutionInput) => Promise<boolean>;
+  onRetryLoad: (tab: WorktreeEditorTab) => Promise<void>;
 }
 
 type SplitDiffRowType = "context" | "add" | "delete" | "replace";
@@ -55,7 +57,16 @@ const MEDIA_MAX_SCALE = 8;
 const MEDIA_ZOOM_STEP = 1.2;
 const MEDIA_PAN_STEP = 36;
 
-export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelectTab, onCloseTab, onPinTab, onResolveConflict }: WorktreeDetailPanelProps) {
+export function WorktreeDetailPanel({
+  tabs,
+  activeTabId,
+  repositoryPath,
+  onSelectTab,
+  onCloseTab,
+  onPinTab,
+  onResolveConflict,
+  onRetryLoad
+}: WorktreeDetailPanelProps) {
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const diffPanelRef = useRef<HTMLElement>(null);
   const splitDiffRef = useRef<HTMLDivElement>(null);
@@ -251,11 +262,25 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
         {activeTab.subtitle ? <span>{activeTab.subtitle}</span> : null}
       </div>
 
-      <div className={`editor-diff-shell ${activeTab.conflict ? "conflict-mode" : ""}`} style={splitDiffStyle}>
+      <div className={`editor-diff-shell ${activeTab.conflict ? "conflict-mode" : ""} ${activeTab.loadError ? "load-error-mode" : ""}`} style={splitDiffStyle}>
         {activeTab.loading ? (
           <div className="editor-empty-state conflict-loading-state">
             <GitMerge size={20} />
             <span>正在读取冲突内容...</span>
+          </div>
+        ) : activeTab.loadError ? (
+          <div className="editor-load-error" role="alert">
+            <span className="editor-load-error-icon" aria-hidden="true">
+              <AlertTriangle size={20} />
+            </span>
+            <div className="editor-load-error-content">
+              <strong>{file.status === "conflicted" ? "无法读取冲突详情" : "无法加载文件详情"}</strong>
+              <p>{activeTab.loadError}</p>
+              <button type="button" onClick={() => void onRetryLoad(activeTab)}>
+                <RefreshCw size={15} />
+                {file.status === "conflicted" ? "刷新工作区并重试" : "重新加载"}
+              </button>
+            </div>
           </div>
         ) : activeTab.conflict ? (
           <ConflictResolver tab={activeTab} onResolve={onResolveConflict} />

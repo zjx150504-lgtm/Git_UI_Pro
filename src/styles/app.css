@@ -143,6 +143,13 @@ button {
   -webkit-user-select: text;
 }
 
+.path-tooltip-popover.control-tooltip {
+  cursor: default;
+  pointer-events: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
 .app-shell {
   display: grid;
   grid-template-columns: var(--sidebar-width) 6px minmax(0, 1fr);
@@ -2671,6 +2678,66 @@ button {
 
 .conflict-loading-state {
   height: 100%;
+}
+
+.editor-diff-shell.load-error-mode {
+  overflow: auto;
+}
+
+.editor-load-error {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 520px);
+  gap: 12px;
+  align-content: start;
+  justify-content: center;
+  min-height: 100%;
+  padding: clamp(28px, 8vh, 72px) 24px;
+}
+
+.editor-load-error-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--danger) 30%, var(--border));
+  border-radius: 6px;
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
+}
+
+.editor-load-error-content {
+  min-width: 0;
+}
+
+.editor-load-error-content strong {
+  color: var(--text-strong);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.editor-load-error-content p {
+  margin: 6px 0 14px;
+  color: var(--muted-strong);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.editor-load-error-content button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 30px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  padding: 0 10px;
+  color: var(--text);
+  background: var(--surface);
+}
+
+.editor-load-error-content button:hover {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--border-strong));
+  background: var(--surface-hover);
 }
 
 .conflict-resolver {
@@ -7019,14 +7086,15 @@ code,
 }
 
 [data-sonner-toast] [data-title] {
-  width: max-content;
+  width: auto;
   max-width: 340px;
   font-size: 13px;
   font-weight: 600;
   line-height: 1.35;
   letter-spacing: 0;
   color: var(--text-strong);
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 [data-sonner-toast] [data-description] {

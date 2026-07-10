@@ -110,6 +110,11 @@ async function testConflictAbortRestoresSource() {
   assert.equal(conflictStatus.operationState, "merge");
   assert.equal(conflictStatus.mergeSourceBranch, "feature/conflict");
   assert.equal(conflictStatus.mergeTargetBranch, "main");
+  const worktree = await restartedService.getWorktree(repositoryPath);
+  assert.deepEqual(
+    worktree.unstagedFiles.filter((file) => file.status === "conflicted").map((file) => file.path),
+    ["shared.txt"]
+  );
   const abortResult = await restartedService.abortMerge(repositoryPath);
   assert.equal(abortResult.ok, true, abortResult.messageZh ?? abortResult.stderr);
   assert.equal(git(repositoryPath, "branch", "--show-current"), "feature/conflict");

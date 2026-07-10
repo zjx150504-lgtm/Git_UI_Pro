@@ -15,6 +15,7 @@ interface WorkspaceViewProps {
   onUnstageAll: () => void;
   onDiscardFile: (file: ChangedFile) => void;
   onDiscardAll: () => void;
+  onRefreshWorktree: () => void;
   onSelectFile: (file: ChangedFile) => void;
   onPinFile: (file: ChangedFile) => void;
   selectedFilePath?: string;
@@ -47,6 +48,7 @@ export function WorkspaceView({
   onUnstageAll,
   onDiscardFile,
   onDiscardAll,
+  onRefreshWorktree,
   onSelectFile,
   onPinFile,
   selectedFilePath,
@@ -66,6 +68,7 @@ export function WorkspaceView({
   const [commitMenuOpen, setCommitMenuOpen] = useState(false);
   const [commitMenuPosition, setCommitMenuPosition] = useState<{ top: number; left: number } | null>(null);
   const [changesOpen, setChangesOpen] = useState(true);
+  const [conflictsOpen, setConflictsOpen] = useState(true);
   const [stagedOpen, setStagedOpen] = useState(true);
   const commitActionsRef = useRef<HTMLDivElement>(null);
   const commitMenuButtonRef = useRef<HTMLButtonElement>(null);
@@ -74,7 +77,9 @@ export function WorkspaceView({
   const stagedCount = worktree.stagedFiles.length;
   const unstagedCount = worktree.unstagedFiles.length;
   const changeCount = unstagedCount + stagedCount;
-  const hasConflicts = Boolean(project?.status?.hasConflicts) || worktree.unstagedFiles.some((file) => file.status === "conflicted");
+  const conflictFiles = worktree.unstagedFiles.filter((file) => file.status === "conflicted");
+  const regularUnstagedFiles = worktree.unstagedFiles.filter((file) => file.status !== "conflicted");
+  const hasConflicts = Boolean(project?.status?.hasConflicts) || conflictFiles.length > 0;
   const willAutoStage = !hasConflicts && stagedCount === 0 && unstagedCount > 0;
   const outgoingCount = project?.status?.ahead ?? 0;
   const canSyncOutgoing = changeCount === 0 && outgoingCount > 0;
@@ -322,10 +327,41 @@ export function WorkspaceView({
             </ScmSection>
           ) : null}
 
-          {worktree.unstagedFiles.length > 0 ? (
+          {conflictFiles.length > 0 ? (
+            <ScmSection
+              title="冲突"
+              count={conflictFiles.length}
+              emptyText="没有冲突文件。"
+              actions={[
+                {
+                  title: "刷新冲突状态",
+                  icon: <RefreshCw size={15} />,
+                  onAction: onRefreshWorktree
+                }
+              ]}
+              open={conflictsOpen}
+              onToggle={() => setConflictsOpen((value) => !value)}
+            >
+              {conflictFiles.map((file) => (
+                <ScmFileRow
+                  file={file}
+                  selected={file.path === selectedFilePath && selectedFileStaged === false}
+                  key={`conflict-${file.path}`}
+                  primaryActionTitle="打开冲突解决器"
+                  primaryActionIcon={<GitMerge size={15} />}
+                  onPrimaryAction={() => onSelectFile(file)}
+                  onSelect={() => onSelectFile(file)}
+                  onPin={() => onPinFile(file)}
+                  repositoryPath={project?.path}
+                />
+              ))}
+            </ScmSection>
+          ) : null}
+
+          {regularUnstagedFiles.length > 0 ? (
             <ScmSection
               title="更改"
-              count={worktree.unstagedFiles.length}
+              count={regularUnstagedFiles.length}
               emptyText="没有未暂存改动。"
               actions={[
                 {
@@ -345,15 +381,15 @@ export function WorkspaceView({
               open={changesOpen}
               onToggle={() => setChangesOpen((value) => !value)}
             >
-              {worktree.unstagedFiles.map((file) => (
+              {regularUnstagedFiles.map((file) => (
                 <ScmFileRow
                   file={file}
                   selected={file.path === selectedFilePath && selectedFileStaged === false}
                   key={`unstaged-${file.path}-${file.status}`}
-                  primaryActionTitle={file.status === "conflicted" ? "解决冲突" : "暂存更改"}
-                  primaryActionIcon={file.status === "conflicted" ? <GitMerge size={15} /> : <Plus size={15} />}
-                  onPrimaryAction={() => (file.status === "conflicted" ? onSelectFile(file) : onStageFile(file))}
-                  onDiscard={file.status === "conflicted" ? undefined : () => onDiscardFile(file)}
+                  primaryActionTitle="暂存更改"
+                  primaryActionIcon={<Plus size={15} />}
+                  onPrimaryAction={() => onStageFile(file)}
+                  onDiscard={() => onDiscardFile(file)}
                   onSelect={() => onSelectFile(file)}
                   onPin={() => onPinFile(file)}
                   repositoryPath={project?.path}

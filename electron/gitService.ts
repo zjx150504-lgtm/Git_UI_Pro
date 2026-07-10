@@ -1692,8 +1692,8 @@ function parseWorktree(output: string): WorktreeState {
     }
 
     if (line.startsWith("u ")) {
-      const paths = extractPorcelainPaths(line, true);
-      unstagedFiles.push({ path: paths.path, oldPath: paths.oldPath, status: "conflicted", staged: false });
+      const path = extractUnmergedPorcelainPath(line);
+      unstagedFiles.push({ path, status: "conflicted", staged: false });
       continue;
     }
 
@@ -1884,6 +1884,11 @@ function extractPorcelainPaths(line: string, hasOriginalPath: boolean): { path: 
   }
 
   return { path: rawPath };
+}
+
+function extractUnmergedPorcelainPath(line: string): string {
+  const pathStartIndex = findNthSpace(line, 10);
+  return pathStartIndex >= 0 ? line.slice(pathStartIndex + 1) : "";
 }
 
 function findNthSpace(value: string, count: number): number {
