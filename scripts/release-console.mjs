@@ -17,12 +17,15 @@ import {
   GitFork,
   History,
   LoaderCircle,
+  LockKeyhole,
   Package,
+  Plus,
   RefreshCw,
   Rocket,
   ShieldCheck,
   SquareTerminal,
-  Tag
+  Tag,
+  X
 } from "lucide-react";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -45,12 +48,15 @@ const iconComponents = {
   GitFork,
   History,
   LoaderCircle,
+  LockKeyhole,
   Package,
+  Plus,
   RefreshCw,
   Rocket,
   ShieldCheck,
   SquareTerminal,
-  Tag
+  Tag,
+  X
 };
 
 const jobs = new Map();
@@ -134,6 +140,12 @@ export function buildCommitMessage({ title, notes, files }) {
     ...cleanFiles.map((file, index) => `${index + 1}. ${file}`),
     ""
   ].join("\n");
+}
+
+export function mergeReleaseNotes(requiredNotes, submittedNotes) {
+  const required = requiredNotes.map(cleanMessageLine).filter(Boolean);
+  const submitted = submittedNotes.map(cleanMessageLine).filter(Boolean);
+  return [...required, ...submitted.filter((note) => !required.includes(note))];
 }
 
 export function detectProvider(remoteUrl) {
@@ -579,7 +591,7 @@ function validateReleasePayload(payload, status) {
   if (!Array.isArray(payload.notes)) {
     throw new Error("版本说明格式不正确");
   }
-  const notes = payload.notes.map(cleanMessageLine).filter(Boolean);
+  const notes = mergeReleaseNotes(status.suggestedNotes, payload.notes);
   if (notes.length < 1 || notes.length > 12) {
     throw new Error("请填写 1 到 12 条版本说明");
   }
@@ -927,12 +939,15 @@ function openBrowser(url) {
 
 export async function startReleaseConsole(options = {}) {
   const token = randomBytes(24).toString("base64url");
-  const [htmlTemplate, css, javascript] = await Promise.all([
+  const [htmlTemplate, css, javascript, brandIcon] = await Promise.all([
     readFile(path.join(consoleDir, "index.html"), "utf8"),
     readFile(path.join(consoleDir, "styles.css"), "utf8"),
-    readFile(path.join(consoleDir, "app.js"), "utf8")
+    readFile(path.join(consoleDir, "app.js"), "utf8"),
+    readFile(path.join(rootDir, "build", "icon.png"))
   ]);
-  const html = renderIcons(htmlTemplate).replace("{{RELEASE_TOKEN}}", token);
+  const html = renderIcons(htmlTemplate)
+    .replace("{{RELEASE_TOKEN}}", token)
+    .replace("{{BRAND_ICON}}", `data:image/png;base64,${brandIcon.toString("base64")}`);
   let expectedOrigin = null;
 
   const server = createServer(async (request, response) => {

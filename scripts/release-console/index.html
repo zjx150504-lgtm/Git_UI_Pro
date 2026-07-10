@@ -8,9 +8,14 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
+    <div class="ambient-scene" aria-hidden="true">
+      <span class="light-ribbon ribbon-cyan"></span>
+      <span class="light-ribbon ribbon-rose"></span>
+      <span class="light-ribbon ribbon-blue"></span>
+    </div>
     <header class="app-bar">
       <div class="brand-lockup">
-        <span class="brand-mark">{{icon:GitBranch}}</span>
+        <span class="brand-mark"><img src="{{BRAND_ICON}}" alt="" /></span>
         <div>
           <strong>Git UI Pro</strong>
           <span>发布控制台</span>
@@ -29,7 +34,7 @@
         <div class="release-form-pane">
           <div class="section-heading">
             <div>
-              <span class="section-kicker">WINDOWS RELEASE</span>
+              <span class="section-kicker">本地发布</span>
               <h1 id="releaseHeading">准备新版本</h1>
             </div>
             <span id="readinessBadge" class="status-badge loading">{{icon:LoaderCircle}} 检查中</span>
@@ -60,10 +65,20 @@
           </div>
 
           <div class="form-grid">
-            <div class="field field-wide">
-              <label for="releaseNotes">版本说明</label>
-              <textarea id="releaseNotes" rows="5" maxlength="2400" placeholder="每行一条变更说明"></textarea>
-              <span class="field-meta"><span id="noteCount">0 条</span><span>最多 12 条</span></span>
+            <div class="field field-wide release-notes-field">
+              <div class="notes-heading">
+                <span class="field-label">已记录变更</span>
+                <span class="locked-badge" title="从 Git 提交历史生成，不可修改">{{icon:LockKeyhole}} 已锁定</span>
+              </div>
+              <ol id="automaticNoteList" class="automatic-note-list"></ol>
+
+              <label class="custom-note-label" for="customNoteInput">补充说明</label>
+              <div class="note-composer">
+                <input id="customNoteInput" type="text" maxlength="200" autocomplete="off" placeholder="补充一条本次发布说明" />
+                <button id="addNoteButton" type="button">{{icon:Plus}} 添加</button>
+              </div>
+              <ul id="customNoteList" class="custom-note-list"></ul>
+              <span class="field-meta"><span id="noteCount">0 条说明</span><span id="noteLimit">还可补充 12 条</span></span>
             </div>
 
             <fieldset class="field build-mode-field">
@@ -127,7 +142,7 @@
         <aside class="activity-pane" aria-labelledby="activityHeading">
           <div class="activity-heading">
             <div>
-              <span class="section-kicker">PIPELINE</span>
+              <span class="section-kicker">发布流水线</span>
               <h2 id="activityHeading">发布进度</h2>
             </div>
             <span id="jobState" class="job-state idle">空闲</span>
@@ -163,7 +178,7 @@
         <div class="changes-column">
           <div class="band-heading">
             <div>
-              <span class="section-kicker">WORKTREE</span>
+              <span class="section-kicker">工作区</span>
               <h2 id="changesHeading">本次涉及改动</h2>
             </div>
             <span id="changeCount" class="count-label">--</span>
@@ -176,7 +191,7 @@
         <div class="history-column">
           <div class="band-heading">
             <div>
-              <span class="section-kicker">TAGS</span>
+              <span class="section-kicker">版本标签</span>
               <h2>历史版本</h2>
             </div>
             <span id="historyCount" class="count-label">--</span>
@@ -206,6 +221,7 @@
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <template id="removeNoteIcon">{{icon:X}}</template>
     <script src="/app.js" defer></script>
   </body>
 </html>

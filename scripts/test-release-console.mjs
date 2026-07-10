@@ -4,6 +4,7 @@ import {
   buildCommitMessage,
   compareVersions,
   detectProvider,
+  mergeReleaseNotes,
   parseStatusPorcelain,
   parseVersion,
   recommendVersions,
@@ -42,6 +43,14 @@ test("生成符合仓库规则的中文分段提交信息", () => {
     }),
     "chore(release): 发布 v0.1.6\n\n1. 更新版本号\n2. 生成 Windows 安装包\n\n涉及文件:\n1. package.json\n2. package-lock.json\n"
   );
+});
+
+test("自动版本说明不能被提交请求删除", () => {
+  assert.deepEqual(
+    mergeReleaseNotes(["自动记录一", "自动记录二"], ["自动记录二", "补充说明"]),
+    ["自动记录一", "自动记录二", "补充说明"]
+  );
+  assert.deepEqual(mergeReleaseNotes(["自动记录一"], []), ["自动记录一"]);
 });
 
 test("识别 GitHub 与 Gitee 远端", () => {
