@@ -2,6 +2,8 @@ import { mockCommits, mockDiffLines, mockProjects } from "../data/mockData";
 import type {
   BranchInfo,
   ChangedFile,
+  ConflictFileDetails,
+  ConflictResolutionInput,
   CommitMessageInput,
   CommitInput,
   CommitNode,
@@ -249,6 +251,12 @@ export const apiClient = {
     }
 
     await wait(mockDelay);
+    if (project.status?.hasConflicts) {
+      return {
+        stagedFiles: [],
+        unstagedFiles: [{ path: "src/config.ts", status: "conflicted", staged: false }]
+      };
+    }
     return {
       stagedFiles: [{ path: "docs/PRD.md", status: "added", staged: true }],
       unstagedFiles: [
@@ -277,6 +285,40 @@ export const apiClient = {
     void file;
     await wait(40);
     return null;
+  },
+
+  async getConflictFileDetails(project: GitProject, filePath: string): Promise<ConflictFileDetails> {
+    if (window.gitUI) {
+      return window.gitUI.getConflictFileDetails(project.path, filePath);
+    }
+
+    await wait(mockDelay);
+    return {
+      path: filePath,
+      baseContent: "export const mode = \"base\";\nexport const retries = 2;\n",
+      currentContent: "export const mode = \"release\";\nexport const retries = 2;\n",
+      incomingContent: "export const mode = \"feature\";\nexport const retries = 3;\n",
+      resultContent:
+        "<<<<<<< HEAD\nexport const mode = \"release\";\nexport const retries = 2;\n=======\nexport const mode = \"feature\";\nexport const retries = 3;\n>>>>>>> feature/invoice-flow\n",
+      baseExists: true,
+      currentExists: true,
+      incomingExists: true,
+      resultExists: true,
+      currentLabel: "release/2.4",
+      incomingLabel: "feature/invoice-flow",
+      editable: true,
+      isBinary: false,
+      token: "mock-conflict-token"
+    };
+  },
+
+  async resolveConflictFile(project: GitProject, filePath: string, input: ConflictResolutionInput): Promise<GitOperationResult> {
+    if (window.gitUI) {
+      return window.gitUI.resolveConflictFile(project.path, filePath, input);
+    }
+
+    await wait(mockDelay);
+    return okResult(`git add -- ${filePath}`);
   },
 
   async stageFile(project: GitProject, filePath: string): Promise<GitOperationResult> {

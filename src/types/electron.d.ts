@@ -1,6 +1,8 @@
 import type {
   BranchInfo,
   ChangedFile,
+  ConflictFileDetails,
+  ConflictResolutionInput,
   CommitMessageInput,
   CommitInput,
   CommitNode,
@@ -54,6 +56,8 @@ export interface GitUIBridge {
   getWorktree: (repositoryPath: string) => Promise<WorktreeState>;
   getWorktreeDiff: (repositoryPath: string, filePath: string, staged: boolean) => Promise<DiffLine[]>;
   getWorktreeFilePreview: (repositoryPath: string, file: ChangedFile) => Promise<FilePreview | null>;
+  getConflictFileDetails: (repositoryPath: string, filePath: string) => Promise<ConflictFileDetails>;
+  resolveConflictFile: (repositoryPath: string, filePath: string, input: ConflictResolutionInput) => Promise<GitOperationResult>;
   stageFile: (repositoryPath: string, filePath: string) => Promise<GitOperationResult>;
   stageAll: (repositoryPath: string) => Promise<GitOperationResult>;
   unstageFile: (repositoryPath: string, filePath: string) => Promise<GitOperationResult>;

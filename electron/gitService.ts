@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import { access, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { access, mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { TextDecoder } from "node:util";
 
@@ -61,6 +62,29 @@ export interface DiffLine {
   oldLineNumber?: number;
   newLineNumber?: number;
   content: string;
+}
+
+export interface ConflictFileDetails {
+  path: string;
+  baseContent?: string;
+  currentContent?: string;
+  incomingContent?: string;
+  resultContent?: string;
+  baseExists: boolean;
+  currentExists: boolean;
+  incomingExists: boolean;
+  resultExists: boolean;
+  currentLabel: string;
+  incomingLabel: string;
+  editable: boolean;
+  isBinary: boolean;
+  token: string;
+}
+
+export interface ConflictResolutionInput {
+  choice: "content" | "current" | "incoming";
+  content?: string;
+  expectedToken: string;
 }
 
 export interface FilePreview {
@@ -134,11 +158,21 @@ interface ManagedMergeState {
   startedAt: string;
 }
 
+interface ConflictSnapshot {
+  path: string;
+  base: Buffer | null;
+  current: Buffer | null;
+  incoming: Buffer | null;
+  result: Buffer | null;
+  token: string;
+}
+
 const fieldSeparator = "\x1f";
 const recordSeparator = "\x1e";
 const resetCommandTimeoutMs = 30_000;
 const mergeCommandTimeoutMs = 120_000;
 const managedMergeStateFile = "git-ui-pro-merge-state.json";
+const maxEditableConflictBytes = 2 * 1024 * 1024;
 const maxPreviewImageBytes = 25 * 1024 * 1024;
 const maxPreviewVideoBytes = 80 * 1024 * 1024;
 
@@ -615,6 +649,73 @@ export class GitService {
     return diffLines;
   }
 
+  async getConflictFileDetails(repositoryPath: string, filePath: string): Promise<ConflictFileDetails> {
+    const snapshot = await this.loadConflictSnapshot(repositoryPath, filePath);
+    const [status, managedState, incomingLabel] = await Promise.all([
+      this.getStatus(repositoryPath),
+      this.readManagedMergeState(repositoryPath),
+      this.getMergeHeadLabel(repositoryPath)
+    ]);
+    const buffers = [snapshot.base, snapshot.current, snapshot.incoming, snapshot.result].filter((value): value is Buffer => Boolean(value));
+    const isBinary = buffers.some(isBinaryBuffer);
+    const editable = !isBinary && buffers.every((buffer) => buffer.byteLength <= maxEditableConflictBytes);
+
+    return {
+      path: snapshot.path,
+      baseContent: editable && snapshot.base ? decodeGitOutput(snapshot.base) : undefined,
+      currentContent: editable && snapshot.current ? decodeGitOutput(snapshot.current) : undefined,
+      incomingContent: editable && snapshot.incoming ? decodeGitOutput(snapshot.incoming) : undefined,
+      resultContent: editable && snapshot.result ? decodeGitOutput(snapshot.result) : undefined,
+      baseExists: Boolean(snapshot.base),
+      currentExists: Boolean(snapshot.current),
+      incomingExists: Boolean(snapshot.incoming),
+      resultExists: Boolean(snapshot.result),
+      currentLabel: managedState?.targetBranch ?? status.currentBranch ?? "当前分支",
+      incomingLabel: managedState?.sourceBranch ?? incomingLabel ?? "传入分支",
+      editable,
+      isBinary,
+      token: snapshot.token
+    };
+  }
+
+  async resolveConflictFile(repositoryPath: string, filePath: string, input: ConflictResolutionInput): Promise<GitOperationResult> {
+    try {
+      const snapshot = await this.loadConflictSnapshot(repositoryPath, filePath);
+      if (snapshot.token !== input.expectedToken) {
+        return gitFailure("git add", "冲突文件已被外部修改，请重新打开后再解决。", "Conflict snapshot changed.");
+      }
+
+      let resolvedContent: Buffer | null;
+      if (input.choice === "current") {
+        resolvedContent = snapshot.current;
+      } else if (input.choice === "incoming") {
+        resolvedContent = snapshot.incoming;
+      } else {
+        if (typeof input.content !== "string") {
+          return gitFailure("git add", "缺少合并结果内容。", "Resolved content is missing.");
+        }
+        if (!isEditableConflictSnapshot(snapshot)) {
+          return gitFailure("git add", "该冲突文件无法作为文本编辑，请采用当前版本或传入版本。", "Conflict is binary or too large.");
+        }
+        if (containsConflictMarkers(input.content)) {
+          return gitFailure("git add", "合并结果仍包含冲突标记，请处理全部冲突块后再保存。", "Conflict markers remain.");
+        }
+        resolvedContent = Buffer.from(input.content, "utf8");
+      }
+
+      if (!resolvedContent) {
+        return this.run(repositoryPath, ["rm", "-f", "--", snapshot.path]);
+      }
+
+      const absolutePath = resolveRepositoryFilePath(repositoryPath, snapshot.path);
+      await mkdir(path.dirname(absolutePath), { recursive: true });
+      await writeFile(absolutePath, resolvedContent);
+      return this.run(repositoryPath, ["add", "--", snapshot.path]);
+    } catch (error) {
+      return gitFailure("git add", errorMessage(error, "解决冲突文件失败。"));
+    }
+  }
+
   async getWorktreeFilePreview(repositoryPath: string, file: ChangedFile): Promise<FilePreview | null> {
     const previewPath = file.status === "deleted" ? file.oldPath ?? file.path : file.path;
     const media = previewMediaFromPath(previewPath);
@@ -1047,6 +1148,57 @@ export class GitService {
     return lastResult!;
   }
 
+  private async loadConflictSnapshot(repositoryPath: string, filePath: string): Promise<ConflictSnapshot> {
+    const normalizedPath = toGitPath(filePath.trim());
+    if (!normalizedPath) {
+      throw new Error("冲突文件路径不能为空。");
+    }
+    resolveRepositoryFilePath(repositoryPath, normalizedPath);
+
+    const unmergedResult = await this.run(repositoryPath, ["ls-files", "--unmerged", "--", normalizedPath]);
+    if (!unmergedResult.ok || !unmergedResult.stdout.trim()) {
+      throw new Error("该文件已不在冲突状态，请刷新工作区。");
+    }
+
+    const [base, current, incoming, result] = await Promise.all([
+      this.readConflictStage(repositoryPath, normalizedPath, 1),
+      this.readConflictStage(repositoryPath, normalizedPath, 2),
+      this.readConflictStage(repositoryPath, normalizedPath, 3),
+      readWorktreeFile(repositoryPath, normalizedPath)
+    ]);
+    const token = createHash("sha256")
+      .update(unmergedResult.stdout)
+      .update(conflictBufferToken(base))
+      .update(conflictBufferToken(current))
+      .update(conflictBufferToken(incoming))
+      .update(conflictBufferToken(result))
+      .digest("hex");
+
+    return {
+      path: normalizedPath,
+      base,
+      current,
+      incoming,
+      result,
+      token
+    };
+  }
+
+  private async readConflictStage(repositoryPath: string, filePath: string, stage: 1 | 2 | 3): Promise<Buffer | null> {
+    const result = await this.runBinary(repositoryPath, ["show", `:${stage}:${filePath}`], { timeoutMs: 10_000 });
+    return result.ok ? result.stdout : null;
+  }
+
+  private async getMergeHeadLabel(repositoryPath: string): Promise<string | undefined> {
+    const result = await this.run(repositoryPath, ["for-each-ref", "--points-at", "MERGE_HEAD", "--format=%(refname:short)"]);
+    if (!result.ok) {
+      return undefined;
+    }
+
+    const refs = result.stdout.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+    return refs.find((ref) => !ref.includes("/")) ?? refs[0];
+  }
+
   private async buildMergePreview(repositoryPath: string, targetBranch: string): Promise<GitMergePreview> {
     const status = await this.getStatus(repositoryPath);
     if (status.operationState || status.hasConflicts) {
@@ -1315,6 +1467,40 @@ function combineGitResults(results: GitOperationResult[], ok: boolean): GitOpera
     exitCode: ok ? 0 : failedResult?.exitCode ?? -1,
     messageZh: ok ? undefined : failedResult?.messageZh
   };
+}
+
+function conflictBufferToken(buffer: Buffer | null): Buffer {
+  if (!buffer) {
+    return Buffer.from("missing\0");
+  }
+  return Buffer.concat([Buffer.from(`${buffer.byteLength}\0`), buffer]);
+}
+
+function isBinaryBuffer(buffer: Buffer): boolean {
+  return buffer.includes(0);
+}
+
+function isEditableConflictSnapshot(snapshot: ConflictSnapshot): boolean {
+  const buffers = [snapshot.base, snapshot.current, snapshot.incoming, snapshot.result].filter((value): value is Buffer => Boolean(value));
+  return !buffers.some(isBinaryBuffer) && buffers.every((buffer) => buffer.byteLength <= maxEditableConflictBytes);
+}
+
+function containsConflictMarkers(content: string): boolean {
+  return /^<<<<<<<[^\r\n]*\r?$[\s\S]*?^======\=\r?$[\s\S]*?^>>>>>>>[^\r\n]*\r?$/m.test(content);
+}
+
+function resolveRepositoryFilePath(repositoryPath: string, filePath: string): string {
+  if (path.isAbsolute(filePath)) {
+    throw new Error("文件路径必须位于当前仓库内。");
+  }
+
+  const root = path.resolve(repositoryPath);
+  const resolved = path.resolve(root, filePath);
+  const relative = path.relative(root, resolved);
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error("文件路径超出当前仓库范围。");
+  }
+  return resolved;
 }
 
 function parseStatus(output: string): GitStatusSummary {

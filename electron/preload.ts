@@ -48,6 +48,12 @@ contextBridge.exposeInMainWorld("gitUI", {
   getWorktreeDiff: (repositoryPath: string, filePath: string, staged: boolean) => ipcRenderer.invoke("git:getWorktreeDiff", repositoryPath, filePath, staged),
   getWorktreeFilePreview: (repositoryPath: string, file: { path: string; oldPath?: string; status: string; staged: boolean }) =>
     ipcRenderer.invoke("git:getWorktreeFilePreview", repositoryPath, file),
+  getConflictFileDetails: (repositoryPath: string, filePath: string) => ipcRenderer.invoke("git:getConflictFileDetails", repositoryPath, filePath),
+  resolveConflictFile: (
+    repositoryPath: string,
+    filePath: string,
+    input: { choice: "content" | "current" | "incoming"; content?: string; expectedToken: string }
+  ) => ipcRenderer.invoke("git:resolveConflictFile", repositoryPath, filePath, input),
   stageFile: (repositoryPath: string, filePath: string) => ipcRenderer.invoke("git:stageFile", repositoryPath, filePath),
   stageAll: (repositoryPath: string) => ipcRenderer.invoke("git:stageAll", repositoryPath),
   unstageFile: (repositoryPath: string, filePath: string) => ipcRenderer.invoke("git:unstageFile", repositoryPath, filePath),

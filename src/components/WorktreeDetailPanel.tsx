@@ -10,9 +10,9 @@ import {
   type UIEvent as ReactUIEvent,
   type WheelEvent as ReactWheelEvent
 } from "react";
-import { Copy, FileText, Maximize2, X, ZoomIn, ZoomOut } from "lucide-react";
+import { Check, Copy, FileText, GitMerge, Maximize2, RotateCcw, Save, X, ZoomIn, ZoomOut } from "lucide-react";
 import { PathTooltip } from "./PathTooltip";
-import type { ChangedFile, DiffLine, FilePreview } from "../types/domain";
+import type { ChangedFile, ConflictFileDetails, ConflictResolutionInput, DiffLine, FilePreview } from "../types/domain";
 import { absoluteFilePath } from "../utils/filePath";
 
 export interface WorktreeEditorTab {
@@ -25,6 +25,8 @@ export interface WorktreeEditorTab {
   commitHash?: string;
   sourceLabel?: string;
   subtitle?: string;
+  conflict?: ConflictFileDetails;
+  loading?: boolean;
 }
 
 interface WorktreeDetailPanelProps {
@@ -34,6 +36,7 @@ interface WorktreeDetailPanelProps {
   onSelectTab: (tabId: string) => void;
   onCloseTab: (tabId: string) => void;
   onPinTab: (tabId: string) => void;
+  onResolveConflict: (tab: WorktreeEditorTab, input: ConflictResolutionInput) => Promise<boolean>;
 }
 
 type SplitDiffRowType = "context" | "add" | "delete" | "replace";
@@ -52,7 +55,7 @@ const MEDIA_MAX_SCALE = 8;
 const MEDIA_ZOOM_STEP = 1.2;
 const MEDIA_PAN_STEP = 36;
 
-export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelectTab, onCloseTab, onPinTab }: WorktreeDetailPanelProps) {
+export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelectTab, onCloseTab, onPinTab, onResolveConflict }: WorktreeDetailPanelProps) {
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const diffPanelRef = useRef<HTMLElement>(null);
   const splitDiffRef = useRef<HTMLDivElement>(null);
@@ -248,7 +251,15 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
         {activeTab.subtitle ? <span>{activeTab.subtitle}</span> : null}
       </div>
 
-      <div className="editor-diff-shell" style={splitDiffStyle}>
+      <div className={`editor-diff-shell ${activeTab.conflict ? "conflict-mode" : ""}`} style={splitDiffStyle}>
+        {activeTab.loading ? (
+          <div className="editor-empty-state conflict-loading-state">
+            <GitMerge size={20} />
+            <span>正在读取冲突内容...</span>
+          </div>
+        ) : activeTab.conflict ? (
+          <ConflictResolver tab={activeTab} onResolve={onResolveConflict} />
+        ) : (
         <section className={`diff-panel editor-diff-panel ${showSplitDiff ? "split-mode" : ""} ${mediaPreview ? "media-mode" : ""}`} ref={diffPanelRef} onScroll={handleDiffPanelScroll}>
           {mediaPreview ? (
             <MediaPreview preview={mediaPreview} filePath={file.path} />
@@ -290,6 +301,7 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
             </div>
           )}
         </section>
+        )}
         {showSplitDiff && splitMaxScroll > 0 ? (
           <div className="split-diff-horizontal-scroll" ref={splitScrollRef} onScroll={(event) => setSplitScrollX(event.currentTarget.scrollLeft)}>
             <div style={{ width: `calc(100% + ${splitMaxScroll}px)` }} />
@@ -298,6 +310,206 @@ export function WorktreeDetailPanel({ tabs, activeTabId, repositoryPath, onSelec
       </div>
     </aside>
   );
+}
+
+type ConflictViewMode = "blocks" | "three-way" | "result";
+
+interface ParsedConflictBlock {
+  id: string;
+  start: number;
+  end: number;
+  lineNumber: number;
+  current: string;
+  base?: string;
+  incoming: string;
+}
+
+function ConflictResolver({ tab, onResolve }: { tab: WorktreeEditorTab; onResolve: WorktreeDetailPanelProps["onResolveConflict"] }) {
+  const details = tab.conflict!;
+  const initialDraft = conflictInitialDraft(details);
+  const [draft, setDraft] = useState(initialDraft);
+  const [viewMode, setViewMode] = useState<ConflictViewMode>(() => (parseConflictBlocks(initialDraft).length > 0 ? "blocks" : "three-way"));
+  const [busy, setBusy] = useState(false);
+  const blocks = useMemo(() => parseConflictBlocks(draft), [draft]);
+  const initialBlockCount = useMemo(() => parseConflictBlocks(initialDraft).length, [initialDraft]);
+  const resolvedBlockCount = Math.max(0, initialBlockCount - blocks.length);
+
+  useEffect(() => {
+    const nextDraft = conflictInitialDraft(details);
+    setDraft(nextDraft);
+    setViewMode(parseConflictBlocks(nextDraft).length > 0 ? "blocks" : "three-way");
+    setBusy(false);
+  }, [details.token]);
+
+  function applyBlock(block: ParsedConflictBlock, choice: "current" | "incoming" | "both") {
+    const replacement = choice === "current" ? block.current : choice === "incoming" ? block.incoming : joinConflictSides(block.current, block.incoming);
+    setDraft((current) => `${current.slice(0, block.start)}${replacement}${current.slice(block.end)}`);
+  }
+
+  async function resolve(input: Omit<ConflictResolutionInput, "expectedToken">) {
+    if (busy) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await onResolve(tab, { ...input, expectedToken: details.token });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="conflict-resolver" aria-label={`解决冲突 ${details.path}`}>
+      <header className="conflict-resolver-header">
+        <div className="conflict-resolver-summary">
+          <GitMerge size={17} />
+          <span>
+            <strong>{blocks.length > 0 ? `${blocks.length} 个冲突块` : "冲突内容已合并"}</strong>
+            {initialBlockCount > 0 ? `已处理 ${resolvedBlockCount} / ${initialBlockCount}` : "等待确认最终结果"}
+          </span>
+        </div>
+        <div className="conflict-whole-actions">
+          <button type="button" onClick={() => void resolve({ choice: "current" })} disabled={busy}>
+            采用 {details.currentLabel}{details.currentExists ? "" : "（删除）"}
+          </button>
+          <button type="button" onClick={() => void resolve({ choice: "incoming" })} disabled={busy}>
+            采用 {details.incomingLabel}{details.incomingExists ? "" : "（删除）"}
+          </button>
+        </div>
+      </header>
+
+      {details.editable ? (
+        <>
+          <div className="conflict-view-tabs" role="tablist" aria-label="冲突查看模式">
+            <button type="button" role="tab" aria-selected={viewMode === "blocks"} className={viewMode === "blocks" ? "active" : ""} onClick={() => setViewMode("blocks")}>
+              冲突块 {blocks.length}
+            </button>
+            <button type="button" role="tab" aria-selected={viewMode === "three-way"} className={viewMode === "three-way" ? "active" : ""} onClick={() => setViewMode("three-way")}>
+              三方原文
+            </button>
+            <button type="button" role="tab" aria-selected={viewMode === "result"} className={viewMode === "result" ? "active" : ""} onClick={() => setViewMode("result")}>
+              最终结果
+            </button>
+          </div>
+
+          <div className="conflict-resolver-body">
+            {viewMode === "blocks" ? (
+              blocks.length > 0 ? (
+                <div className="conflict-block-list">
+                  {blocks.map((block, index) => (
+                    <article className="conflict-block" key={block.id}>
+                      <header className="conflict-block-header">
+                        <strong>冲突 {index + 1}</strong>
+                        <span>第 {block.lineNumber} 行</span>
+                        <div>
+                          <button type="button" onClick={() => applyBlock(block, "current")} disabled={busy}>采用当前</button>
+                          <button type="button" onClick={() => applyBlock(block, "incoming")} disabled={busy}>采用传入</button>
+                          <button type="button" onClick={() => applyBlock(block, "both")} disabled={busy}>保留两者</button>
+                        </div>
+                      </header>
+                      <div className="conflict-block-sides">
+                        <ConflictTextPane label={details.currentLabel} content={block.current} tone="current" />
+                        <ConflictTextPane label={details.incomingLabel} content={block.incoming} tone="incoming" />
+                      </div>
+                      {block.base !== undefined ? (
+                        <details className="conflict-block-base">
+                          <summary>共同基线</summary>
+                          <pre>{block.base || "（空内容）"}</pre>
+                        </details>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="conflict-resolved-state">
+                  <Check size={22} />
+                  <strong>没有剩余冲突标记</strong>
+                  <span>最终结果可以保存并标记为已解决</span>
+                </div>
+              )
+            ) : viewMode === "three-way" ? (
+              <div className="conflict-three-way" role="table" aria-label="冲突三方原文">
+                <ConflictTextPane label="共同基线" content={details.baseExists ? details.baseContent ?? "" : ""} exists={details.baseExists} tone="base" />
+                <ConflictTextPane label={details.currentLabel} content={details.currentExists ? details.currentContent ?? "" : ""} exists={details.currentExists} tone="current" />
+                <ConflictTextPane label={details.incomingLabel} content={details.incomingExists ? details.incomingContent ?? "" : ""} exists={details.incomingExists} tone="incoming" />
+              </div>
+            ) : (
+              <textarea className="conflict-result-editor" value={draft} onChange={(event) => setDraft(event.target.value)} spellCheck={false} aria-label="最终合并结果" />
+            )}
+          </div>
+
+          <footer className="conflict-resolver-footer">
+            <button type="button" className="text-button" onClick={() => setDraft(initialDraft)} disabled={busy || draft === initialDraft}>
+              <RotateCcw size={14} />
+              重置
+            </button>
+            <button type="button" className="primary-action" onClick={() => void resolve({ choice: "content", content: draft })} disabled={busy || blocks.length > 0}>
+              <Save size={14} />
+              {busy ? "正在保存" : "保存并标记已解决"}
+            </button>
+          </footer>
+        </>
+      ) : (
+        <div className="conflict-noneditable">
+          <FileText size={22} />
+          <strong>{details.isBinary ? "二进制文件冲突" : "冲突文件过大"}</strong>
+          <span>请选择当前版本或传入版本作为最终结果</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function ConflictTextPane({
+  label,
+  content,
+  exists = true,
+  tone
+}: {
+  label: string;
+  content: string;
+  exists?: boolean;
+  tone: "base" | "current" | "incoming";
+}) {
+  return (
+    <section className={`conflict-text-pane ${tone}`}>
+      <header>{label}</header>
+      <pre>{exists ? content || "（空内容）" : "（文件已删除）"}</pre>
+    </section>
+  );
+}
+
+function conflictInitialDraft(details: ConflictFileDetails): string {
+  return details.resultContent ?? details.currentContent ?? details.incomingContent ?? "";
+}
+
+function parseConflictBlocks(content: string): ParsedConflictBlock[] {
+  const blocks: ParsedConflictBlock[] = [];
+  const pattern = /^<<<<<<<[^\r\n]*\r?\n([\s\S]*?)(?=^(?:\|\|\|\|\|\|\||=======))(?:^\|\|\|\|\|\|\|[^\r\n]*\r?\n([\s\S]*?)(?=^=======))?^=======\r?\n([\s\S]*?)^>>>>>>>[^\r\n]*(?:\r?\n|$)/gm;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(content)) !== null) {
+    const start = match.index;
+    blocks.push({
+      id: `${start}-${pattern.lastIndex}`,
+      start,
+      end: pattern.lastIndex,
+      lineNumber: content.slice(0, start).split(/\r?\n/).length,
+      current: match[1] ?? "",
+      base: match[2],
+      incoming: match[3] ?? ""
+    });
+  }
+  return blocks;
+}
+
+function joinConflictSides(current: string, incoming: string): string {
+  if (!current) {
+    return incoming;
+  }
+  if (!incoming) {
+    return current;
+  }
+  return `${current}${current.endsWith("\n") || current.endsWith("\r") ? "" : "\n"}${incoming}`;
 }
 
 function MediaPreview({ preview, filePath }: { preview: FilePreview; filePath: string }) {

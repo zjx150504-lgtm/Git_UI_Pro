@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronRight, Plus, RefreshCw, Trash2, Undo2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, GitMerge, Plus, RefreshCw, Trash2, Undo2 } from "lucide-react";
 import { PathTooltip } from "./PathTooltip";
 import type { ChangedFile, CommitInput, GitProject, GitResetMode, WorktreeState } from "../types/domain";
 import { fileIconInfo } from "../utils/fileIcon";
@@ -74,11 +74,14 @@ export function WorkspaceView({
   const stagedCount = worktree.stagedFiles.length;
   const unstagedCount = worktree.unstagedFiles.length;
   const changeCount = unstagedCount + stagedCount;
-  const willAutoStage = stagedCount === 0 && unstagedCount > 0;
+  const hasConflicts = Boolean(project?.status?.hasConflicts) || worktree.unstagedFiles.some((file) => file.status === "conflicted");
+  const willAutoStage = !hasConflicts && stagedCount === 0 && unstagedCount > 0;
   const outgoingCount = project?.status?.ahead ?? 0;
   const canSyncOutgoing = changeCount === 0 && outgoingCount > 0;
-  const commitDisabled = changeCount === 0 && !canSyncOutgoing;
-  const commitTitle = canSyncOutgoing
+  const commitDisabled = hasConflicts || (changeCount === 0 && !canSyncOutgoing);
+  const commitTitle = hasConflicts
+    ? "请先解决所有冲突文件"
+    : canSyncOutgoing
     ? `同步 ${outgoingCount} 个本地提交到远程。`
     : willAutoStage
       ? `${unstagedCount} 个文件未暂存，提交时会自动暂存并提交。`
@@ -329,12 +332,14 @@ export function WorkspaceView({
                   title: "取消所有更改",
                   icon: <Trash2 size={15} />,
                   onAction: onDiscardAll,
-                  danger: true
+                  danger: true,
+                  disabled: hasConflicts
                 },
                 {
                   title: "暂存所有更改",
                   icon: <Plus size={16} />,
-                  onAction: onStageAll
+                  onAction: onStageAll,
+                  disabled: hasConflicts
                 }
               ]}
               open={changesOpen}
@@ -345,10 +350,10 @@ export function WorkspaceView({
                   file={file}
                   selected={file.path === selectedFilePath && selectedFileStaged === false}
                   key={`unstaged-${file.path}-${file.status}`}
-                  primaryActionTitle="暂存更改"
-                  primaryActionIcon={<Plus size={15} />}
-                  onPrimaryAction={() => onStageFile(file)}
-                  onDiscard={() => onDiscardFile(file)}
+                  primaryActionTitle={file.status === "conflicted" ? "解决冲突" : "暂存更改"}
+                  primaryActionIcon={file.status === "conflicted" ? <GitMerge size={15} /> : <Plus size={15} />}
+                  onPrimaryAction={() => (file.status === "conflicted" ? onSelectFile(file) : onStageFile(file))}
+                  onDiscard={file.status === "conflicted" ? undefined : () => onDiscardFile(file)}
                   onSelect={() => onSelectFile(file)}
                   onPin={() => onPinFile(file)}
                   repositoryPath={project?.path}

@@ -31,14 +31,17 @@ export const mockProjects: GitProject[] = [
     createdAt: "2026-06-08T03:00:00.000Z",
     updatedAt: "2026-06-30T10:10:00.000Z",
     status: {
-      currentBranch: "feature/invoice-flow",
-      upstream: "origin/feature/invoice-flow",
+      currentBranch: "release/2.4",
+      upstream: "origin/release/2.4",
       ahead: 2,
       behind: 1,
-      stagedCount: 2,
-      unstagedCount: 4,
-      untrackedCount: 1,
-      hasConflicts: false
+      stagedCount: 0,
+      unstagedCount: 1,
+      untrackedCount: 0,
+      hasConflicts: true,
+      operationState: "merge",
+      mergeSourceBranch: "feature/invoice-flow",
+      mergeTargetBranch: "release/2.4"
     }
   },
   {

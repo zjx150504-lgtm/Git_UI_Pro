@@ -2665,6 +2665,329 @@ button {
   overflow: hidden;
 }
 
+.editor-diff-shell.conflict-mode {
+  overflow: hidden;
+}
+
+.conflict-loading-state {
+  height: 100%;
+}
+
+.conflict-resolver {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--panel);
+}
+
+.conflict-resolver-header {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  min-width: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 10px 12px;
+}
+
+.conflict-resolver-summary {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.conflict-resolver-summary svg {
+  flex: 0 0 auto;
+  color: var(--warning);
+}
+
+.conflict-resolver-summary span {
+  display: grid;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.conflict-resolver-summary strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conflict-whole-actions {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.conflict-whole-actions button,
+.conflict-block-header button {
+  min-height: 26px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 8px;
+  color: var(--muted-strong);
+  background: var(--surface-2);
+  font-size: 11px;
+}
+
+.conflict-whole-actions button {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conflict-whole-actions button:hover,
+.conflict-block-header button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.conflict-view-tabs {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+  border-bottom: 1px solid var(--border);
+  padding: 0 12px;
+}
+
+.conflict-view-tabs button {
+  min-height: 32px;
+  border-bottom: 2px solid transparent;
+  padding: 0 10px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 12px;
+}
+
+.conflict-view-tabs button.active {
+  border-bottom-color: var(--blue);
+  color: var(--text);
+}
+
+.conflict-resolver-body {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  background: var(--sunken);
+}
+
+.conflict-block-list {
+  display: grid;
+  gap: 10px;
+  min-width: 620px;
+  padding: 12px;
+}
+
+.conflict-block {
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.conflict-block-header {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 36px;
+  border-bottom: 1px solid var(--border);
+  padding: 4px 8px 4px 10px;
+}
+
+.conflict-block-header strong {
+  font-size: 12px;
+}
+
+.conflict-block-header > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.conflict-block-header > div {
+  display: flex;
+  gap: 5px;
+  justify-content: flex-end;
+}
+
+.conflict-block-sides {
+  display: grid;
+  grid-template-columns: minmax(280px, 1fr) minmax(280px, 1fr);
+}
+
+.conflict-text-pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  overflow: hidden;
+  background: var(--panel);
+  container-type: inline-size;
+}
+
+.conflict-text-pane + .conflict-text-pane {
+  border-left: 1px solid var(--border);
+}
+
+.conflict-text-pane header {
+  overflow: hidden;
+  border-bottom: 1px solid var(--border);
+  padding: 6px 10px;
+  color: var(--muted-strong);
+  background: var(--surface-2);
+  font-size: 11px;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.conflict-text-pane.current header {
+  box-shadow: inset 3px 0 0 var(--blue);
+}
+
+.conflict-text-pane.incoming header {
+  box-shadow: inset 3px 0 0 var(--success);
+}
+
+.conflict-text-pane.base header {
+  box-shadow: inset 3px 0 0 var(--muted);
+}
+
+.conflict-text-pane pre,
+.conflict-block-base pre {
+  min-height: 54px;
+  margin: 0;
+  overflow: auto;
+  padding: 8px 10px;
+  color: var(--text);
+  font-family: var(--mono-font);
+  font-size: 12px;
+  line-height: 1.55;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.conflict-block-base {
+  border-top: 1px solid var(--border);
+}
+
+.conflict-block-base summary {
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.conflict-three-way {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(300px, 1fr));
+  min-width: 900px;
+  min-height: 100%;
+}
+
+.conflict-three-way .conflict-text-pane pre {
+  min-height: 100%;
+}
+
+.conflict-result-editor {
+  width: 100%;
+  height: 100%;
+  min-width: 620px;
+  min-height: 280px;
+  border: 0;
+  outline: 0;
+  padding: 12px 14px 36px;
+  color: var(--text);
+  background: var(--sunken);
+  font-family: var(--mono-font);
+  font-size: 12px;
+  line-height: 1.55;
+  resize: none;
+  tab-size: 2;
+  white-space: pre;
+}
+
+.conflict-resolver-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border);
+  padding: 8px 12px;
+}
+
+.detail-stack.conflict-console-toggle .conflict-resolver-footer {
+  padding-right: 128px;
+}
+
+.conflict-resolver-footer button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  min-height: 30px;
+}
+
+.conflict-resolved-state,
+.conflict-noneditable {
+  display: grid;
+  gap: 6px;
+  place-content: center;
+  min-height: 220px;
+  padding: 20px;
+  color: var(--muted);
+  text-align: center;
+}
+
+.conflict-resolved-state svg {
+  margin: 0 auto;
+  color: var(--success);
+}
+
+.conflict-resolved-state strong,
+.conflict-noneditable strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.conflict-resolved-state span,
+.conflict-noneditable span {
+  font-size: 12px;
+}
+
+@container (max-width: 520px) {
+  .conflict-resolver-header {
+    display: grid;
+    align-items: stretch;
+  }
+
+  .conflict-whole-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .conflict-whole-actions button {
+    max-width: none;
+  }
+
+  .conflict-view-tabs {
+    overflow-x: auto;
+  }
+
+  .conflict-view-tabs button {
+    flex: 0 0 auto;
+  }
+
+  .detail-stack.conflict-console-toggle .conflict-resolver-footer {
+    padding-right: 12px;
+    padding-bottom: 52px;
+  }
+}
+
 .editor-diff-panel .diff-lines {
   min-width: 720px;
   border-radius: 0;

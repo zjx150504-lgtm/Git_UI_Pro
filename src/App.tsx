@@ -34,6 +34,7 @@ import type {
   CommitInput,
   CommitMessageInput,
   CommitNode,
+  ConflictResolutionInput,
   GitHistoryFilter,
   GitHistoryRef,
   GitMergePreview,
@@ -790,15 +791,26 @@ export function App() {
       return;
     }
 
-    const pendingTab: WorktreeEditorTab = { id: tabId, file, diffLines: [], pinned, sourceType: "worktree" };
+    const pendingTab: WorktreeEditorTab = { id: tabId, file, diffLines: [], pinned, sourceType: "worktree", loading: true };
     setWorktreeTabs((current) => upsertWorktreeTab(current, pendingTab, pinned));
     setActiveWorktreeTabId(tabId);
 
     try {
+      if (file.status === "conflicted") {
+        const conflict = await apiClient.getConflictFileDetails(selectedProject, file.path);
+        setWorktreeTabs((current) =>
+          current.map((tab) =>
+            tab.id === tabId ? { ...tab, file, diffLines: [], preview: null, conflict, loading: false, pinned: tab.pinned || pinned } : tab
+          )
+        );
+        rememberStatus(`正在解决冲突：${file.path}`);
+        return;
+      }
+
       const preview = await apiClient.getWorktreeFilePreview(selectedProject, file);
       if (preview) {
         setWorktreeTabs((current) =>
-          current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines: [], preview, pinned: tab.pinned || pinned } : tab))
+          current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines: [], preview, loading: false, pinned: tab.pinned || pinned } : tab))
         );
         rememberStatus(`正在查看媒体：${file.path}`);
         return;
@@ -806,10 +818,42 @@ export function App() {
 
       const diffLines = await apiClient.getWorktreeDiff(selectedProject, file.path, file.staged);
       setWorktreeTabs((current) =>
-        current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines, preview: null, pinned: tab.pinned || pinned } : tab))
+        current.map((tab) => (tab.id === tabId ? { ...tab, file, diffLines, preview: null, loading: false, pinned: tab.pinned || pinned } : tab))
       );
     } catch (error) {
+      setWorktreeTabs((current) => current.map((tab) => (tab.id === tabId ? { ...tab, loading: false } : tab)));
       notifyError(error instanceof Error ? error.message : "加载工作区文件失败");
+    }
+  }
+
+  async function handleResolveConflict(tab: WorktreeEditorTab, input: ConflictResolutionInput): Promise<boolean> {
+    if (!selectedProject || tab.file.status !== "conflicted") {
+      return false;
+    }
+
+    const nextConflictFile = worktree.unstagedFiles.find((file) => file.status === "conflicted" && file.path !== tab.file.path);
+    const toastId = notifyLoading(`正在保存冲突结果：${tab.file.path}...`);
+    try {
+      const result = await apiClient.resolveConflictFile(selectedProject, tab.file.path, input);
+      if (!notifyGitResult(result, `已解决并暂存：${tab.file.path}`, "解决冲突失败，请查看原始 Git 输出。", toastId)) {
+        return false;
+      }
+
+      handleCloseWorktreeTab(tab.id);
+      await loadProjectData(selectedProject);
+      if (nextConflictFile) {
+        await openWorktreeFile(nextConflictFile, false);
+        return true;
+      }
+
+      const status = await apiClient.getProjectStatus(selectedProject).catch(() => undefined);
+      if (status?.operationState === "merge" && !status.hasConflicts) {
+        notifyInfo("所有冲突文件已解决", "检查暂存结果后可以继续合并。");
+      }
+      return true;
+    } catch (error) {
+      notifyError(errorText(error, "解决冲突失败"), undefined, toastId);
+      return false;
     }
   }
 
@@ -2127,7 +2171,12 @@ export function App() {
             </div>
             {!rightCollapsed ? <div className="resize-handle detail-resize" onMouseDown={(event) => beginResize("detail", event)} /> : null}
             {!rightCollapsed ? (
-              <section className={`detail-stack ${consoleOpen ? "console-open" : ""}`} aria-label="文件查看和控制台" ref={detailStackRef} style={detailStackStyle}>
+              <section
+                className={`detail-stack ${consoleOpen ? "console-open" : ""} ${!consoleOpen && activeWorktreeTab?.conflict ? "conflict-console-toggle" : ""}`}
+                aria-label="文件查看和控制台"
+                ref={detailStackRef}
+                style={detailStackStyle}
+              >
                 <WorktreeDetailPanel
                   tabs={worktreeTabs}
                   activeTabId={activeWorktreeTabId}
@@ -2135,6 +2184,7 @@ export function App() {
                   onSelectTab={handleSelectWorktreeTab}
                   onCloseTab={handleCloseWorktreeTab}
                   onPinTab={handlePinWorktreeTab}
+                  onResolveConflict={handleResolveConflict}
                 />
                 <div className="console-resize" hidden={!consoleOpen} onMouseDown={(event) => beginResize("console", event)} />
                 <ConsolePanel

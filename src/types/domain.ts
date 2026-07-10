@@ -74,6 +74,29 @@ export interface DiffLine {
   content: string;
 }
 
+export interface ConflictFileDetails {
+  path: string;
+  baseContent?: string;
+  currentContent?: string;
+  incomingContent?: string;
+  resultContent?: string;
+  baseExists: boolean;
+  currentExists: boolean;
+  incomingExists: boolean;
+  resultExists: boolean;
+  currentLabel: string;
+  incomingLabel: string;
+  editable: boolean;
+  isBinary: boolean;
+  token: string;
+}
+
+export interface ConflictResolutionInput {
+  choice: "content" | "current" | "incoming";
+  content?: string;
+  expectedToken: string;
+}
+
 export interface FilePreview {
   type: "image" | "video";
   mimeType: string;

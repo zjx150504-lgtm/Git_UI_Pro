@@ -132,6 +132,12 @@ function registerIpc(): void {
     gitService.getWorktreeDiff(repositoryPath, filePath, staged)
   );
   ipcMain.handle("git:getWorktreeFilePreview", (_event, repositoryPath: string, file) => gitService.getWorktreeFilePreview(repositoryPath, file));
+  ipcMain.handle("git:getConflictFileDetails", (_event, repositoryPath: string, filePath: string) =>
+    gitService.getConflictFileDetails(repositoryPath, filePath)
+  );
+  ipcMain.handle("git:resolveConflictFile", (_event, repositoryPath: string, filePath: string, input) =>
+    gitService.resolveConflictFile(repositoryPath, filePath, input)
+  );
   ipcMain.handle("git:stageFile", (_event, repositoryPath: string, filePath: string) => gitService.stageFile(repositoryPath, filePath));
   ipcMain.handle("git:stageAll", (_event, repositoryPath: string) => gitService.stageAll(repositoryPath));
   ipcMain.handle("git:unstageFile", (_event, repositoryPath: string, filePath: string) => gitService.unstageFile(repositoryPath, filePath));
