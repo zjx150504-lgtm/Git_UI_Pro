@@ -1060,6 +1060,39 @@ input[type="radio"]:focus-visible {
   min-height: 36px;
 }
 
+.project-rail-list {
+  scrollbar-color: transparent transparent;
+}
+
+.project-rail-list::-webkit-scrollbar-thumb {
+  border-color: transparent;
+  background-color: var(--scrollbar-thumb);
+  opacity: 0;
+  transition: opacity 420ms ease, background-color 150ms ease;
+}
+
+.project-rail-list:hover,
+.project-rail-list:focus-within {
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.project-rail-list:hover::-webkit-scrollbar-thumb,
+.project-rail-list:focus-within::-webkit-scrollbar-thumb {
+  opacity: 1;
+  transition-duration: 150ms, 150ms;
+}
+
+.project-rail-list:hover::-webkit-scrollbar-thumb:hover,
+.project-rail-list:focus-within::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .project-rail-list::-webkit-scrollbar-thumb {
+    transition: none;
+  }
+}
+
 /* Unified project controls and text-input focus states. */
 
 .project-rail-filterbar {
