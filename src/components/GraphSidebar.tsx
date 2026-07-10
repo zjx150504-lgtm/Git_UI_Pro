@@ -46,6 +46,7 @@ interface GraphSidebarProps {
   onCommitAction: (action: CommitGraphAction, commit: CommitNode) => void;
   onContinueMerge: () => void;
   onAbortMerge: () => void;
+  operationBusy: boolean;
   panelOpen: boolean;
   onTogglePanel: () => void;
 }
@@ -54,7 +55,7 @@ const graphOperations = [
   { label: "fetch", title: "抓取远程更新", icon: RefreshCw },
   { label: "pull", title: "拉取当前分支", icon: CloudDownload },
   { label: "push", title: "推送当前分支", icon: CloudUpload },
-  { label: "合并到主分支", title: "切换到主分支并合并当前分支", icon: GitMerge },
+  { label: "合并分支", title: "将当前分支合并到目标分支", icon: GitMerge },
   { label: "新建分支", title: "新建分支", icon: Plus }
 ];
 
@@ -152,6 +153,7 @@ export function GraphSidebar({
   onCommitAction,
   onContinueMerge,
   onAbortMerge,
+  operationBusy,
   panelOpen,
   onTogglePanel
 }: GraphSidebarProps) {
@@ -198,6 +200,7 @@ export function GraphSidebar({
   const rowTones = useMemo(() => buildGraphTones(filteredCommits, graphContext), [filteredCommits, graphContext]);
   const graphLayouts = useMemo(() => buildGraphLayouts(filteredCommits, rowTones, graphContext), [filteredCommits, rowTones, graphContext]);
   const operationProject = project && (project.status?.operationState || project.status?.hasConflicts) ? project : undefined;
+  const gitOperationLocked = operationBusy || Boolean(project?.status?.operationState || project?.status?.hasConflicts);
   const syncProject = project && ((project.status?.ahead ?? 0) > 0 || (project.status?.behind ?? 0) > 0) ? project : undefined;
   const localOnlyCount = project?.status?.upstream ? project.status.ahead : commits.length;
   const virtualGraphEnabled = filteredCommits.length > GRAPH_VIRTUAL_THRESHOLD && !expandedHash;
@@ -628,7 +631,13 @@ export function GraphSidebar({
               const Icon = operation.icon;
               return (
                 <PathTooltip content={operation.title} className="graph-toolbar-tooltip" key={operation.label}>
-                  <button type="button" className="icon-button compact-icon" aria-label={operation.title} onClick={() => onOperation(operation.label)}>
+                  <button
+                    type="button"
+                    className="icon-button compact-icon"
+                    aria-label={operation.title}
+                    onClick={() => onOperation(operation.label)}
+                    disabled={gitOperationLocked}
+                  >
                     <Icon size={GRAPH_TOOLBAR_ICON_SIZE} />
                   </button>
                 </PathTooltip>
@@ -725,7 +734,14 @@ export function GraphSidebar({
               </div>
             ) : null}
             {filteredCommits.length === 0 && !loading ? <div className="empty-state graph-empty">当前仓库没有可显示的提交。</div> : null}
-            {operationProject ? <GraphOperationRow project={operationProject} onContinueMerge={onContinueMerge} onAbortMerge={onAbortMerge} /> : null}
+            {operationProject ? (
+              <GraphOperationRow
+                project={operationProject}
+                onContinueMerge={onContinueMerge}
+                onAbortMerge={onAbortMerge}
+                busy={operationBusy}
+              />
+            ) : null}
             {syncProject ? <GraphSyncRow project={syncProject} /> : null}
             {virtualGraphEnabled && graphVirtualRange.topPadding > 0 ? <div className="graph-virtual-spacer" style={{ height: graphVirtualRange.topPadding }} aria-hidden="true" /> : null}
             {visibleCommits.map((commit, visibleIndex) => {
@@ -1587,16 +1603,18 @@ function historyRefDescription(ref: GitHistoryRef): string {
 function GraphOperationRow({
   project,
   onContinueMerge,
-  onAbortMerge
+  onAbortMerge,
+  busy
 }: {
   project: GitProject;
   onContinueMerge: () => void;
   onAbortMerge: () => void;
+  busy: boolean;
 }) {
   const state = project.status?.operationState;
   const hasConflicts = Boolean(project.status?.hasConflicts);
   const branch = project.status?.currentBranch ?? "分离 HEAD";
-  const copy = graphOperationCopy(state, hasConflicts);
+  const copy = graphOperationCopy(project, state, hasConflicts);
   const showMergeActions = state === "merge";
 
   return (
@@ -1606,10 +1624,10 @@ function GraphOperationRow({
       <span className="graph-operation-detail">{copy.detail ?? branch}</span>
       {showMergeActions ? (
         <span className="graph-operation-actions">
-          <button type="button" className="graph-operation-action" onClick={onContinueMerge}>
-            继续
+          <button type="button" className="graph-operation-action" onClick={onContinueMerge} disabled={busy}>
+            {busy ? "处理中" : "继续"}
           </button>
-          <button type="button" className="graph-operation-action danger" onClick={onAbortMerge}>
+          <button type="button" className="graph-operation-action danger" onClick={onAbortMerge} disabled={busy}>
             终止
           </button>
         </span>
@@ -1618,7 +1636,7 @@ function GraphOperationRow({
   );
 }
 
-function graphOperationCopy(state: GitOperationState | undefined, hasConflicts: boolean): { label: string; detail?: string } {
+function graphOperationCopy(project: GitProject, state: GitOperationState | undefined, hasConflicts: boolean): { label: string; detail?: string } {
   if (!state) {
     return {
       label: hasConflicts ? "存在冲突" : "Git 操作进行中",
@@ -1628,8 +1646,12 @@ function graphOperationCopy(state: GitOperationState | undefined, hasConflicts: 
 
   const conflictSuffix = hasConflicts ? "，解决冲突后继续" : "";
   switch (state) {
-    case "merge":
-      return { label: "正在合并", detail: `合并操作进行中${conflictSuffix}` };
+    case "merge": {
+      const route = project.status?.mergeSourceBranch && project.status.mergeTargetBranch
+        ? `${project.status.mergeSourceBranch} → ${project.status.mergeTargetBranch}`
+        : "合并操作进行中";
+      return { label: "正在合并", detail: `${route}${conflictSuffix}` };
+    }
     case "rebase":
       return { label: "正在变基", detail: `变基操作进行中${conflictSuffix}` };
     case "cherry-pick":

@@ -32,6 +32,7 @@
     "build": "npm run build:electron && npm run build:renderer",
     "build:electron": "tsc -p electron/tsconfig.json",
     "build:renderer": "tsc -p tsconfig.json --noEmit && vite build",
+    "test:merge": "npm run build:electron && node scripts/test-merge-service.mjs",
     "icons": "node scripts/generate-icons.mjs",
     "dist": "npm run icons && npm run build && electron-builder",
     "dist:dir": "npm run icons && npm run build && electron-builder --dir",

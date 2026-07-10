@@ -5,6 +5,7 @@ import {
   ExternalLink,
   FolderGit2,
   GitBranch,
+  GitMerge,
   MessageSquareText,
   Moon,
   PanelLeftClose,
@@ -35,6 +36,8 @@ import type {
   CommitNode,
   GitHistoryFilter,
   GitHistoryRef,
+  GitMergePreview,
+  GitMergeStrategy,
   GitOperationResult,
   GitProject,
   GitResetMode,
@@ -82,7 +85,15 @@ type GitDependencyState =
   | { status: "missing"; message: string; details?: string };
 type BranchDialogState =
   | { mode: "create"; project: GitProject; branchName: string; checkout: boolean; startPoint?: string; startLabel?: string }
-  | { mode: "switch"; project: GitProject; branches: BranchInfo[]; query: string };
+  | { mode: "switch"; project: GitProject; branches: BranchInfo[]; query: string }
+  | {
+      mode: "merge";
+      project: GitProject;
+      branches: BranchInfo[];
+      query: string;
+      strategy: GitMergeStrategy;
+      preview?: GitMergePreview;
+    };
 type CommitMessageDialogState = {
   project: GitProject;
   commit: CommitNode;
@@ -124,6 +135,7 @@ export function App() {
   const [graphPanelOpen, setGraphPanelOpen] = useState(true);
   const [branchDialog, setBranchDialog] = useState<BranchDialogState | null>(null);
   const [branchDialogBusy, setBranchDialogBusy] = useState(false);
+  const [mergeOperationBusy, setMergeOperationBusy] = useState(false);
   const [commitMessageDialog, setCommitMessageDialog] = useState<CommitMessageDialogState | null>(null);
   const [commitMessageDialogBusy, setCommitMessageDialogBusy] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<FeedbackConfirmOptions | null>(null);
@@ -994,8 +1006,8 @@ export function App() {
       return;
     }
 
-    if (action === "合并到主分支") {
-      await mergeCurrentBranchToMain(selectedProject);
+    if (action === "合并分支") {
+      await openMergeDialog(selectedProject);
       return;
     }
 
@@ -1064,8 +1076,8 @@ export function App() {
     await loadProjectData(project);
   }
 
-  async function mergeCurrentBranchToMain(project: GitProject) {
-    if (!requireGitReady("合并到主分支")) {
+  async function openMergeDialog(project: GitProject) {
+    if (!requireGitReady("合并分支")) {
       return;
     }
 
@@ -1076,32 +1088,81 @@ export function App() {
 
     const currentBranch = project.status?.currentBranch;
     if (!currentBranch) {
-      notifyInfo("当前是分离 HEAD 状态，无法自动合并到主分支");
+      notifyInfo("当前是分离 HEAD 状态，无法执行分支合并");
       return;
     }
 
     if (hasWorktreeChanges(project)) {
-      const confirmed = await requestConfirm({
-        title: "合并到主分支",
-        description: "将切换到主分支，并把当前分支合并进去。当前工作区存在未提交改动，切换或合并可能失败。",
-        detail: currentBranch,
-        confirmLabel: "继续合并",
-        tone: "warning"
-      });
-      if (!confirmed) {
-        return;
-      }
-    }
-
-    const toastId = notifyLoading(`正在将 ${currentBranch} 合并到主分支...`);
-    const result = await apiClient.mergeCurrentBranchToMain(project);
-    if (!notifyGitResult(result, `已将 ${currentBranch} 合并到主分支`, "合并到主分支失败，请查看原始 Git 输出。", toastId)) {
-      await loadProjectData(project, nextProjectLoadRequestId(), graphHistoryFilter, { clearTabs: true });
+      notifyInfo("合并前必须保持工作区干净", "请先提交、暂存到 stash 或丢弃当前改动。");
       return;
     }
 
-    clearWorktreeEditorTabs();
-    await loadProjectData(project);
+    setMergeOperationBusy(true);
+    rememberStatus("正在读取可合并分支...");
+    try {
+      const branches = (await apiClient.getBranches(project)).filter((branch) => branch.type === "local" && !branch.current);
+      if (branches.length === 0) {
+        notifyInfo("没有可作为合并目标的本地分支");
+        return;
+      }
+
+      setBranchDialog({ mode: "merge", project, branches, query: "", strategy: "ff" });
+      rememberStatus(`当前来源分支：${currentBranch}`);
+    } catch (error) {
+      notifyError(errorText(error, "读取分支列表失败"));
+    } finally {
+      setMergeOperationBusy(false);
+    }
+  }
+
+  async function previewMergeTarget(target: BranchInfo) {
+    if (!branchDialog || branchDialog.mode !== "merge") {
+      return;
+    }
+
+    const { project } = branchDialog;
+    setBranchDialogBusy(true);
+    rememberStatus(`正在预检 ${target.name}...`);
+    try {
+      const preview = await apiClient.getMergePreview(project, target.name);
+      setBranchDialog((current) => (current?.mode === "merge" ? { ...current, preview } : current));
+      rememberStatus(`合并预检完成：${preview.sourceBranch} → ${preview.targetBranch}`);
+    } catch (error) {
+      notifyError(errorText(error, "合并预检失败"));
+      setBranchDialog((current) => (current?.mode === "merge" ? { ...current, preview: undefined } : current));
+    } finally {
+      setBranchDialogBusy(false);
+    }
+  }
+
+  async function submitMerge() {
+    if (!branchDialog || branchDialog.mode !== "merge" || !branchDialog.preview) {
+      return;
+    }
+
+    const { project, preview, strategy } = branchDialog;
+    if (preview.mode === "up-to-date") {
+      notifyInfo(`${preview.targetBranch} 已包含 ${preview.sourceBranch} 的全部提交`);
+      setBranchDialog(null);
+      return;
+    }
+
+    setBranchDialogBusy(true);
+    setMergeOperationBusy(true);
+    const toastId = notifyLoading(`正在合并 ${preview.sourceBranch} → ${preview.targetBranch}...`);
+    try {
+      const result = await apiClient.mergeCurrentBranch(project, preview.targetBranch, strategy);
+      setBranchDialog(null);
+      clearWorktreeEditorTabs();
+      notifyGitResult(result, `合并完成：${preview.sourceBranch} → ${preview.targetBranch}`, "合并失败，请查看原始 Git 输出。", toastId);
+    } catch (error) {
+      setBranchDialog(null);
+      notifyError(errorText(error, "合并失败"), undefined, toastId);
+    } finally {
+      await loadProjectData(project, nextProjectLoadRequestId(), graphHistoryFilter, { clearTabs: true });
+      setBranchDialogBusy(false);
+      setMergeOperationBusy(false);
+    }
   }
 
   async function continueMerge(project: GitProject) {
@@ -1114,15 +1175,23 @@ export function App() {
       return;
     }
 
-    const toastId = notifyLoading("正在继续合并...");
-    const result = await apiClient.continueMerge(project);
-    if (!notifyGitResult(result, "合并完成", "继续合并失败，请确认所有冲突已解决并暂存。", toastId)) {
-      await loadProjectData(project);
+    if (mergeOperationBusy) {
       return;
     }
 
-    clearWorktreeEditorTabs();
-    await loadProjectData(project);
+    setMergeOperationBusy(true);
+    const toastId = notifyLoading("正在继续合并...");
+    try {
+      const result = await apiClient.continueMerge(project);
+      if (notifyGitResult(result, "合并完成", "继续合并失败，请确认所有冲突已解决并暂存。", toastId)) {
+        clearWorktreeEditorTabs();
+      }
+    } catch (error) {
+      notifyError(errorText(error, "继续合并失败"), undefined, toastId);
+    } finally {
+      await loadProjectData(project);
+      setMergeOperationBusy(false);
+    }
   }
 
   async function abortMerge(project: GitProject) {
@@ -1135,9 +1204,15 @@ export function App() {
       return;
     }
 
+    if (mergeOperationBusy) {
+      return;
+    }
+
     const confirmed = await requestConfirm({
       title: "终止合并",
-      description: "将取消当前 merge，并尽量恢复合并开始前的主分支状态。",
+      description: project.status.mergeSourceBranch
+        ? `将取消当前 merge，恢复目标分支后切回 ${project.status.mergeSourceBranch}。`
+        : "将取消当前 merge，并恢复合并开始前的分支内容。",
       confirmLabel: "终止合并",
       tone: "danger"
     });
@@ -1145,15 +1220,22 @@ export function App() {
       return;
     }
 
+    setMergeOperationBusy(true);
     const toastId = notifyLoading("正在终止合并...");
-    const result = await apiClient.abortMerge(project);
-    if (!notifyGitResult(result, "已终止合并", "终止合并失败，请查看原始 Git 输出。", toastId)) {
+    try {
+      const result = await apiClient.abortMerge(project);
+      const successMessage = project.status.mergeSourceBranch
+        ? `已终止合并并返回 ${project.status.mergeSourceBranch}`
+        : "已终止合并";
+      if (notifyGitResult(result, successMessage, "终止合并失败，请查看原始 Git 输出。", toastId)) {
+        clearWorktreeEditorTabs();
+      }
+    } catch (error) {
+      notifyError(errorText(error, "终止合并失败"), undefined, toastId);
+    } finally {
       await loadProjectData(project);
-      return;
+      setMergeOperationBusy(false);
     }
-
-    clearWorktreeEditorTabs();
-    await loadProjectData(project);
   }
 
   async function createBranchFromToolbar(project: GitProject) {
@@ -2038,6 +2120,7 @@ export function App() {
                 onCommitAction={(action, commit) => void handleCommitGraphAction(action, commit)}
                 onContinueMerge={() => (selectedProject ? void continueMerge(selectedProject) : undefined)}
                 onAbortMerge={() => (selectedProject ? void abortMerge(selectedProject) : undefined)}
+                operationBusy={mergeOperationBusy}
                 panelOpen={graphPanelOpen}
                 onTogglePanel={() => setGraphPanelOpen((value) => !value)}
               />
@@ -2101,9 +2184,16 @@ export function App() {
               setBranchDialog((current) => (current?.mode === "create" ? { ...current, branchName } : current))
             }
             onCheckoutChange={(checkout) => setBranchDialog((current) => (current?.mode === "create" ? { ...current, checkout } : current))}
-            onSwitchQueryChange={(query) => setBranchDialog((current) => (current?.mode === "switch" ? { ...current, query } : current))}
+            onBranchQueryChange={(query) =>
+              setBranchDialog((current) => (current?.mode === "switch" || current?.mode === "merge" ? { ...current, query } : current))
+            }
+            onMergeStrategyChange={(strategy) =>
+              setBranchDialog((current) => (current?.mode === "merge" ? { ...current, strategy } : current))
+            }
             onCreate={submitCreateBranch}
             onSwitch={submitSwitchBranch}
+            onMergeTarget={previewMergeTarget}
+            onMerge={submitMerge}
           />
         ) : null}
         {commitMessageDialog ? (
@@ -2189,18 +2279,24 @@ function BranchDialog({
   onClose,
   onCreateNameChange,
   onCheckoutChange,
-  onSwitchQueryChange,
+  onBranchQueryChange,
+  onMergeStrategyChange,
   onCreate,
-  onSwitch
+  onSwitch,
+  onMergeTarget,
+  onMerge
 }: {
   state: BranchDialogState;
   busy: boolean;
   onClose: () => void;
   onCreateNameChange: (value: string) => void;
   onCheckoutChange: (value: boolean) => void;
-  onSwitchQueryChange: (value: string) => void;
+  onBranchQueryChange: (value: string) => void;
+  onMergeStrategyChange: (value: GitMergeStrategy) => void;
   onCreate: () => void;
   onSwitch: (branch: BranchInfo) => void;
+  onMergeTarget: (branch: BranchInfo) => void;
+  onMerge: () => void;
 }) {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -2214,17 +2310,18 @@ function BranchDialog({
   }, [onClose]);
 
   const filteredBranches =
-    state.mode === "switch"
+    state.mode === "switch" || state.mode === "merge"
       ? state.branches.filter((branch) => `${branch.name} ${branch.fullName}`.toLowerCase().includes(state.query.trim().toLowerCase()))
       : [];
+  const dialogTitle = state.mode === "create" ? "新建分支" : state.mode === "switch" ? "切换分支" : "合并分支";
 
   return (
     <div className="branch-dialog-backdrop" role="presentation" onMouseDown={onClose}>
-      <section className="branch-dialog" role="dialog" aria-modal="true" aria-label={state.mode === "create" ? "新建分支" : "切换分支"} onMouseDown={(event) => event.stopPropagation()}>
+      <section className={`branch-dialog ${state.mode === "merge" ? "merge-dialog" : ""}`} role="dialog" aria-modal="true" aria-label={dialogTitle} onMouseDown={(event) => event.stopPropagation()}>
         <header className="branch-dialog-header">
           <span className="branch-dialog-title">
-            {state.mode === "create" ? <Plus size={15} /> : <GitBranch size={15} />}
-            {state.mode === "create" ? "新建分支" : "切换分支"}
+            {state.mode === "create" ? <Plus size={15} /> : state.mode === "merge" ? <GitMerge size={15} /> : <GitBranch size={15} />}
+            {dialogTitle}
           </span>
           <button type="button" className="icon-button compact-icon" title="关闭" onClick={onClose}>
             <X size={14} />
@@ -2263,23 +2360,74 @@ function BranchDialog({
             </div>
           </form>
         ) : (
-          <div className="branch-switch-panel">
+          <div className={`branch-switch-panel ${state.mode === "merge" ? "merge-branch-panel" : ""}`}>
             <label className="branch-search">
               <GitBranch size={14} />
-              <input value={state.query} autoFocus onChange={(event) => onSwitchQueryChange(event.target.value)} placeholder="搜索分支" disabled={busy} />
+              <input value={state.query} autoFocus onChange={(event) => onBranchQueryChange(event.target.value)} placeholder={state.mode === "merge" ? "搜索目标分支" : "搜索分支"} disabled={busy} />
             </label>
             <div className="branch-list" role="list">
               {filteredBranches.map((branch) => (
-                <button type="button" className={`branch-list-item ${branch.current ? "current" : ""}`} key={`${branch.type}-${branch.fullName}`} onClick={() => onSwitch(branch)} disabled={busy}>
+                <button
+                  type="button"
+                  className={`branch-list-item ${branch.current ? "current" : ""} ${state.mode === "merge" && state.preview?.targetBranch === branch.name ? "selected" : ""}`}
+                  key={`${branch.type}-${branch.fullName}`}
+                  onClick={() => (state.mode === "merge" ? onMergeTarget(branch) : onSwitch(branch))}
+                  disabled={busy}
+                >
                   <span>
                     <GitBranch size={13} />
                     {branch.name}
                   </span>
-                  <small>{branch.current ? "当前" : branch.type === "remote" ? "远程" : branch.upstream ? `跟踪 ${branch.upstream}` : "本地"}</small>
+                  <small>{state.mode === "merge" && state.preview?.targetBranch === branch.name ? "目标" : branch.current ? "当前" : branch.type === "remote" ? "远程" : branch.upstream ? `跟踪 ${branch.upstream}` : "本地"}</small>
                 </button>
               ))}
               {filteredBranches.length === 0 ? <div className="empty-inline branch-empty">没有匹配分支。</div> : null}
             </div>
+            {state.mode === "merge" && state.preview ? (
+              <div className="merge-plan">
+                <div className="merge-plan-route">
+                  <code>{state.preview.sourceBranch}</code>
+                  <span aria-hidden="true">→</span>
+                  <code>{state.preview.targetBranch}</code>
+                </div>
+                <div className="merge-plan-facts">
+                  <span>
+                    <strong>结果</strong>
+                    {mergeResultLabel(state.preview, state.strategy)}
+                  </span>
+                  <span>
+                    <strong>远端</strong>
+                    {mergeRemoteLabel(state.preview)}
+                  </span>
+                </div>
+                {state.preview.mode !== "up-to-date" ? (
+                  <div className="merge-strategy" role="radiogroup" aria-label="合并策略">
+                    <button type="button" role="radio" aria-checked={state.strategy === "ff"} className={state.strategy === "ff" ? "active" : ""} onClick={() => onMergeStrategyChange("ff")} disabled={busy}>
+                      允许快进
+                    </button>
+                    <button type="button" role="radio" aria-checked={state.strategy === "no-ff"} className={state.strategy === "no-ff" ? "active" : ""} onClick={() => onMergeStrategyChange("no-ff")} disabled={busy}>
+                      创建合并提交
+                    </button>
+                  </div>
+                ) : null}
+                {state.preview.targetBehind > 0 ? <div className="merge-plan-warning">目标分支落后 {state.preview.targetUpstream} {state.preview.targetBehind} 个提交</div> : null}
+                <div className="branch-dialog-actions">
+                  <button type="button" className="text-button" onClick={onClose} disabled={busy}>
+                    取消
+                  </button>
+                  <button type="button" className="primary-action branch-primary-action" onClick={onMerge} disabled={busy || state.preview.mode === "up-to-date"}>
+                    <GitMerge size={14} />
+                    {state.preview.mode === "up-to-date" ? "无需合并" : busy ? "处理中" : "开始合并"}
+                  </button>
+                </div>
+              </div>
+            ) : state.mode === "merge" ? (
+              <div className="branch-dialog-actions merge-dialog-footer">
+                <button type="button" className="text-button" onClick={onClose} disabled={busy}>
+                  取消
+                </button>
+              </div>
+            ) : null}
           </div>
         )}
       </section>
@@ -2378,6 +2526,33 @@ function gitOutputPreview(result: GitOperationResult): string | undefined {
   }
 
   return output.length > 180 ? `${output.slice(0, 180)}...` : output;
+}
+
+function errorText(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message.trim() ? error.message : fallback;
+}
+
+function mergeResultLabel(preview: GitMergePreview, strategy: GitMergeStrategy): string {
+  if (preview.mode === "up-to-date") {
+    return "目标已包含来源";
+  }
+  if (strategy === "no-ff") {
+    return "创建合并提交";
+  }
+  return preview.mode === "fast-forward" ? "快进" : "创建合并提交";
+}
+
+function mergeRemoteLabel(preview: GitMergePreview): string {
+  if (!preview.targetUpstream) {
+    return "未配置上游";
+  }
+  if (preview.targetAhead === 0 && preview.targetBehind === 0) {
+    return `与 ${preview.targetUpstream} 一致`;
+  }
+  if (preview.targetAhead > 0 && preview.targetBehind > 0) {
+    return `领先 ${preview.targetAhead} / 落后 ${preview.targetBehind}`;
+  }
+  return preview.targetAhead > 0 ? `领先 ${preview.targetAhead}` : `落后 ${preview.targetBehind}`;
 }
 
 function mergeProjects(incoming: GitProject[], current: GitProject[]): GitProject[] {

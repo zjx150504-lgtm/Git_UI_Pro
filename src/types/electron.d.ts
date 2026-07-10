@@ -8,6 +8,8 @@ import type {
   FilePreview,
   GitHistoryFilter,
   GitHistoryRef,
+  GitMergePreview,
+  GitMergeStrategy,
   GitOperationResult,
   GitProject,
   GitResetMode,
@@ -64,7 +66,8 @@ export interface GitUIBridge {
   getBranches: (repositoryPath: string) => Promise<BranchInfo[]>;
   createBranch: (repositoryPath: string, branchName: string, checkout: boolean, startPoint?: string) => Promise<GitOperationResult>;
   switchBranch: (repositoryPath: string, branch: BranchInfo) => Promise<GitOperationResult>;
-  mergeCurrentBranchToMain: (repositoryPath: string) => Promise<GitOperationResult>;
+  getMergePreview: (repositoryPath: string, targetBranch: string) => Promise<GitMergePreview>;
+  mergeCurrentBranch: (repositoryPath: string, targetBranch: string, strategy: GitMergeStrategy) => Promise<GitOperationResult>;
   continueMerge: (repositoryPath: string) => Promise<GitOperationResult>;
   abortMerge: (repositoryPath: string) => Promise<GitOperationResult>;
   deleteBranch: (repositoryPath: string, branchName: string) => Promise<GitOperationResult>;

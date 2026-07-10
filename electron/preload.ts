@@ -64,7 +64,9 @@ contextBridge.exposeInMainWorld("gitUI", {
     ipcRenderer.invoke("git:createBranch", repositoryPath, branchName, checkout, startPoint),
   switchBranch: (repositoryPath: string, branch: { name: string; fullName: string; type: string; current: boolean; upstream?: string; headHash: string }) =>
     ipcRenderer.invoke("git:switchBranch", repositoryPath, branch),
-  mergeCurrentBranchToMain: (repositoryPath: string) => ipcRenderer.invoke("git:mergeCurrentBranchToMain", repositoryPath),
+  getMergePreview: (repositoryPath: string, targetBranch: string) => ipcRenderer.invoke("git:getMergePreview", repositoryPath, targetBranch),
+  mergeCurrentBranch: (repositoryPath: string, targetBranch: string, strategy: "ff" | "no-ff") =>
+    ipcRenderer.invoke("git:mergeCurrentBranch", repositoryPath, targetBranch, strategy),
   continueMerge: (repositoryPath: string) => ipcRenderer.invoke("git:continueMerge", repositoryPath),
   abortMerge: (repositoryPath: string) => ipcRenderer.invoke("git:abortMerge", repositoryPath),
   deleteBranch: (repositoryPath: string, branchName: string) => ipcRenderer.invoke("git:deleteBranch", repositoryPath, branchName),

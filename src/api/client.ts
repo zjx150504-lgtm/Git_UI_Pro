@@ -9,6 +9,8 @@ import type {
   FilePreview,
   GitHistoryFilter,
   GitHistoryRef,
+  GitMergePreview,
+  GitMergeStrategy,
   GitOperationResult,
   GitProject,
   GitResetMode,
@@ -409,14 +411,30 @@ export const apiClient = {
     return okResult(branch.type === "remote" ? `git switch --track ${branch.name}` : `git switch ${branch.name}`);
   },
 
-  async mergeCurrentBranchToMain(project: GitProject): Promise<GitOperationResult> {
+  async getMergePreview(project: GitProject, targetBranch: string): Promise<GitMergePreview> {
     if (window.gitUI) {
-      return window.gitUI.mergeCurrentBranchToMain(project.path);
+      return window.gitUI.getMergePreview(project.path, targetBranch);
+    }
+
+    await wait(mockDelay);
+    return {
+      sourceBranch: project.status?.currentBranch ?? "feature/current",
+      targetBranch,
+      targetUpstream: `origin/${targetBranch}`,
+      targetAhead: 0,
+      targetBehind: 0,
+      mode: "fast-forward"
+    };
+  },
+
+  async mergeCurrentBranch(project: GitProject, targetBranch: string, strategy: GitMergeStrategy): Promise<GitOperationResult> {
+    if (window.gitUI) {
+      return window.gitUI.mergeCurrentBranch(project.path, targetBranch, strategy);
     }
 
     await wait(mockDelay);
     const currentBranch = project.status?.currentBranch ?? "feature/current";
-    return okResult(`git switch master && git merge --no-edit ${currentBranch}`);
+    return okResult(`git switch ${targetBranch} && git merge --${strategy} --no-edit ${currentBranch}`);
   },
 
   async continueMerge(project: GitProject): Promise<GitOperationResult> {

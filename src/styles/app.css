@@ -4758,7 +4758,8 @@ button {
 }
 
 .branch-list-item:hover,
-.branch-list-item.current {
+.branch-list-item.current,
+.branch-list-item.selected {
   background: var(--surface);
 }
 
@@ -4781,8 +4782,115 @@ button {
   color: var(--blue);
 }
 
+.branch-list-item.selected {
+  box-shadow: inset 2px 0 0 var(--blue);
+}
+
+.branch-list-item.selected small {
+  color: var(--blue);
+}
+
 .branch-empty {
   padding: 12px 4px;
+}
+
+.merge-dialog {
+  width: min(460px, calc(100vw - 32px));
+  max-height: min(680px, calc(100vh - 112px));
+}
+
+.merge-branch-panel .branch-list {
+  max-height: 220px;
+}
+
+.merge-plan {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+.merge-plan-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 18px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.merge-plan-route code {
+  overflow: hidden;
+  padding: 4px 6px;
+  color: var(--text);
+  background: var(--sunken);
+  font-family: var(--mono-font);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.merge-plan-route span {
+  color: var(--muted);
+  text-align: center;
+}
+
+.merge-plan-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  color: var(--muted-strong);
+  font-size: 12px;
+}
+
+.merge-plan-facts span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.merge-plan-facts strong {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.merge-strategy {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+}
+
+.merge-strategy button {
+  min-height: 30px;
+  padding: 0 8px;
+  color: var(--muted-strong);
+  background: var(--sunken);
+  font-size: 12px;
+}
+
+.merge-strategy button + button {
+  border-left: 1px solid var(--border-strong);
+}
+
+.merge-strategy button.active {
+  color: var(--text);
+  background: var(--surface);
+}
+
+.merge-plan-warning {
+  border-left: 2px solid var(--warning);
+  padding-left: 8px;
+  color: var(--warning);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.merge-dialog-footer {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
 }
 
 * {

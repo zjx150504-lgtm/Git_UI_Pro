@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, readFile, readdir, stat } from "node:fs/promises";
+import { access, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { TextDecoder } from "node:util";
 
@@ -22,6 +22,8 @@ export interface GitStatusSummary {
   untrackedCount: number;
   hasConflicts: boolean;
   operationState?: GitOperationState;
+  mergeSourceBranch?: string;
+  mergeTargetBranch?: string;
 }
 
 export interface ChangedFile {
@@ -114,10 +116,29 @@ export interface CommitMessageInput {
 
 export type GitResetMode = "soft" | "mixed" | "hard";
 export type GitOperationState = "merge" | "rebase" | "cherry-pick" | "revert" | "bisect";
+export type GitMergeStrategy = "ff" | "no-ff";
+export type GitMergeMode = "up-to-date" | "fast-forward" | "merge-commit";
+
+export interface GitMergePreview {
+  sourceBranch: string;
+  targetBranch: string;
+  targetUpstream?: string;
+  targetAhead: number;
+  targetBehind: number;
+  mode: GitMergeMode;
+}
+
+interface ManagedMergeState {
+  sourceBranch: string;
+  targetBranch: string;
+  startedAt: string;
+}
 
 const fieldSeparator = "\x1f";
 const recordSeparator = "\x1e";
 const resetCommandTimeoutMs = 30_000;
+const mergeCommandTimeoutMs = 120_000;
+const managedMergeStateFile = "git-ui-pro-merge-state.json";
 const maxPreviewImageBytes = 25 * 1024 * 1024;
 const maxPreviewVideoBytes = 80 * 1024 * 1024;
 
@@ -189,6 +210,8 @@ function decodeGitOutput(buffer: Buffer): string {
 }
 
 export class GitService {
+  private readonly activeMergeRepositories = new Set<string>();
+
   async run(cwd: string, args: string[], options: { timeoutMs?: number } = {}): Promise<GitOperationResult> {
     return new Promise((resolve) => {
       const command = `git ${args.join(" ")}`;
@@ -362,6 +385,13 @@ export class GitService {
 
     const summary = parseStatus(result.stdout);
     summary.operationState = await this.getOperationState(repositoryPath);
+    if (summary.operationState === "merge") {
+      const managedState = await this.readManagedMergeState(repositoryPath);
+      summary.mergeSourceBranch = managedState?.sourceBranch;
+      summary.mergeTargetBranch = managedState?.targetBranch;
+    } else {
+      await this.clearManagedMergeState(repositoryPath);
+    }
     return summary;
   }
 
@@ -839,73 +869,153 @@ export class GitService {
     ]);
   }
 
-  async mergeCurrentBranchToMain(repositoryPath: string): Promise<GitOperationResult> {
-    const status = await this.getStatus(repositoryPath);
-    if (status.operationState || status.hasConflicts) {
+  async getMergePreview(repositoryPath: string, targetBranch: string): Promise<GitMergePreview> {
+    if (this.activeMergeRepositories.has(this.mergeRepositoryKey(repositoryPath))) {
+      throw new Error("当前仓库正在执行合并操作，请稍候。");
+    }
+
+    return this.buildMergePreview(repositoryPath, targetBranch);
+  }
+
+  async mergeCurrentBranch(repositoryPath: string, targetBranch: string, strategy: GitMergeStrategy): Promise<GitOperationResult> {
+    const repositoryKey = this.mergeRepositoryKey(repositoryPath);
+    if (this.activeMergeRepositories.has(repositoryKey)) {
+      return gitFailure("git merge", "当前仓库正在执行合并操作，请稍候。", "Another merge operation is already running.");
+    }
+
+    this.activeMergeRepositories.add(repositoryKey);
+    try {
+      const plan = await this.buildMergePreview(repositoryPath, targetBranch);
+      if (plan.mode === "up-to-date") {
+        return {
+          ok: true,
+          command: `git merge-base --is-ancestor ${plan.sourceBranch} ${plan.targetBranch}`,
+          stdout: `${plan.targetBranch} already contains ${plan.sourceBranch}.`,
+          stderr: "",
+          exitCode: 0
+        };
+      }
+
+      const switchResult = await this.switchToLocalBranch(repositoryPath, plan.targetBranch);
+      if (!switchResult.ok) {
+        return {
+          ...switchResult,
+          messageZh: `无法切换到目标分支 ${plan.targetBranch}。工作区未发生合并，请查看原始 Git 输出。`
+        };
+      }
+
+      const strategyArg = strategy === "no-ff" ? "--no-ff" : "--ff";
+      const mergeResult = await this.run(repositoryPath, ["merge", strategyArg, "--no-edit", plan.sourceBranch], {
+        timeoutMs: mergeCommandTimeoutMs
+      });
+      if (mergeResult.ok) {
+        await this.clearManagedMergeState(repositoryPath);
+        return combineGitResults([switchResult, mergeResult], true);
+      }
+
+      const operationState = await this.getOperationState(repositoryPath);
+      if (operationState === "merge") {
+        try {
+          await this.writeManagedMergeState(repositoryPath, {
+            sourceBranch: plan.sourceBranch,
+            targetBranch: plan.targetBranch,
+            startedAt: new Date().toISOString()
+          });
+        } catch (error) {
+          return {
+            ...combineGitResults([switchResult, mergeResult], false),
+            messageZh: `${mergeResult.messageZh ?? "合并产生冲突。"} 软件无法记录原分支，终止后可能需要手动切回 ${plan.sourceBranch}。`,
+            stderr: [mergeResult.stderr, error instanceof Error ? error.message : String(error)].filter(Boolean).join("\n")
+          };
+        }
+
+        return combineGitResults([switchResult, mergeResult], false);
+      }
+
+      const restoreResult = await this.switchToLocalBranch(repositoryPath, plan.sourceBranch);
+      const combined = combineGitResults([switchResult, mergeResult, restoreResult], false);
       return {
-        ok: false,
-        command: "git merge",
-        stdout: "",
-        stderr: "A Git operation is already in progress.",
-        exitCode: -1,
-        messageZh: "当前已有 Git 操作或冲突未完成，请先继续或终止当前操作。"
+        ...combined,
+        exitCode: mergeResult.exitCode,
+        messageZh: restoreResult.ok
+          ? `${mergeResult.messageZh ?? "合并失败。"} 已自动切回原分支 ${plan.sourceBranch}。`
+          : `${mergeResult.messageZh ?? "合并失败。"} 同时无法自动切回原分支 ${plan.sourceBranch}，当前仍在 ${plan.targetBranch}。`
       };
+    } catch (error) {
+      return gitFailure("git merge", errorMessage(error, "合并预检失败。"));
+    } finally {
+      this.activeMergeRepositories.delete(repositoryKey);
     }
-
-    const sourceBranch = status.currentBranch;
-    if (!sourceBranch) {
-      throw new Error("当前是分离 HEAD 状态，无法自动合并到主分支。");
-    }
-
-    const mainBranch = await this.getMainBranchName(repositoryPath);
-    if (!mainBranch) {
-      return {
-        ok: false,
-        command: "git merge",
-        stdout: "",
-        stderr: "No main branch could be determined.",
-        exitCode: -1,
-        messageZh: "无法识别主分支，请确认仓库存在 main 或 master 分支。"
-      };
-    }
-
-    if (sourceBranch === mainBranch) {
-      return {
-        ok: false,
-        command: "git merge",
-        stdout: "",
-        stderr: "The current branch is already the main branch.",
-        exitCode: -1,
-        messageZh: `当前已经在主分支 ${mainBranch}，无需合并到主分支。`
-      };
-    }
-
-    const switchResult = await this.switchToMainBranch(repositoryPath, mainBranch);
-    if (!switchResult.ok) {
-      return {
-        ...switchResult,
-        messageZh: switchResult.messageZh ?? `无法切换到主分支 ${mainBranch}，请检查工作区是否有未提交改动。`
-      };
-    }
-
-    const mergeResult = await this.run(repositoryPath, ["merge", "--no-edit", sourceBranch]);
-    return {
-      ...mergeResult,
-      command: `${switchResult.command} && ${mergeResult.command}`,
-      stdout: [switchResult.stdout, mergeResult.stdout].filter(Boolean).join("\n"),
-      stderr: [switchResult.stderr, mergeResult.stderr].filter(Boolean).join("\n")
-    };
   }
 
   async continueMerge(repositoryPath: string): Promise<GitOperationResult> {
-    return this.run(repositoryPath, ["commit", "--no-edit"]);
+    const repositoryKey = this.mergeRepositoryKey(repositoryPath);
+    if (this.activeMergeRepositories.has(repositoryKey)) {
+      return gitFailure("git merge --continue", "当前仓库正在执行合并操作，请稍候。", "Another merge operation is already running.");
+    }
+
+    this.activeMergeRepositories.add(repositoryKey);
+    try {
+      const status = await this.getStatus(repositoryPath);
+      if (status.operationState !== "merge") {
+        return gitFailure("git merge --continue", "当前没有正在进行的合并操作。", "No merge operation is in progress.");
+      }
+      if (status.hasConflicts) {
+        return gitFailure("git merge --continue", "仍有冲突文件未解决，请解决并暂存所有冲突后再继续。", "Unmerged files remain.");
+      }
+
+      const result = await this.run(repositoryPath, ["-c", "core.editor=true", "merge", "--continue"], {
+        timeoutMs: mergeCommandTimeoutMs
+      });
+      if (result.ok) {
+        await this.clearManagedMergeState(repositoryPath);
+      }
+      return result;
+    } catch (error) {
+      return gitFailure("git merge --continue", errorMessage(error, "继续合并失败。"));
+    } finally {
+      this.activeMergeRepositories.delete(repositoryKey);
+    }
   }
 
   async abortMerge(repositoryPath: string): Promise<GitOperationResult> {
-    return this.runWithFallbacks(repositoryPath, [
-      ["merge", "--abort"],
-      ["reset", "--merge"]
-    ]);
+    const repositoryKey = this.mergeRepositoryKey(repositoryPath);
+    if (this.activeMergeRepositories.has(repositoryKey)) {
+      return gitFailure("git merge --abort", "当前仓库正在执行合并操作，请稍候。", "Another merge operation is already running.");
+    }
+
+    this.activeMergeRepositories.add(repositoryKey);
+    try {
+      const status = await this.getStatus(repositoryPath);
+      if (status.operationState !== "merge") {
+        return gitFailure("git merge --abort", "当前没有正在进行的合并操作。", "No merge operation is in progress.");
+      }
+
+      const managedState = await this.readManagedMergeState(repositoryPath);
+      const abortResult = await this.run(repositoryPath, ["merge", "--abort"], { timeoutMs: mergeCommandTimeoutMs });
+      if (!abortResult.ok) {
+        return abortResult;
+      }
+
+      await this.clearManagedMergeState(repositoryPath);
+      if (!managedState) {
+        return abortResult;
+      }
+
+      const restoreResult = await this.switchToLocalBranch(repositoryPath, managedState.sourceBranch);
+      if (!restoreResult.ok) {
+        return {
+          ...combineGitResults([abortResult, restoreResult], false),
+          messageZh: `合并已经终止，但无法切回原分支 ${managedState.sourceBranch}。当前分支内容已恢复，请手动切换分支。`
+        };
+      }
+
+      return combineGitResults([abortResult, restoreResult], true);
+    } catch (error) {
+      return gitFailure("git merge --abort", errorMessage(error, "终止合并失败。"));
+    } finally {
+      this.activeMergeRepositories.delete(repositoryKey);
+    }
   }
 
   async deleteBranch(repositoryPath: string, branchName: string): Promise<GitOperationResult> {
@@ -935,6 +1045,145 @@ export class GitService {
     }
 
     return lastResult!;
+  }
+
+  private async buildMergePreview(repositoryPath: string, targetBranch: string): Promise<GitMergePreview> {
+    const status = await this.getStatus(repositoryPath);
+    if (status.operationState || status.hasConflicts) {
+      throw new Error("当前已有 Git 操作或冲突未完成，请先继续或终止当前操作。");
+    }
+
+    if (status.stagedCount + status.unstagedCount + status.untrackedCount > 0) {
+      throw new Error("合并前必须保持工作区干净，请先提交、暂存到 stash 或丢弃当前改动。");
+    }
+
+    const sourceBranch = status.currentBranch;
+    if (!sourceBranch) {
+      throw new Error("当前是分离 HEAD 状态，无法执行分支合并。");
+    }
+
+    const target = targetBranch.trim();
+    if (!target) {
+      throw new Error("请选择目标分支。");
+    }
+    if (target === sourceBranch) {
+      throw new Error("来源分支和目标分支不能相同。");
+    }
+
+    const validationResult = await this.run(repositoryPath, ["check-ref-format", "--branch", target]);
+    if (!validationResult.ok) {
+      throw new Error("目标分支名不合法。");
+    }
+
+    const localBranchResult = await this.run(repositoryPath, ["show-ref", "--verify", "--quiet", `refs/heads/${target}`]);
+    if (!localBranchResult.ok) {
+      throw new Error(`目标分支 ${target} 不是本地分支，请先创建或检出本地分支。`);
+    }
+
+    const mergeBaseResult = await this.run(repositoryPath, ["merge-base", sourceBranch, target]);
+    if (!mergeBaseResult.ok || !mergeBaseResult.stdout.trim()) {
+      throw new Error(`分支 ${sourceBranch} 与 ${target} 没有共同历史，已取消合并。`);
+    }
+
+    const sourceIsAncestor = await this.run(repositoryPath, ["merge-base", "--is-ancestor", sourceBranch, target]);
+    let mode: GitMergeMode;
+    if (sourceIsAncestor.ok) {
+      mode = "up-to-date";
+    } else {
+      const targetIsAncestor = await this.run(repositoryPath, ["merge-base", "--is-ancestor", target, sourceBranch]);
+      mode = targetIsAncestor.ok ? "fast-forward" : "merge-commit";
+    }
+
+    const upstreamResult = await this.run(repositoryPath, ["for-each-ref", `refs/heads/${target}`, "--format=%(upstream:short)"]);
+    const targetUpstream = upstreamResult.ok ? upstreamResult.stdout.trim() || undefined : undefined;
+    let targetAhead = 0;
+    let targetBehind = 0;
+    if (targetUpstream) {
+      const divergenceResult = await this.run(repositoryPath, ["rev-list", "--left-right", "--count", `${target}...${targetUpstream}`]);
+      if (divergenceResult.ok) {
+        const [aheadText, behindText] = divergenceResult.stdout.trim().split(/\s+/);
+        targetAhead = Number(aheadText) || 0;
+        targetBehind = Number(behindText) || 0;
+      }
+    }
+
+    return {
+      sourceBranch,
+      targetBranch: target,
+      targetUpstream,
+      targetAhead,
+      targetBehind,
+      mode
+    };
+  }
+
+  private mergeRepositoryKey(repositoryPath: string): string {
+    const resolvedPath = path.resolve(repositoryPath);
+    return process.platform === "win32" ? resolvedPath.toLowerCase() : resolvedPath;
+  }
+
+  private async switchToLocalBranch(repositoryPath: string, branchName: string): Promise<GitOperationResult> {
+    return this.runWithFallbacks(repositoryPath, [
+      ["switch", branchName],
+      ["checkout", branchName]
+    ]);
+  }
+
+  private async managedMergeStatePath(repositoryPath: string): Promise<string | undefined> {
+    const result = await this.run(repositoryPath, ["rev-parse", "--git-path", managedMergeStateFile]);
+    if (!result.ok) {
+      return undefined;
+    }
+
+    const statePath = result.stdout.trim();
+    if (!statePath) {
+      return undefined;
+    }
+    return path.isAbsolute(statePath) ? statePath : path.resolve(repositoryPath, statePath);
+  }
+
+  private async readManagedMergeState(repositoryPath: string): Promise<ManagedMergeState | undefined> {
+    const statePath = await this.managedMergeStatePath(repositoryPath);
+    if (!statePath) {
+      return undefined;
+    }
+
+    try {
+      const parsed = JSON.parse(await readFile(statePath, "utf8")) as Partial<ManagedMergeState>;
+      if (typeof parsed.sourceBranch !== "string" || typeof parsed.targetBranch !== "string" || typeof parsed.startedAt !== "string") {
+        return undefined;
+      }
+      return {
+        sourceBranch: parsed.sourceBranch,
+        targetBranch: parsed.targetBranch,
+        startedAt: parsed.startedAt
+      };
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async writeManagedMergeState(repositoryPath: string, state: ManagedMergeState): Promise<void> {
+    const statePath = await this.managedMergeStatePath(repositoryPath);
+    if (!statePath) {
+      throw new Error("无法定位 Git 合并状态目录。");
+    }
+    await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+  }
+
+  private async clearManagedMergeState(repositoryPath: string): Promise<void> {
+    const statePath = await this.managedMergeStatePath(repositoryPath);
+    if (!statePath) {
+      return;
+    }
+
+    try {
+      await unlink(statePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        return;
+      }
+    }
   }
 
   private async getPushRemote(repositoryPath: string, branchName: string): Promise<string | undefined> {
@@ -975,53 +1224,6 @@ export class GitService {
     }
 
     return result.stdout.trim() || undefined;
-  }
-
-  private async getMainBranchName(repositoryPath: string): Promise<string | undefined> {
-    const localBranchesResult = await this.run(repositoryPath, ["for-each-ref", "refs/heads", "--format=%(refname:short)"]);
-    const localBranches = new Set(
-      localBranchesResult.ok
-        ? localBranchesResult.stdout
-            .split(/\r?\n/)
-            .map((branch) => branch.trim())
-            .filter(Boolean)
-        : []
-    );
-
-    const defaultRemoteBranch = await this.getDefaultRemoteHeadBranch(repositoryPath);
-    if (defaultRemoteBranch && localBranches.has(defaultRemoteBranch)) {
-      return defaultRemoteBranch;
-    }
-
-    if (localBranches.has("main")) {
-      return "main";
-    }
-
-    if (localBranches.has("master")) {
-      return "master";
-    }
-
-    return defaultRemoteBranch;
-  }
-
-  private async getDefaultRemoteHeadBranch(repositoryPath: string): Promise<string | undefined> {
-    const result = await this.run(repositoryPath, ["symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"]);
-    if (!result.ok) {
-      return undefined;
-    }
-
-    const remoteHead = result.stdout.trim();
-    const branchStart = remoteHead.indexOf("/");
-    return branchStart >= 0 ? remoteHead.slice(branchStart + 1) : remoteHead || undefined;
-  }
-
-  private async switchToMainBranch(repositoryPath: string, mainBranch: string): Promise<GitOperationResult> {
-    return this.runWithFallbacks(repositoryPath, [
-      ["switch", mainBranch],
-      ["checkout", mainBranch],
-      ["switch", "--track", `origin/${mainBranch}`],
-      ["checkout", "-t", `origin/${mainBranch}`]
-    ]);
   }
 
   private async getHistoryRevisions(repositoryPath: string, status?: GitStatusSummary, filter: GitHistoryFilter = { mode: "auto" }): Promise<string[]> {
@@ -1086,6 +1288,33 @@ export class GitService {
 
     return result.stdout;
   }
+}
+
+function gitFailure(command: string, messageZh: string, stderr = ""): GitOperationResult {
+  return {
+    ok: false,
+    command,
+    stdout: "",
+    stderr,
+    exitCode: -1,
+    messageZh
+  };
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error && error.message.trim() ? error.message : fallback;
+}
+
+function combineGitResults(results: GitOperationResult[], ok: boolean): GitOperationResult {
+  const failedResult = results.find((result) => !result.ok);
+  return {
+    ok,
+    command: results.map((result) => result.command).filter(Boolean).join(" ; "),
+    stdout: results.map((result) => result.stdout).filter(Boolean).join("\n"),
+    stderr: results.map((result) => result.stderr).filter(Boolean).join("\n"),
+    exitCode: ok ? 0 : failedResult?.exitCode ?? -1,
+    messageZh: ok ? undefined : failedResult?.messageZh
+  };
 }
 
 function parseStatus(output: string): GitStatusSummary {

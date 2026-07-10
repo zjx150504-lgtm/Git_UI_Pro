@@ -89,6 +89,7 @@ MVP 只启用：
 - 切换分支
 - 删除分支
 - 提交
+- 合并
 
 未进入 MVP 的按钮可以隐藏，或以禁用状态进入“后续版本”。
 
@@ -394,6 +395,8 @@ interface GitStatusSummary {
   untrackedCount: number;
   hasConflicts: boolean;
   operationState?: "merge" | "rebase" | "cherry-pick" | "revert";
+  mergeSourceBranch?: string;
+  mergeTargetBranch?: string;
 }
 
 interface CommitNode {
@@ -503,6 +506,8 @@ interface GitOperationResult {
 | 新建并切换 | `git switch -c <name> [startPoint]` | 兼容旧 Git 时 fallback 到 checkout |
 | 切换分支 | `git switch <branch>` | 兼容旧 Git 时 fallback 到 checkout |
 | 删除本地分支 | `git branch -d <branch>` | 强删 `-D` 后续支持且需确认 |
+| merge 预检 | `git merge-base [--is-ancestor] <source> <target>` | 校验共同历史并判断快进、合并提交或无需合并 |
+| merge 执行 | `git switch <target>` + `git merge --ff/--no-ff --no-edit <source>` | 仅允许干净工作区和本地目标分支 |
 | 冲突检测 | `git status --porcelain=v2 --branch` | 解析 unmerged 状态 |
 | merge 继续 | `git merge --continue` | 冲突 MVP |
 | merge 终止 | `git merge --abort` | 冲突 MVP |
@@ -516,6 +521,8 @@ interface GitOperationResult {
 - 所有命令必须设置工作目录。
 - 长时间命令需要展示 loading 和可取消状态。
 - 命令失败需要返回中文摘要和原始输出。
+- merge 必须由用户明确选择本地目标分支，执行前展示来源、目标、合并结果类型和目标分支远端差异。
+- merge 执行前必须再次校验工作区干净；普通失败自动切回来源分支，冲突终止后恢复并切回来源分支。
 
 ## 10. 错误提示与危险操作
 
@@ -682,4 +689,3 @@ MVP 可以发布的最低标准：
 - 危险操作都有中文确认。
 - Git 错误都有中文摘要，并可展开原始输出。
 - 底部控制台能在当前项目目录执行普通命令。
-

@@ -20,9 +20,22 @@ export interface GitStatusSummary {
   untrackedCount: number;
   hasConflicts: boolean;
   operationState?: GitOperationState;
+  mergeSourceBranch?: string;
+  mergeTargetBranch?: string;
 }
 
 export type GitOperationState = "merge" | "rebase" | "cherry-pick" | "revert" | "bisect";
+export type GitMergeStrategy = "ff" | "no-ff";
+export type GitMergeMode = "up-to-date" | "fast-forward" | "merge-commit";
+
+export interface GitMergePreview {
+  sourceBranch: string;
+  targetBranch: string;
+  targetUpstream?: string;
+  targetAhead: number;
+  targetBehind: number;
+  mode: GitMergeMode;
+}
 
 export interface CommitNode {
   hash: string;
