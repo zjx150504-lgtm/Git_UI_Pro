@@ -2838,11 +2838,41 @@ button {
   color: var(--text);
 }
 
+.conflict-resolver-body-shell {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--sunken);
+}
+
+.conflict-resolver-body-shell.has-horizontal-scroll {
+  grid-template-rows: minmax(0, 1fr) 14px;
+}
+
 .conflict-resolver-body {
   min-width: 0;
   min-height: 0;
   overflow: auto;
-  background: var(--sunken);
+}
+
+.conflict-resolver-body-shell.has-horizontal-scroll .conflict-resolver-body {
+  overflow-x: hidden;
+}
+
+.conflict-horizontal-scroll {
+  min-width: 0;
+  height: 14px;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+  scrollbar-gutter: stable;
+}
+
+.conflict-horizontal-scroll > div {
+  height: 1px;
 }
 
 .conflict-block-list {
@@ -2953,8 +2983,8 @@ button {
 
 .conflict-three-way {
   display: grid;
-  grid-template-columns: repeat(3, minmax(300px, 1fr));
-  min-width: 900px;
+  grid-template-columns: repeat(3, minmax(420px, 1fr));
+  min-width: 1260px;
   min-height: 100%;
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronsDown, ChevronsUp, ListX, Plus, Trash2, X, Terminal as TerminalIcon } from "lucide-react";
+import { ClipboardPaste, Copy, ChevronsDown, ChevronsUp, ListX, Plus, Trash2, X, Terminal as TerminalIcon } from "lucide-react";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
@@ -37,6 +37,7 @@ interface TerminalRuntime {
   terminal: Terminal;
   fitAddon: FitAddon;
   inputSubscription: { dispose: () => void };
+  selectionSubscription: { dispose: () => void };
   host?: HTMLDivElement;
   opened: boolean;
   resizeObserver?: ResizeObserver;
@@ -50,6 +51,7 @@ interface TerminalRuntime {
 export function ConsolePanel({ project, theme, visible, maximized, onToggleMaximized, onHide, onConfirmCloseTabs }: ConsolePanelProps) {
   const [tabs, setTabs] = useState<TerminalTab[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [activeHasSelection, setActiveHasSelection] = useState(false);
   const panelRef = useRef<HTMLElement>(null);
   const tabsRef = useRef<TerminalTab[]>([]);
   const activeTabIdRef = useRef<string | null>(null);
@@ -71,6 +73,7 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
     if (activeTab) {
       activeByProjectRef.current.set(activeTab.projectId, activeTab.id);
     }
+    setActiveHasSelection(activeTab ? Boolean(runtimeByTabRef.current.get(activeTab.id)?.terminal.hasSelection()) : false);
   }, [activeTab, activeTabId]);
 
   useEffect(() => {
@@ -176,15 +179,22 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
         void apiClient.writeTerminal(runtime.sessionId, data);
       }
     });
+    const selectionSubscription = terminal.onSelectionChange(() => {
+      if (activeTabIdRef.current === tabId) {
+        setActiveHasSelection(terminal.hasSelection());
+      }
+    });
 
     runtimeByTabRef.current.set(tabId, {
       terminal,
       fitAddon,
       inputSubscription,
+      selectionSubscription,
       opened: false,
       resizeFrame: 0,
       resizeTimer: 0
     });
+    terminal.attachCustomKeyEventHandler((event) => handleTerminalKeyEvent(tabId, event));
 
     terminal.writeln("正在启动控制台...");
 
@@ -375,6 +385,88 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
     runtime?.terminal.focus();
   }
 
+  function handleTerminalKeyEvent(tabId: string, event: KeyboardEvent): boolean {
+    if (event.type !== "keydown") {
+      return true;
+    }
+
+    const runtime = runtimeByTabRef.current.get(tabId);
+    if (!runtime) {
+      return true;
+    }
+
+    const key = event.key.toLowerCase();
+    const copyShortcut =
+      (event.metaKey && key === "c") ||
+      (event.ctrlKey && event.shiftKey && key === "c") ||
+      (event.ctrlKey && !event.shiftKey && event.key === "Insert") ||
+      (event.ctrlKey && !event.shiftKey && key === "c" && runtime.terminal.hasSelection());
+    const pasteShortcut =
+      (event.metaKey && key === "v") ||
+      (event.ctrlKey && event.shiftKey && key === "v") ||
+      (!event.ctrlKey && !event.metaKey && event.shiftKey && event.key === "Insert");
+
+    if (copyShortcut) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (runtime.terminal.hasSelection()) {
+        void copyTerminalSelection(tabId);
+      }
+      return false;
+    }
+
+    if (pasteShortcut) {
+      event.preventDefault();
+      event.stopPropagation();
+      void pasteIntoTerminal(tabId);
+      return false;
+    }
+
+    return true;
+  }
+
+  async function copyTerminalSelection(tabId = activeTab?.id) {
+    if (!tabId) {
+      return;
+    }
+
+    const runtime = runtimeByTabRef.current.get(tabId);
+    const selection = runtime?.terminal.getSelection() ?? "";
+    if (!runtime || !selection) {
+      return;
+    }
+
+    runtime.terminal.focus();
+    if (window.gitUI) {
+      await window.gitUI.runAppCommand("edit:copy");
+    } else {
+      await navigator.clipboard.writeText(selection);
+    }
+    runtime.terminal.focus();
+  }
+
+  async function pasteIntoTerminal(tabId = activeTab?.id) {
+    if (!tabId) {
+      return;
+    }
+
+    const runtime = runtimeByTabRef.current.get(tabId);
+    if (!runtime?.sessionId) {
+      return;
+    }
+
+    runtime.terminal.focus();
+    if (window.gitUI) {
+      await window.gitUI.runAppCommand("edit:paste");
+    } else {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        runtime.terminal.paste(text);
+      }
+    }
+    runtime.terminal.focus();
+  }
+
   async function handleCloseProjectTabs() {
     if (!project) {
       return;
@@ -413,6 +505,7 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
     window.clearTimeout(runtime.resizeTimer);
     runtime.resizeObserver?.disconnect();
     runtime.inputSubscription.dispose();
+    runtime.selectionSubscription.dispose();
     if (runtime.sessionId) {
       tabBySessionRef.current.delete(runtime.sessionId);
       void apiClient.disposeTerminal(runtime.sessionId);
@@ -464,6 +557,28 @@ export function ConsolePanel({ project, theme, visible, maximized, onToggleMaxim
             disabled={!visible}
           >
             {maximized ? <ChevronsDown size={14} /> : <ChevronsUp size={14} />}
+          </button>
+        </PathTooltip>
+        <PathTooltip content="复制所选内容 (Ctrl+Shift+C / Ctrl+C)" className="console-icon-tooltip">
+          <button
+            type="button"
+            className="icon-button console-close"
+            aria-label="复制所选内容"
+            onClick={() => void copyTerminalSelection()}
+            disabled={!activeTab || !activeHasSelection}
+          >
+            <Copy size={14} />
+          </button>
+        </PathTooltip>
+        <PathTooltip content="粘贴 (Ctrl+Shift+V / Shift+Insert)" className="console-icon-tooltip">
+          <button
+            type="button"
+            className="icon-button console-close"
+            aria-label="粘贴到终端"
+            onClick={() => void pasteIntoTerminal()}
+            disabled={!activeTab?.session}
+          >
+            <ClipboardPaste size={14} />
           </button>
         </PathTooltip>
         <PathTooltip content="清空当前终端" className="console-icon-tooltip">

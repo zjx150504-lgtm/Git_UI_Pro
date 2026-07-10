@@ -355,6 +355,9 @@ function ConflictResolver({ tab, onResolve }: { tab: WorktreeEditorTab; onResolv
   const [draft, setDraft] = useState(initialDraft);
   const [viewMode, setViewMode] = useState<ConflictViewMode>(() => (parseConflictBlocks(initialDraft).length > 0 ? "blocks" : "three-way"));
   const [busy, setBusy] = useState(false);
+  const bodyScrollRef = useRef<HTMLDivElement>(null);
+  const horizontalScrollRef = useRef<HTMLDivElement>(null);
+  const [horizontalMaxScroll, setHorizontalMaxScroll] = useState(0);
   const blocks = useMemo(() => parseConflictBlocks(draft), [draft]);
   const initialBlockCount = useMemo(() => parseConflictBlocks(initialDraft).length, [initialDraft]);
   const resolvedBlockCount = Math.max(0, initialBlockCount - blocks.length);
@@ -365,6 +368,38 @@ function ConflictResolver({ tab, onResolve }: { tab: WorktreeEditorTab; onResolv
     setViewMode(parseConflictBlocks(nextDraft).length > 0 ? "blocks" : "three-way");
     setBusy(false);
   }, [details.token]);
+
+  useLayoutEffect(() => {
+    const body = bodyScrollRef.current;
+    if (!body || viewMode === "result") {
+      setHorizontalMaxScroll(0);
+      return;
+    }
+
+    const measure = () => {
+      const nextMaxScroll = Math.max(0, body.scrollWidth - body.clientWidth);
+      setHorizontalMaxScroll(nextMaxScroll);
+      if (body.scrollLeft > nextMaxScroll) {
+        body.scrollLeft = nextMaxScroll;
+      }
+    };
+    const frameId = window.requestAnimationFrame(measure);
+    const observer = new ResizeObserver(measure);
+    observer.observe(body);
+    if (body.firstElementChild instanceof HTMLElement) {
+      observer.observe(body.firstElementChild);
+    }
+    return () => {
+      window.cancelAnimationFrame(frameId);
+      observer.disconnect();
+    };
+  }, [blocks.length, details.token, viewMode]);
+
+  function syncConflictBodyScroll(event: ReactUIEvent<HTMLDivElement>) {
+    if (horizontalScrollRef.current && horizontalScrollRef.current.scrollLeft !== event.currentTarget.scrollLeft) {
+      horizontalScrollRef.current.scrollLeft = event.currentTarget.scrollLeft;
+    }
+  }
 
   function applyBlock(block: ParsedConflictBlock, choice: "current" | "incoming" | "both") {
     const replacement = choice === "current" ? block.current : choice === "incoming" ? block.incoming : joinConflictSides(block.current, block.incoming);
@@ -417,50 +452,66 @@ function ConflictResolver({ tab, onResolve }: { tab: WorktreeEditorTab; onResolv
             </button>
           </div>
 
-          <div className="conflict-resolver-body">
-            {viewMode === "blocks" ? (
-              blocks.length > 0 ? (
-                <div className="conflict-block-list">
-                  {blocks.map((block, index) => (
-                    <article className="conflict-block" key={block.id}>
-                      <header className="conflict-block-header">
-                        <strong>冲突 {index + 1}</strong>
-                        <span>第 {block.lineNumber} 行</span>
-                        <div>
-                          <button type="button" onClick={() => applyBlock(block, "current")} disabled={busy}>采用当前</button>
-                          <button type="button" onClick={() => applyBlock(block, "incoming")} disabled={busy}>采用传入</button>
-                          <button type="button" onClick={() => applyBlock(block, "both")} disabled={busy}>保留两者</button>
+          <div className={`conflict-resolver-body-shell ${horizontalMaxScroll > 0 ? "has-horizontal-scroll" : ""}`}>
+            <div className="conflict-resolver-body" ref={bodyScrollRef} onScroll={syncConflictBodyScroll}>
+              {viewMode === "blocks" ? (
+                blocks.length > 0 ? (
+                  <div className="conflict-block-list">
+                    {blocks.map((block, index) => (
+                      <article className="conflict-block" key={block.id}>
+                        <header className="conflict-block-header">
+                          <strong>冲突 {index + 1}</strong>
+                          <span>第 {block.lineNumber} 行</span>
+                          <div>
+                            <button type="button" onClick={() => applyBlock(block, "current")} disabled={busy}>采用当前</button>
+                            <button type="button" onClick={() => applyBlock(block, "incoming")} disabled={busy}>采用传入</button>
+                            <button type="button" onClick={() => applyBlock(block, "both")} disabled={busy}>保留两者</button>
+                          </div>
+                        </header>
+                        <div className="conflict-block-sides">
+                          <ConflictTextPane label={details.currentLabel} content={block.current} tone="current" />
+                          <ConflictTextPane label={details.incomingLabel} content={block.incoming} tone="incoming" />
                         </div>
-                      </header>
-                      <div className="conflict-block-sides">
-                        <ConflictTextPane label={details.currentLabel} content={block.current} tone="current" />
-                        <ConflictTextPane label={details.incomingLabel} content={block.incoming} tone="incoming" />
-                      </div>
-                      {block.base !== undefined ? (
-                        <details className="conflict-block-base">
-                          <summary>共同基线</summary>
-                          <pre>{block.base || "（空内容）"}</pre>
-                        </details>
-                      ) : null}
-                    </article>
-                  ))}
+                        {block.base !== undefined ? (
+                          <details className="conflict-block-base">
+                            <summary>共同基线</summary>
+                            <pre>{block.base || "（空内容）"}</pre>
+                          </details>
+                        ) : null}
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="conflict-resolved-state">
+                    <Check size={22} />
+                    <strong>没有剩余冲突标记</strong>
+                    <span>最终结果可以保存并标记为已解决</span>
+                  </div>
+                )
+              ) : viewMode === "three-way" ? (
+                <div className="conflict-three-way" role="table" aria-label="冲突三方原文">
+                  <ConflictTextPane label="共同基线" content={details.baseExists ? details.baseContent ?? "" : ""} exists={details.baseExists} tone="base" />
+                  <ConflictTextPane label={details.currentLabel} content={details.currentExists ? details.currentContent ?? "" : ""} exists={details.currentExists} tone="current" />
+                  <ConflictTextPane label={details.incomingLabel} content={details.incomingExists ? details.incomingContent ?? "" : ""} exists={details.incomingExists} tone="incoming" />
                 </div>
               ) : (
-                <div className="conflict-resolved-state">
-                  <Check size={22} />
-                  <strong>没有剩余冲突标记</strong>
-                  <span>最终结果可以保存并标记为已解决</span>
-                </div>
-              )
-            ) : viewMode === "three-way" ? (
-              <div className="conflict-three-way" role="table" aria-label="冲突三方原文">
-                <ConflictTextPane label="共同基线" content={details.baseExists ? details.baseContent ?? "" : ""} exists={details.baseExists} tone="base" />
-                <ConflictTextPane label={details.currentLabel} content={details.currentExists ? details.currentContent ?? "" : ""} exists={details.currentExists} tone="current" />
-                <ConflictTextPane label={details.incomingLabel} content={details.incomingExists ? details.incomingContent ?? "" : ""} exists={details.incomingExists} tone="incoming" />
+                <textarea className="conflict-result-editor" value={draft} onChange={(event) => setDraft(event.target.value)} spellCheck={false} aria-label="最终合并结果" />
+              )}
+            </div>
+            {horizontalMaxScroll > 0 ? (
+              <div
+                className="conflict-horizontal-scroll"
+                ref={horizontalScrollRef}
+                aria-label="横向滚动冲突内容"
+                onScroll={(event) => {
+                  if (bodyScrollRef.current && bodyScrollRef.current.scrollLeft !== event.currentTarget.scrollLeft) {
+                    bodyScrollRef.current.scrollLeft = event.currentTarget.scrollLeft;
+                  }
+                }}
+              >
+                <div style={{ width: `calc(100% + ${horizontalMaxScroll}px)` }} />
               </div>
-            ) : (
-              <textarea className="conflict-result-editor" value={draft} onChange={(event) => setDraft(event.target.value)} spellCheck={false} aria-label="最终合并结果" />
-            )}
+            ) : null}
           </div>
 
           <footer className="conflict-resolver-footer">
