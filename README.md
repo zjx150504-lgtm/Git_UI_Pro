@@ -4,6 +4,28 @@
 
 Git UI Pro 不重新实现 Git 内核，所有仓库操作都调用用户本机的 `git` 命令。它的目标是把项目管理、工作区改动、提交图、分支状态、提交详情和文件 diff 做成更清晰的中文桌面界面。
 
+## 界面预览
+
+### 项目管理、提交图与文件差异
+
+![Git UI Pro 主界面：项目管理、提交图与文件差异](docs/images/screenshots/main-interface.png)
+
+### 分支切换
+
+![Git UI Pro 分支切换界面](docs/images/screenshots/branch-switcher.png)
+
+### 分支合并
+
+![Git UI Pro 分支合并界面](docs/images/screenshots/branch-merge.png)
+
+### 提交图与内置控制台
+
+![Git UI Pro 提交图与内置控制台界面](docs/images/screenshots/commit-graph-console.png)
+
+### 源代码管理与图片预览
+
+![Git UI Pro 提交图与内置控制台界面](docs/images/screenshots/source-control-image-preview.png)
+
 ## 功能特性
 
 - 多项目管理：添加、扫描、搜索、收藏和切换本地 Git 仓库。
