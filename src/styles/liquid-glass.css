@@ -27,6 +27,7 @@
   --glass-edge: rgba(255, 255, 255, 0.82);
   --glass-fill: rgba(247, 252, 255, 0.58);
   --glass-fill-strong: rgba(255, 255, 255, 0.76);
+  --glass-fill-static: rgba(247, 252, 255, 0.9);
   --glass-shadow: 0 22px 54px rgba(55, 85, 111, 0.16),
     0 2px 8px rgba(52, 76, 100, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.84);
@@ -56,6 +57,7 @@
   --glass-edge: rgba(230, 244, 252, 0.13);
   --glass-fill: rgba(14, 27, 40, 0.66);
   --glass-fill-strong: rgba(26, 43, 59, 0.8);
+  --glass-fill-static: rgba(14, 27, 40, 0.92);
   --glass-shadow: 0 24px 60px rgba(0, 6, 13, 0.34),
     0 2px 10px rgba(0, 0, 0, 0.2),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
@@ -80,41 +82,6 @@
     linear-gradient(120deg, #07131f 0%, #132535 45%, #231d31 74%, #102a33 100%);
 }
 
-.app-shell::before,
-.app-shell::after {
-  position: absolute;
-  z-index: 0;
-  left: -12%;
-  width: 126%;
-  height: 46%;
-  content: "";
-  pointer-events: none;
-  filter: blur(46px);
-  will-change: transform;
-}
-
-.app-shell::before {
-  top: 2%;
-  clip-path: polygon(0 20%, 23% 1%, 47% 31%, 72% 8%, 100% 26%, 100% 72%, 74% 100%, 45% 70%, 18% 94%, 0 66%);
-  background: linear-gradient(100deg, rgba(90, 204, 196, 0.2), rgba(93, 160, 220, 0.22) 45%, rgba(232, 143, 186, 0.18));
-  animation: liquid-app-ribbon 19s ease-in-out infinite alternate;
-}
-
-.app-shell::after {
-  bottom: -8%;
-  clip-path: polygon(0 28%, 28% 4%, 51% 34%, 78% 0, 100% 29%, 100% 81%, 76% 66%, 51% 100%, 24% 70%, 0 92%);
-  background: linear-gradient(96deg, rgba(238, 132, 174, 0.18), rgba(111, 178, 220, 0.2) 47%, rgba(83, 197, 177, 0.2));
-  animation: liquid-app-ribbon 23s ease-in-out -7s infinite alternate-reverse;
-}
-
-.theme-dark.app-shell::before {
-  background: linear-gradient(100deg, rgba(26, 142, 130, 0.2), rgba(42, 105, 153, 0.23) 45%, rgba(151, 67, 117, 0.18));
-}
-
-.theme-dark.app-shell::after {
-  background: linear-gradient(96deg, rgba(142, 54, 99, 0.16), rgba(45, 108, 150, 0.22) 47%, rgba(27, 132, 117, 0.19));
-}
-
 .app-shell > .app-chrome,
 .app-shell > .project-rail,
 .app-shell > .collapsed-sidebar,
@@ -128,10 +95,8 @@
   grid-template-rows: 32px;
   min-height: 32px;
   border-bottom: 1px solid var(--glass-edge);
-  background: color-mix(in srgb, var(--glass-fill-strong) 76%, transparent);
+  background: var(--glass-fill-static);
   box-shadow: 0 8px 24px rgba(38, 65, 88, 0.08), inset 0 1px 0 var(--glass-edge);
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
 }
 
 .app-chrome-brand {
@@ -158,10 +123,8 @@
   margin: 8px 0 10px 10px;
   border: 1px solid var(--glass-edge);
   border-radius: 22px;
-  background: var(--glass-fill);
+  background: var(--glass-fill-static);
   box-shadow: var(--glass-shadow);
-  backdrop-filter: blur(32px) saturate(165%);
-  -webkit-backdrop-filter: blur(32px) saturate(165%);
   overflow: hidden;
 }
 
@@ -287,10 +250,8 @@
   padding: 10px 16px;
   border: 1px solid var(--glass-edge);
   border-radius: 20px;
-  background: var(--glass-fill);
+  background: var(--glass-fill-static);
   box-shadow: var(--glass-shadow);
-  backdrop-filter: blur(30px) saturate(165%);
-  -webkit-backdrop-filter: blur(30px) saturate(165%);
 }
 
 .project-heading {
@@ -325,10 +286,8 @@
   margin: 0 10px 10px 4px;
   border: 1px solid var(--glass-edge);
   border-radius: 24px;
-  background: var(--glass-fill);
+  background: var(--glass-fill-static);
   box-shadow: var(--glass-shadow);
-  backdrop-filter: blur(32px) saturate(165%);
-  -webkit-backdrop-filter: blur(32px) saturate(165%);
   overflow: hidden;
 }
 
@@ -449,9 +408,7 @@
     color-mix(in srgb, var(--accent) 12%, var(--glass-fill-strong)) 0%,
     color-mix(in srgb, var(--blue) 13%, var(--glass-fill-strong)) 48%,
     color-mix(in srgb, var(--accent) 10%, var(--glass-fill-strong)) 100%);
-  background-size: 220% 100%;
   box-shadow: 0 7px 18px color-mix(in srgb, var(--accent) 10%, transparent), inset 0 1px 0 var(--glass-edge);
-  animation: glass-selection-flow 9s ease-in-out infinite alternate;
 }
 
 .scm-file-name,
@@ -759,24 +716,6 @@ input[type="radio"]:focus-visible {
   background: rgba(13, 29, 43, 0.78);
 }
 
-@keyframes liquid-app-ribbon {
-  0% {
-    transform: translate3d(-2%, -2%, 0) scale(1.02);
-  }
-  100% {
-    transform: translate3d(3%, 4%, 0) scale(1.08);
-  }
-}
-
-@keyframes glass-selection-flow {
-  0% {
-    background-position: 0% 50%;
-  }
-  100% {
-    background-position: 100% 50%;
-  }
-}
-
 @media (max-width: 900px) {
   .workspace-shell {
     grid-template-rows: 72px minmax(0, 1fr);
@@ -864,19 +803,6 @@ input[type="radio"]:focus-visible {
   .project-branch,
   .ahead-behind-badge {
     max-width: 96px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-shell::before,
-  .app-shell::after,
-  .scm-file-row.active,
-  .scm-file-row.selected,
-  .graph-commit-row.active,
-  .graph-commit-row.selected,
-  .history-file-row.active,
-  .commit-file-row.active {
-    animation: none;
   }
 }
 
