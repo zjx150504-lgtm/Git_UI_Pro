@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, ChevronRight, GitMerge, Plus, RefreshCw, Trash2, Undo2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, GitMerge, GitPullRequest, Plus, RefreshCw, Trash2, Undo2 } from "lucide-react";
 import { PathTooltip } from "./PathTooltip";
 import type { ChangedFile, CommitInput, GitProject, GitResetMode, WorktreeState } from "../types/domain";
 import { fileIconInfo } from "../utils/fileIcon";
@@ -24,6 +24,7 @@ interface WorkspaceViewProps {
   onAmendLastMessage: () => void;
   onUndoLastCommit: (mode: Exclude<GitResetMode, "hard">) => void;
   onSyncChanges: () => Promise<void>;
+  onMergeRemote: () => Promise<void>;
   hasCommits: boolean;
   focusRequest: number;
   messageDraftRequest?: CommitMessageDraftRequest;
@@ -57,6 +58,7 @@ export function WorkspaceView({
   onAmendLastMessage,
   onUndoLastCommit,
   onSyncChanges,
+  onMergeRemote,
   hasCommits,
   focusRequest,
   messageDraftRequest,
@@ -82,16 +84,20 @@ export function WorkspaceView({
   const hasConflicts = Boolean(project?.status?.hasConflicts) || conflictFiles.length > 0;
   const willAutoStage = !hasConflicts && stagedCount === 0 && unstagedCount > 0;
   const outgoingCount = project?.status?.ahead ?? 0;
-  const canSyncOutgoing = changeCount === 0 && outgoingCount > 0;
-  const commitDisabled = hasConflicts || (changeCount === 0 && !canSyncOutgoing);
+  const incomingCount = project?.status?.behind ?? 0;
+  const canMergeRemote = changeCount === 0 && outgoingCount > 0 && incomingCount > 0;
+  const canSyncOutgoing = changeCount === 0 && outgoingCount > 0 && incomingCount === 0;
+  const commitDisabled = hasConflicts || (changeCount === 0 && !canSyncOutgoing && !canMergeRemote);
   const commitTitle = hasConflicts
     ? "请先解决所有冲突文件"
+    : canMergeRemote
+      ? `将 ${project?.status?.upstream ?? "远程分支"} 的 ${incomingCount} 个新提交合并到当前分支，本地提交不会被改写。`
     : canSyncOutgoing
     ? `同步 ${outgoingCount} 个本地提交到远程。`
     : willAutoStage
       ? `${unstagedCount} 个文件未暂存，提交时会自动暂存并提交。`
       : "提交已暂存的更改";
-  const primaryActionLabel = canSyncOutgoing ? `同步更改 ${outgoingCount} 个` : "提交";
+  const primaryActionLabel = canMergeRemote ? `合并远程更改 ${incomingCount} 个` : canSyncOutgoing ? `同步更改 ${outgoingCount} 个` : "提交";
 
   useEffect(() => {
     if (focusRequest > 0) {
@@ -168,6 +174,17 @@ export function WorkspaceView({
 
     const { syncAfterCommit, ...commitOptions } = options;
 
+    if (canMergeRemote && !commitOptions.amend && !commitOptions.pushAfterCommit && !syncAfterCommit) {
+      setCommitBusy(true);
+      try {
+        await onMergeRemote();
+        setCommitMenuOpen(false);
+      } finally {
+        setCommitBusy(false);
+      }
+      return;
+    }
+
     if (canSyncOutgoing && !commitOptions.amend && !commitOptions.pushAfterCommit && !syncAfterCommit) {
       setCommitBusy(true);
       try {
@@ -228,14 +245,14 @@ export function WorkspaceView({
               rows={1}
             />
             <div className="scm-commit-control" ref={commitActionsRef}>
-              <div className={`scm-commit-actions ${canSyncOutgoing ? "sync-mode" : ""}`}>
+              <div className={`scm-commit-actions ${canSyncOutgoing || canMergeRemote ? "sync-mode" : ""}`}>
                 <PathTooltip content={commitTitle} className="scm-commit-button-tooltip">
                   <button type="submit" className="scm-commit-button" aria-label={commitTitle} disabled={commitDisabled || commitBusy}>
-                    {canSyncOutgoing ? <RefreshCw size={17} /> : <Check size={17} />}
+                    {canMergeRemote ? <GitPullRequest size={17} /> : canSyncOutgoing ? <RefreshCw size={17} /> : <Check size={17} />}
                     {primaryActionLabel}
                   </button>
                 </PathTooltip>
-                {!canSyncOutgoing ? (
+                {!canSyncOutgoing && !canMergeRemote ? (
                   <PathTooltip content="提交选项" className="scm-commit-menu-tooltip">
                     <button type="button" className="scm-commit-menu" aria-label="提交选项" onClick={toggleCommitMenu} ref={commitMenuButtonRef}>
                       <ChevronDown size={17} />
@@ -243,7 +260,7 @@ export function WorkspaceView({
                   </PathTooltip>
                 ) : null}
               </div>
-              {!canSyncOutgoing && commitMenuOpen && commitMenuPosition && typeof document !== "undefined"
+              {!canSyncOutgoing && !canMergeRemote && commitMenuOpen && commitMenuPosition && typeof document !== "undefined"
                 ? createPortal(
                     <div className="floating-menu commit-menu commit-menu-portal" style={commitMenuPosition} ref={commitMenuRef}>
                       <button type="button" disabled={commitDisabled || commitBusy} onClick={() => void submitCommit()}>

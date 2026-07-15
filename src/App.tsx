@@ -1145,6 +1145,11 @@ export function App() {
       return;
     }
 
+    if (action === "合并远程更改") {
+      await runMergeRemoteOperation(selectedProject);
+      return;
+    }
+
     if (action === "新建分支") {
       await createBranchFromToolbar(selectedProject);
       return;
@@ -1208,6 +1213,45 @@ export function App() {
 
     notifySuccess("同步完成", undefined, toastId);
     await loadProjectData(project);
+  }
+
+  async function runMergeRemoteOperation(project: GitProject) {
+    if (!requireGitReady("合并远程更改")) {
+      return;
+    }
+
+    const status = project.status;
+    if (status?.operationState || status?.hasConflicts) {
+      notifyInfo("请先继续或终止当前 Git 操作");
+      return;
+    }
+    if ((status?.stagedCount ?? 0) + (status?.unstagedCount ?? 0) + (status?.untrackedCount ?? 0) > 0) {
+      notifyInfo("合并远程更改前必须保持工作区干净", "请先提交、暂存到 stash 或丢弃当前改动。");
+      return;
+    }
+
+    const confirmed = await requestConfirm({
+      title: "合并远程更改",
+      description: `将先抓取远程，然后把 ${status?.upstream ?? "远程分支"} 的 ${status?.behind ?? 0} 个新提交合并到 ${status?.currentBranch ?? "当前分支"}。`,
+      detail: `本地领先的 ${status?.ahead ?? 0} 个提交不会被改写；若产生冲突，可以在软件中解决或终止合并。`,
+      confirmLabel: "抓取并合并"
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    setMergeOperationBusy(true);
+    const toastId = notifyLoading("正在抓取并合并远程更改...");
+    try {
+      const result = await apiClient.mergeRemote(project);
+      notifyGitResult(result, "远程更改已合并，请检查后推送", "合并远程更改失败，请查看原始 Git 输出。", toastId);
+      await loadProjectData(project);
+    } catch (error) {
+      notifyError(errorText(error, "合并远程更改失败"), undefined, toastId);
+      await loadProjectData(project);
+    } finally {
+      setMergeOperationBusy(false);
+    }
   }
 
   async function openMergeDialog(project: GitProject) {
@@ -2231,6 +2275,7 @@ export function App() {
                 onAmendLastMessage={openAmendLastCommitDialog}
                 onUndoLastCommit={(mode) => void handleUndoLastCommit(mode)}
                 onSyncChanges={() => (selectedProject ? runSyncOperation(selectedProject) : Promise.resolve())}
+                onMergeRemote={() => (selectedProject ? runMergeRemoteOperation(selectedProject) : Promise.resolve())}
                 hasCommits={commits.length > 0}
                 focusRequest={commitFocusRequest}
                 messageDraftRequest={commitMessageDraftRequest}

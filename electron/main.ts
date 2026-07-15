@@ -148,6 +148,7 @@ function registerIpc(): void {
   );
   ipcMain.handle("git:fetch", (_event, repositoryPath: string) => gitService.fetch(repositoryPath));
   ipcMain.handle("git:pull", (_event, repositoryPath: string) => gitService.pull(repositoryPath));
+  ipcMain.handle("git:mergeRemote", (_event, repositoryPath: string) => gitService.mergeRemote(repositoryPath));
   ipcMain.handle("git:push", (_event, repositoryPath: string) => gitService.push(repositoryPath));
   ipcMain.handle("git:getBranches", (_event, repositoryPath: string) => gitService.getBranches(repositoryPath));
   ipcMain.handle("git:createBranch", (_event, repositoryPath: string, branchName: string, checkout: boolean, startPoint?: string) =>

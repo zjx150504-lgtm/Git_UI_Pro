@@ -393,6 +393,15 @@ export const apiClient = {
     return okResult("git pull --ff-only");
   },
 
+  async mergeRemote(project: GitProject): Promise<GitOperationResult> {
+    if (window.gitUI) {
+      return window.gitUI.mergeRemote(project.path);
+    }
+
+    await wait(mockDelay);
+    return okResult(`git fetch --prune ; git merge --no-edit ${project.status?.upstream ?? "@{upstream}"}`);
+  },
+
   async push(project: GitProject): Promise<GitOperationResult> {
     if (window.gitUI) {
       return window.gitUI.push(project.path);

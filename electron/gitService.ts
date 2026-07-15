@@ -825,6 +825,49 @@ export class GitService {
     return this.run(repositoryPath, ["pull", "--ff-only"]);
   }
 
+  async mergeRemote(repositoryPath: string): Promise<GitOperationResult> {
+    const repositoryKey = this.mergeRepositoryKey(repositoryPath);
+    if (this.activeMergeRepositories.has(repositoryKey)) {
+      return gitFailure("git merge", "当前仓库正在执行合并操作，请稍候。", "Another merge operation is already running.");
+    }
+
+    this.activeMergeRepositories.add(repositoryKey);
+    try {
+      let status = await this.getStatus(repositoryPath);
+      const validationFailure = validateRemoteMergeStatus(status);
+      if (validationFailure) {
+        return validationFailure;
+      }
+
+      const fetchResult = await this.fetch(repositoryPath);
+      if (!fetchResult.ok) {
+        return fetchResult;
+      }
+
+      status = await this.getStatus(repositoryPath);
+      const refreshedValidationFailure = validateRemoteMergeStatus(status, true);
+      if (refreshedValidationFailure) {
+        return combineGitResults([fetchResult, refreshedValidationFailure], false);
+      }
+
+      if (status.behind === 0) {
+        return {
+          ...fetchResult,
+          messageZh: "远程分支没有需要合并的新提交。"
+        };
+      }
+
+      const mergeResult = await this.run(repositoryPath, ["merge", "--no-edit", status.upstream!], {
+        timeoutMs: mergeCommandTimeoutMs
+      });
+      return combineGitResults([fetchResult, mergeResult], mergeResult.ok);
+    } catch (error) {
+      return gitFailure("git fetch --prune ; git merge", errorMessage(error, "合并远程更改失败。"));
+    } finally {
+      this.activeMergeRepositories.delete(repositoryKey);
+    }
+  }
+
   async push(repositoryPath: string): Promise<GitOperationResult> {
     const status = await this.getStatus(repositoryPath).catch(() => undefined);
     if (status?.upstream || !status?.currentBranch) {
@@ -1451,6 +1494,25 @@ function gitFailure(command: string, messageZh: string, stderr = ""): GitOperati
     exitCode: -1,
     messageZh
   };
+}
+
+function validateRemoteMergeStatus(status: GitStatusSummary, requireDivergence = false): GitOperationResult | undefined {
+  if (status.operationState || status.hasConflicts) {
+    return gitFailure("git merge", "当前已有 Git 操作或冲突未完成，请先继续或终止当前操作。");
+  }
+  if (status.stagedCount + status.unstagedCount + status.untrackedCount > 0) {
+    return gitFailure("git merge", "合并远程更改前必须保持工作区干净，请先提交、暂存到 stash 或丢弃当前改动。");
+  }
+  if (!status.currentBranch) {
+    return gitFailure("git merge", "当前是分离 HEAD 状态，无法合并远程更改。");
+  }
+  if (!status.upstream) {
+    return gitFailure("git merge", "当前分支没有关联远程分支，无法合并远程更改。");
+  }
+  if (requireDivergence && status.behind > 0 && status.ahead === 0) {
+    return gitFailure("git merge", "当前分支只落后远程，请使用拉取操作完成快进更新。");
+  }
+  return undefined;
 }
 
 function errorMessage(error: unknown, fallback: string): string {

@@ -66,6 +66,7 @@ export interface GitUIBridge {
   commit: (repositoryPath: string, input: CommitInput) => Promise<GitOperationResult>;
   fetch: (repositoryPath: string) => Promise<GitOperationResult>;
   pull: (repositoryPath: string) => Promise<GitOperationResult>;
+  mergeRemote: (repositoryPath: string) => Promise<GitOperationResult>;
   push: (repositoryPath: string) => Promise<GitOperationResult>;
   getBranches: (repositoryPath: string) => Promise<BranchInfo[]>;
   createBranch: (repositoryPath: string, branchName: string, checkout: boolean, startPoint?: string) => Promise<GitOperationResult>;

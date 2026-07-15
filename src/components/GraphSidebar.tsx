@@ -11,6 +11,7 @@ import {
   GitBranchPlus,
   GitCommitHorizontal,
   GitMerge,
+  GitPullRequest,
   MessageSquareText,
   MoreHorizontal,
   Plus,
@@ -202,6 +203,12 @@ export function GraphSidebar({
   const operationProject = project && (project.status?.operationState || project.status?.hasConflicts) ? project : undefined;
   const gitOperationLocked = operationBusy || Boolean(project?.status?.operationState || project?.status?.hasConflicts);
   const syncProject = project && ((project.status?.ahead ?? 0) > 0 || (project.status?.behind ?? 0) > 0) ? project : undefined;
+  const remoteDiverged = (project?.status?.ahead ?? 0) > 0 && (project?.status?.behind ?? 0) > 0;
+  const visibleGraphOperations = graphOperations.map((operation) =>
+    operation.label === "pull" && remoteDiverged
+      ? { label: "合并远程更改", title: `合并 ${project?.status?.upstream ?? "远程分支"} 的新提交`, icon: GitPullRequest }
+      : operation
+  );
   const localOnlyCount = project?.status?.upstream ? project.status.ahead : commits.length;
   const virtualGraphEnabled = filteredCommits.length > GRAPH_VIRTUAL_THRESHOLD && !expandedHash;
   const graphVirtualRange = useMemo(() => {
@@ -628,7 +635,7 @@ export function GraphSidebar({
                 <Search size={GRAPH_TOOLBAR_ICON_SIZE} />
               </button>
             </PathTooltip>
-            {graphOperations.map((operation) => {
+            {visibleGraphOperations.map((operation) => {
               const Icon = operation.icon;
               return (
                 <PathTooltip content={operation.title} className="graph-toolbar-tooltip" key={operation.label}>

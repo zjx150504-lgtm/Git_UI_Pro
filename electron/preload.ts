@@ -64,6 +64,7 @@ contextBridge.exposeInMainWorld("gitUI", {
     ipcRenderer.invoke("git:commit", repositoryPath, input),
   fetch: (repositoryPath: string) => ipcRenderer.invoke("git:fetch", repositoryPath),
   pull: (repositoryPath: string) => ipcRenderer.invoke("git:pull", repositoryPath),
+  mergeRemote: (repositoryPath: string) => ipcRenderer.invoke("git:mergeRemote", repositoryPath),
   push: (repositoryPath: string) => ipcRenderer.invoke("git:push", repositoryPath),
   getBranches: (repositoryPath: string) => ipcRenderer.invoke("git:getBranches", repositoryPath),
   createBranch: (repositoryPath: string, branchName: string, checkout: boolean, startPoint?: string) =>

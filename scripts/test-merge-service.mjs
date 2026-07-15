@@ -47,6 +47,24 @@ async function createConflictRepository(name) {
   return repositoryPath;
 }
 
+async function createDivergedRemoteRepository(name) {
+  const remotePath = path.join(testRoot, `${name}-remote.git`);
+  await mkdir(remotePath);
+  git(remotePath, "init", "--bare", "--initial-branch=main");
+
+  const repositoryPath = await createRepository(`${name}-local`);
+  git(repositoryPath, "remote", "add", "origin", remotePath);
+  git(repositoryPath, "push", "--set-upstream", "origin", "main");
+
+  const collaboratorPath = path.join(testRoot, `${name}-collaborator`);
+  git(testRoot, "clone", remotePath, collaboratorPath);
+  git(collaboratorPath, "config", "user.name", "Remote Merge Test");
+  git(collaboratorPath, "config", "user.email", "remote-merge-test@example.com");
+  git(collaboratorPath, "config", "core.autocrlf", "false");
+
+  return { repositoryPath, collaboratorPath };
+}
+
 async function testDirtyWorktreeIsRejected() {
   const repositoryPath = await createRepository("dirty");
   git(repositoryPath, "switch", "-c", "feature/dirty");
@@ -191,6 +209,59 @@ async function testUnrelatedHistoryIsRejectedBeforeSwitch() {
   assert.equal(git(repositoryPath, "branch", "--show-current"), "feature/unrelated");
 }
 
+async function testRemoteChangesMergeIntoDivergedBranch() {
+  const { repositoryPath, collaboratorPath } = await createDivergedRemoteRepository("remote-diverged");
+  await commitFile(repositoryPath, "local.txt", "local\n", "local commit");
+  await commitFile(collaboratorPath, "remote.txt", "remote\n", "remote commit");
+  git(collaboratorPath, "push", "origin", "main");
+
+  const result = await service.mergeRemote(repositoryPath);
+  assert.equal(result.ok, true, result.messageZh ?? result.stderr);
+  assert.match(result.command, /git fetch --prune/);
+  assert.match(result.command, /git merge --no-edit origin\/main/);
+  assert.equal(git(repositoryPath, "rev-list", "--parents", "-n", "1", "HEAD").split(/\s+/).length, 3);
+  const status = await service.getStatus(repositoryPath);
+  assert.equal(status.behind, 0);
+  assert.equal(status.ahead, 2);
+}
+
+async function testRemoteMergeRejectsDirtyWorktree() {
+  const { repositoryPath, collaboratorPath } = await createDivergedRemoteRepository("remote-dirty");
+  await commitFile(repositoryPath, "local.txt", "local\n", "local commit");
+  await commitFile(collaboratorPath, "remote.txt", "remote\n", "remote commit");
+  git(collaboratorPath, "push", "origin", "main");
+  await writeFile(path.join(repositoryPath, "shared.txt"), "dirty\n", "utf8");
+
+  const result = await service.mergeRemote(repositoryPath);
+  assert.equal(result.ok, false);
+  assert.match(result.messageZh ?? "", /工作区干净/);
+  assert.equal(git(repositoryPath, "rev-list", "--count", "HEAD"), "2");
+}
+
+async function testRemoteMergeConflictCanBeAborted() {
+  const { repositoryPath, collaboratorPath } = await createDivergedRemoteRepository("remote-conflict");
+  await commitFile(repositoryPath, "shared.txt", "local\n", "local conflicting commit");
+  await commitFile(collaboratorPath, "shared.txt", "remote\n", "remote conflicting commit");
+  git(collaboratorPath, "push", "origin", "main");
+
+  const result = await service.mergeRemote(repositoryPath);
+  assert.equal(result.ok, false);
+  const status = await service.getStatus(repositoryPath);
+  assert.equal(status.operationState, "merge");
+  assert.equal(status.hasConflicts, true);
+  const worktree = await service.getWorktree(repositoryPath);
+  assert.deepEqual(
+    worktree.unstagedFiles.filter((file) => file.status === "conflicted").map((file) => file.path),
+    ["shared.txt"]
+  );
+
+  const abortResult = await service.abortMerge(repositoryPath);
+  assert.equal(abortResult.ok, true, abortResult.messageZh ?? abortResult.stderr);
+  assert.equal(git(repositoryPath, "branch", "--show-current"), "main");
+  assert.equal(git(repositoryPath, "status", "--porcelain"), "");
+  assert.equal(await readFile(path.join(repositoryPath, "shared.txt"), "utf8"), "local\n");
+}
+
 try {
   await testDirtyWorktreeIsRejected();
   await testFastForwardMerge();
@@ -201,6 +272,9 @@ try {
   await testConflictResolutionRejectsStaleSnapshot();
   await testConflictCanAdoptIncomingVersion();
   await testUnrelatedHistoryIsRejectedBeforeSwitch();
+  await testRemoteChangesMergeIntoDivergedBranch();
+  await testRemoteMergeRejectsDirtyWorktree();
+  await testRemoteMergeConflictCanBeAborted();
   console.log("Merge integration scenarios passed.");
 } finally {
   await rm(testRoot, { recursive: true, force: true });
