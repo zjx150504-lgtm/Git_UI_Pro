@@ -1,4 +1,4 @@
-import { GitBranch } from "lucide-react";
+import { GitBranch, Server } from "lucide-react";
 import { PathTooltip } from "./PathTooltip";
 import type { GitProject } from "../types/domain";
 
@@ -16,6 +16,9 @@ export function TopBar({
   gitReady = true
 }: TopBarProps) {
   const gitVersionLabel = gitVersion.replace(/^git version\s*/i, "").trim() || gitVersion;
+  const remoteDestination = project?.remote
+    ? `${project.remote.username ? `${project.remote.username}@` : ""}${project.remote.host}${project.remote.port ? `:${project.remote.port}` : ""}`
+    : undefined;
 
   return (
     <header className="top-bar">
@@ -27,10 +30,10 @@ export function TopBar({
       </div>
 
       <div className="layout-controls" aria-label="布局控制">
-        <PathTooltip content={gitVersion} className="git-version-tooltip">
-          <span className={`git-version-badge ${gitReady ? "" : "warning"}`} aria-label={gitVersion}>
-            <GitBranch size={13} />
-            <span>{gitVersionLabel}</span>
+        <PathTooltip content={remoteDestination ? `${remoteDestination}:${project?.path}` : gitVersion} className="git-version-tooltip">
+          <span className={`git-version-badge ${gitReady ? "" : "warning"}`} aria-label={remoteDestination ?? gitVersion}>
+            {remoteDestination ? <Server size={13} /> : <GitBranch size={13} />}
+            <span>{remoteDestination ?? gitVersionLabel}</span>
           </span>
         </PathTooltip>
       </div>

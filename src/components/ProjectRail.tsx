@@ -1,4 +1,4 @@
-import { Check, ChevronDown, Filter, FolderGit2, FolderPlus, FolderSearch, GitBranch, Pin, PinOff, Search, Trash2 } from "lucide-react";
+import { Check, ChevronDown, Filter, FolderGit2, FolderPlus, FolderSearch, GitBranch, Pin, PinOff, Search, Server, Trash2 } from "lucide-react";
 import {
   useEffect,
   useMemo,
@@ -19,6 +19,7 @@ interface ProjectRailProps {
   selectedProjectId: string | null;
   onSelectProject: (projectId: string) => void;
   onAddProject: () => void;
+  onAddRemoteProject: () => void;
   onScanProjects: () => void;
   onRemoveProject: (projectId: string) => void;
   onReorderProjects: (projectIds: string[]) => void;
@@ -72,6 +73,7 @@ export function ProjectRail({
   selectedProjectId,
   onSelectProject,
   onAddProject,
+  onAddRemoteProject,
   onScanProjects,
   onRemoveProject,
   onReorderProjects,
@@ -304,6 +306,11 @@ export function ProjectRail({
               <FolderPlus size={15} />
             </button>
           </PathTooltip>
+          <PathTooltip content="连接远程 Git 项目" className="project-action-tooltip">
+            <button type="button" className="icon-button compact-icon" aria-label="连接远程 Git 项目" onClick={onAddRemoteProject}>
+              <Server size={15} />
+            </button>
+          </PathTooltip>
         </div>
       </div>
 
@@ -420,10 +427,10 @@ export function ProjectRail({
             onContextMenu={(event) => openProjectContextMenu(event, project)}
           >
             <span className="project-rail-icon">
-              <FolderGit2 size={16} />
+              {project.remote ? <Server size={16} /> : <FolderGit2 size={16} />}
             </span>
             <span className="project-rail-main">
-              <PathTooltip path={project.path} className="project-rail-name">
+              <PathTooltip content={projectLocationLabel(project)} className="project-rail-name">
                 <span className="project-rail-name-text">{project.name}</span>
               </PathTooltip>
               <span className="project-rail-meta">
@@ -549,7 +556,16 @@ function fuzzyProjectScore(project: GitProject, query: string): number {
   const nameScore = fuzzyTextScore(project.name, query) * 3;
   const branchScore = fuzzyTextScore(project.status?.currentBranch ?? "", query) * 1.6;
   const pathScore = fuzzyTextScore(project.path, query);
-  return Math.max(nameScore, branchScore, pathScore);
+  const remoteScore = fuzzyTextScore(project.remote ? `${project.remote.username ?? ""}@${project.remote.host}` : "", query);
+  return Math.max(nameScore, branchScore, pathScore, remoteScore);
+}
+
+function projectLocationLabel(project: GitProject): string {
+  if (!project.remote) {
+    return project.path;
+  }
+  const destination = project.remote.username ? `${project.remote.username}@${project.remote.host}` : project.remote.host;
+  return `${destination}${project.remote.port ? `:${project.remote.port}` : ""}:${project.path}`;
 }
 
 function fuzzyTextScore(value: string, query: string): number {

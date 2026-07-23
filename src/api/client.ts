@@ -17,6 +17,9 @@ import type {
   GitProject,
   GitResetMode,
   GitStatusSummary,
+  RemoteProjectInput,
+  RemoteProjectTestResult,
+  RepositoryTarget,
   TerminalDataEvent,
   TerminalExitEvent,
   TerminalSessionInfo,
@@ -51,7 +54,7 @@ export const apiClient = {
 
   async startTerminal(project: GitProject): Promise<TerminalSessionInfo> {
     if (window.gitUI) {
-      return window.gitUI.startTerminal(project.path);
+      return window.gitUI.startTerminal(repositoryTarget(project));
     }
 
     await wait(mockDelay);
@@ -147,6 +150,53 @@ export const apiClient = {
     };
   },
 
+  async chooseIdentityFile(): Promise<string | null> {
+    return window.gitUI?.chooseIdentityFile() ?? null;
+  },
+
+  async testRemoteProject(input: RemoteProjectInput): Promise<RemoteProjectTestResult> {
+    if (window.gitUI) {
+      return window.gitUI.testRemoteProject(input);
+    }
+
+    await wait(mockDelay);
+    const repositoryRoot = input.repositoryPath.trim() || "/srv/git/example";
+    return {
+      ok: true,
+      command: "ssh mock -- git rev-parse --show-toplevel",
+      stdout: `${repositoryRoot}\n`,
+      stderr: "",
+      exitCode: 0,
+      repositoryRoot,
+      projectName: repositoryRoot.split("/").filter(Boolean).at(-1) ?? "远程项目"
+    };
+  },
+
+  async addRemoteProject(input: RemoteProjectInput): Promise<GitProject> {
+    if (window.gitUI) {
+      return window.gitUI.addRemoteProject(input);
+    }
+
+    const result = await this.testRemoteProject(input);
+    const now = new Date().toISOString();
+    return {
+      id: crypto.randomUUID(),
+      name: result.projectName ?? "远程项目",
+      path: result.repositoryRoot ?? input.repositoryPath,
+      remote: {
+        type: "ssh",
+        host: input.host,
+        username: input.username,
+        port: input.port,
+        identityFile: input.identityFile
+      },
+      favorite: false,
+      lastOpenedAt: now,
+      createdAt: now,
+      updatedAt: now
+    };
+  },
+
   async chooseAndScanProjects(): Promise<GitProject[]> {
     if (window.gitUI) {
       const rootPath = await window.gitUI.chooseDirectory();
@@ -186,7 +236,7 @@ export const apiClient = {
 
   async getProjectStatus(project: GitProject): Promise<GitStatusSummary | undefined> {
     if (window.gitUI) {
-      return window.gitUI.getProjectStatus(project.path);
+      return window.gitUI.getProjectStatus(repositoryTarget(project));
     }
 
     await wait(mockDelay);
@@ -195,7 +245,7 @@ export const apiClient = {
 
   async getHistory(project: GitProject, filter: GitHistoryFilter = { mode: "auto" }): Promise<CommitNode[]> {
     if (window.gitUI) {
-      return window.gitUI.getHistory(project.path, filter);
+      return window.gitUI.getHistory(repositoryTarget(project), filter);
     }
 
     await wait(mockDelay);
@@ -204,7 +254,7 @@ export const apiClient = {
 
   async getHistoryRefs(project: GitProject): Promise<GitHistoryRef[]> {
     if (window.gitUI) {
-      return window.gitUI.getHistoryRefs(project.path);
+      return window.gitUI.getHistoryRefs(repositoryTarget(project));
     }
 
     await wait(mockDelay);
@@ -217,7 +267,7 @@ export const apiClient = {
 
   async getCommitDetails(project: GitProject, hash: string): Promise<CommitNode> {
     if (window.gitUI) {
-      return window.gitUI.getCommitDetails(project.path, hash);
+      return window.gitUI.getCommitDetails(repositoryTarget(project), hash);
     }
 
     await wait(mockDelay);
@@ -226,7 +276,7 @@ export const apiClient = {
 
   async getCommitDiff(project: GitProject, hash: string, filePath?: string): Promise<DiffLine[]> {
     if (window.gitUI) {
-      return window.gitUI.getCommitDiff(project.path, hash, filePath);
+      return window.gitUI.getCommitDiff(repositoryTarget(project), hash, filePath);
     }
 
     await wait(mockDelay);
@@ -235,7 +285,7 @@ export const apiClient = {
 
   async getCommitFilePreview(project: GitProject, hash: string, file: ChangedFile): Promise<FilePreview | null> {
     if (window.gitUI) {
-      return window.gitUI.getCommitFilePreview(project.path, hash, file);
+      return window.gitUI.getCommitFilePreview(repositoryTarget(project), hash, file);
     }
 
     void project;
@@ -247,7 +297,7 @@ export const apiClient = {
 
   async getWorktree(project: GitProject): Promise<WorktreeState> {
     if (window.gitUI) {
-      return window.gitUI.getWorktree(project.path);
+      return window.gitUI.getWorktree(repositoryTarget(project));
     }
 
     await wait(mockDelay);
@@ -269,7 +319,7 @@ export const apiClient = {
 
   async getWorktreeDiff(project: GitProject, filePath: string, staged: boolean): Promise<DiffLine[]> {
     if (window.gitUI) {
-      return window.gitUI.getWorktreeDiff(project.path, filePath, staged);
+      return window.gitUI.getWorktreeDiff(repositoryTarget(project), filePath, staged);
     }
 
     await wait(mockDelay);
@@ -278,7 +328,7 @@ export const apiClient = {
 
   async getWorktreeFilePreview(project: GitProject, file: ChangedFile): Promise<FilePreview | null> {
     if (window.gitUI) {
-      return window.gitUI.getWorktreeFilePreview(project.path, file);
+      return window.gitUI.getWorktreeFilePreview(repositoryTarget(project), file);
     }
 
     void project;
@@ -289,7 +339,7 @@ export const apiClient = {
 
   async getConflictFileDetails(project: GitProject, filePath: string): Promise<ConflictFileDetails> {
     if (window.gitUI) {
-      return window.gitUI.getConflictFileDetails(project.path, filePath);
+      return window.gitUI.getConflictFileDetails(repositoryTarget(project), filePath);
     }
 
     await wait(mockDelay);
@@ -314,7 +364,7 @@ export const apiClient = {
 
   async resolveConflictFile(project: GitProject, filePath: string, input: ConflictResolutionInput): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.resolveConflictFile(project.path, filePath, input);
+      return window.gitUI.resolveConflictFile(repositoryTarget(project), filePath, input);
     }
 
     await wait(mockDelay);
@@ -323,7 +373,7 @@ export const apiClient = {
 
   async stageFile(project: GitProject, filePath: string): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.stageFile(project.path, filePath);
+      return window.gitUI.stageFile(repositoryTarget(project), filePath);
     }
 
     await wait(mockDelay);
@@ -332,7 +382,7 @@ export const apiClient = {
 
   async stageAll(project: GitProject): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.stageAll(project.path);
+      return window.gitUI.stageAll(repositoryTarget(project));
     }
 
     await wait(mockDelay);
@@ -341,7 +391,7 @@ export const apiClient = {
 
   async unstageFile(project: GitProject, filePath: string): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.unstageFile(project.path, filePath);
+      return window.gitUI.unstageFile(repositoryTarget(project), filePath);
     }
 
     await wait(mockDelay);
@@ -350,7 +400,7 @@ export const apiClient = {
 
   async unstageAll(project: GitProject): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.unstageAll(project.path);
+      return window.gitUI.unstageAll(repositoryTarget(project));
     }
 
     await wait(mockDelay);
@@ -359,7 +409,7 @@ export const apiClient = {
 
   async discardFile(project: GitProject, file: ChangedFile): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.discardFile(project.path, file);
+      return window.gitUI.discardFile(repositoryTarget(project), file);
     }
 
     await wait(mockDelay);
@@ -368,7 +418,7 @@ export const apiClient = {
 
   async commit(project: GitProject, input: CommitInput): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.commit(project.path, input);
+      return window.gitUI.commit(repositoryTarget(project), input);
     }
 
     await wait(mockDelay);
@@ -377,7 +427,7 @@ export const apiClient = {
 
   async fetch(project: GitProject): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.fetch(project.path);
+      return window.gitUI.fetch(repositoryTarget(project));
     }
 
     await wait(mockDelay);
@@ -386,7 +436,7 @@ export const apiClient = {
 
   async pull(project: GitProject): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.pull(project.path);
+      return window.gitUI.pull(repositoryTarget(project));
     }
 
     await wait(mockDelay);
@@ -395,7 +445,7 @@ export const apiClient = {
 
   async mergeRemote(project: GitProject): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.mergeRemote(project.path);
+      return window.gitUI.mergeRemote(repositoryTarget(project));
     }
 
     await wait(mockDelay);
@@ -404,7 +454,7 @@ export const apiClient = {
 
   async push(project: GitProject): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.push(project.path);
+      return window.gitUI.push(repositoryTarget(project));
     }
 
     await wait(mockDelay);
@@ -413,7 +463,7 @@ export const apiClient = {
 
   async getBranches(project: GitProject): Promise<BranchInfo[]> {
     if (window.gitUI) {
-      return window.gitUI.getBranches(project.path);
+      return window.gitUI.getBranches(repositoryTarget(project));
     }
 
     await wait(mockDelay);
@@ -445,7 +495,7 @@ export const apiClient = {
 
   async createBranch(project: GitProject, branchName: string, checkout: boolean, startPoint?: string): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.createBranch(project.path, branchName, checkout, startPoint);
+      return window.gitUI.createBranch(repositoryTarget(project), branchName, checkout, startPoint);
     }
 
     await wait(mockDelay);
@@ -455,7 +505,7 @@ export const apiClient = {
 
   async switchBranch(project: GitProject, branch: BranchInfo): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.switchBranch(project.path, branch);
+      return window.gitUI.switchBranch(repositoryTarget(project), branch);
     }
 
     await wait(mockDelay);
@@ -464,7 +514,7 @@ export const apiClient = {
 
   async getMergePreview(project: GitProject, targetBranch: string): Promise<GitMergePreview> {
     if (window.gitUI) {
-      return window.gitUI.getMergePreview(project.path, targetBranch);
+      return window.gitUI.getMergePreview(repositoryTarget(project), targetBranch);
     }
 
     await wait(mockDelay);
@@ -480,7 +530,7 @@ export const apiClient = {
 
   async mergeCurrentBranch(project: GitProject, targetBranch: string, strategy: GitMergeStrategy): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.mergeCurrentBranch(project.path, targetBranch, strategy);
+      return window.gitUI.mergeCurrentBranch(repositoryTarget(project), targetBranch, strategy);
     }
 
     await wait(mockDelay);
@@ -490,7 +540,7 @@ export const apiClient = {
 
   async continueMerge(project: GitProject): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.continueMerge(project.path);
+      return window.gitUI.continueMerge(repositoryTarget(project));
     }
 
     await wait(mockDelay);
@@ -499,7 +549,7 @@ export const apiClient = {
 
   async abortMerge(project: GitProject): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.abortMerge(project.path);
+      return window.gitUI.abortMerge(repositoryTarget(project));
     }
 
     await wait(mockDelay);
@@ -508,7 +558,7 @@ export const apiClient = {
 
   async deleteBranch(project: GitProject, branchName: string): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.deleteBranch(project.path, branchName);
+      return window.gitUI.deleteBranch(repositoryTarget(project), branchName);
     }
 
     await wait(mockDelay);
@@ -517,7 +567,7 @@ export const apiClient = {
 
   async amendLastCommitMessage(project: GitProject, input: CommitMessageInput): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.amendLastCommitMessage(project.path, input);
+      return window.gitUI.amendLastCommitMessage(repositoryTarget(project), input);
     }
 
     await wait(mockDelay);
@@ -526,7 +576,7 @@ export const apiClient = {
 
   async resetLastCommit(project: GitProject, mode: Exclude<GitResetMode, "hard">): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.resetLastCommit(project.path, mode);
+      return window.gitUI.resetLastCommit(repositoryTarget(project), mode);
     }
 
     await wait(mockDelay);
@@ -535,7 +585,7 @@ export const apiClient = {
 
   async resetToCommit(project: GitProject, hash: string, mode: GitResetMode): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.resetToCommit(project.path, hash, mode);
+      return window.gitUI.resetToCommit(repositoryTarget(project), hash, mode);
     }
 
     await wait(mockDelay);
@@ -544,7 +594,7 @@ export const apiClient = {
 
   async revertCommit(project: GitProject, hash: string): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.revertCommit(project.path, hash);
+      return window.gitUI.revertCommit(repositoryTarget(project), hash);
     }
 
     await wait(mockDelay);
@@ -553,13 +603,20 @@ export const apiClient = {
 
   async cherryPickCommit(project: GitProject, hash: string): Promise<GitOperationResult> {
     if (window.gitUI) {
-      return window.gitUI.cherryPickCommit(project.path, hash);
+      return window.gitUI.cherryPickCommit(repositoryTarget(project), hash);
     }
 
     await wait(mockDelay);
     return okResult(`git cherry-pick ${hash}`);
   }
 };
+
+function repositoryTarget(project: GitProject): RepositoryTarget {
+  return {
+    path: project.path,
+    remote: project.remote
+  };
+}
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));

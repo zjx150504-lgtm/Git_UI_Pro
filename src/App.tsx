@@ -24,6 +24,7 @@ import { FeedbackConfirmDialog, type FeedbackConfirmOptions } from "./components
 import { GraphSidebar } from "./components/GraphSidebar";
 import { PathTooltip } from "./components/PathTooltip";
 import { ProjectRail } from "./components/ProjectRail";
+import { RemoteProjectDialog } from "./components/RemoteProjectDialog";
 import { TopBar, type ThemeMode } from "./components/TopBar";
 import { WorktreeDetailPanel, type WorktreeEditorTab } from "./components/WorktreeDetailPanel";
 import { WorkspaceView } from "./components/WorkspaceView";
@@ -42,6 +43,8 @@ import type {
   GitOperationResult,
   GitProject,
   GitResetMode,
+  RemoteProjectInput,
+  RemoteProjectTestResult,
   WorktreeState
 } from "./types/domain";
 
@@ -135,6 +138,7 @@ export function App() {
   const [changesPanelOpen, setChangesPanelOpen] = useState(true);
   const [graphPanelOpen, setGraphPanelOpen] = useState(true);
   const [branchDialog, setBranchDialog] = useState<BranchDialogState | null>(null);
+  const [remoteProjectDialogOpen, setRemoteProjectDialogOpen] = useState(false);
   const [branchDialogBusy, setBranchDialogBusy] = useState(false);
   const [mergeOperationBusy, setMergeOperationBusy] = useState(false);
   const [commitMessageDialog, setCommitMessageDialog] = useState<CommitMessageDialogState | null>(null);
@@ -375,6 +379,7 @@ export function App() {
     () => projects.find((project) => project.id === selectedProjectId) ?? projects[0],
     [projects, selectedProjectId]
   );
+  const selectedProjectGitReady = gitDependency.status === "ready" || Boolean(selectedProject?.remote);
   const activeWorktreeTab = useMemo(
     () => worktreeTabs.find((tab) => tab.id === activeWorktreeTabId) ?? worktreeTabs[0],
     [activeWorktreeTabId, worktreeTabs]
@@ -390,7 +395,7 @@ export function App() {
       return;
     }
 
-    if (gitDependency.status !== "ready") {
+    if (!selectedProjectGitReady) {
       setGraphLoading(false);
       setCommits([]);
       setGraphHistoryRefs([]);
@@ -418,10 +423,10 @@ export function App() {
     }, PROJECT_SELECTION_LOAD_DELAY_MS);
 
     return () => window.clearTimeout(selectedProjectLoadTimerRef.current);
-  }, [selectedProject?.id, gitDependency.status]);
+  }, [selectedProject?.id, selectedProjectGitReady]);
 
   useEffect(() => {
-    if (!selectedProject || gitDependency.status !== "ready") {
+    if (!selectedProject || !selectedProjectGitReady) {
       return;
     }
 
@@ -457,10 +462,10 @@ export function App() {
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVisibilityChange);
     };
-  }, [selectedProject?.id, selectedProject?.path, gitDependency.status]);
+  }, [selectedProject?.id, selectedProject?.path, selectedProjectGitReady]);
 
   useEffect(() => {
-    if (gitDependency.status !== "ready") {
+    if (gitDependency.status !== "ready" && !projectsRef.current.some((project) => project.remote)) {
       return;
     }
 
@@ -482,7 +487,7 @@ export function App() {
       window.removeEventListener("focus", refresh);
       document.removeEventListener("visibilitychange", refresh);
     };
-  }, [gitDependency.status]);
+  }, [gitDependency.status, projects.some((project) => Boolean(project.remote))]);
 
   async function loadInitialData() {
     try {
@@ -491,8 +496,9 @@ export function App() {
       setProjects(orderedProjects);
       selectProject(orderedProjects[0]?.id ?? null);
       applyGitVersionResult(versionResult);
-      if (versionResult.ok) {
-        void refreshProjectListStatuses(orderedProjects);
+      const refreshableProjects = versionResult.ok ? orderedProjects : orderedProjects.filter((project) => project.remote);
+      if (refreshableProjects.length > 0) {
+        void refreshProjectListStatuses(refreshableProjects);
       }
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "初始化失败");
@@ -548,8 +554,8 @@ export function App() {
     await apiClient.openExternal(GIT_DOWNLOAD_URL);
   }
 
-  function requireGitReady(actionLabel = "该操作") {
-    if (gitDependency.status === "ready") {
+  function requireGitReady(actionLabel = "该操作", project: GitProject | null | undefined = selectedProject) {
+    if (gitDependency.status === "ready" || Boolean(project?.remote)) {
       return true;
     }
 
@@ -729,6 +735,7 @@ export function App() {
   }
 
   async function refreshProjectListStatuses(projectSnapshot = projectsRef.current, isDisposed: () => boolean = () => false) {
+    projectSnapshot = projectSnapshot.filter((project) => gitDependency.status === "ready" || project.remote);
     if (isDisposed() || projectListRefreshBusyRef.current || projectSnapshot.length === 0) {
       return;
     }
@@ -1022,7 +1029,7 @@ export function App() {
   }
 
   async function handleAddProject() {
-    if (!requireGitReady("添加项目")) {
+    if (!requireGitReady("添加项目", null)) {
       return;
     }
 
@@ -1042,7 +1049,7 @@ export function App() {
   }
 
   async function handleScanProjects() {
-    if (!requireGitReady("扫描项目")) {
+    if (!requireGitReady("扫描项目", null)) {
       return;
     }
 
@@ -1213,6 +1220,28 @@ export function App() {
 
     notifySuccess("同步完成", undefined, toastId);
     await loadProjectData(project);
+  }
+
+  async function handleTestRemoteProject(input: RemoteProjectInput): Promise<RemoteProjectTestResult> {
+    rememberStatus(`正在连接 ${input.host}...`);
+    const result = await apiClient.testRemoteProject(input);
+    rememberStatus(result.ok ? "远程连接测试通过" : result.messageZh ?? "远程连接失败");
+    return result;
+  }
+
+  async function handleAddRemoteProject(input: RemoteProjectInput): Promise<GitProject> {
+    rememberStatus(`正在连接 ${input.host}...`);
+    try {
+      const project = await apiClient.addRemoteProject(input);
+      setProjects((current) => addProjectWithPinnedOrder(current, project));
+      selectProject(project.id);
+      setRemoteProjectDialogOpen(false);
+      notifySuccess(`已连接远程项目：${project.name}`, remoteProjectAddress(project));
+      return project;
+    } catch (error) {
+      rememberStatus(error instanceof Error ? cleanElectronError(error.message) : "连接远程项目失败");
+      throw error;
+    }
   }
 
   async function runMergeRemoteOperation(project: GitProject) {
@@ -2217,6 +2246,7 @@ export function App() {
           selectedProjectId={selectedProject?.id ?? null}
           onSelectProject={selectProject}
           onAddProject={handleAddProject}
+          onAddRemoteProject={() => setRemoteProjectDialogOpen(true)}
           onScanProjects={handleScanProjects}
           onRemoveProject={handleRemoveProject}
           onReorderProjects={(projectIds) => void handleReorderProjects(projectIds)}
@@ -2239,10 +2269,10 @@ export function App() {
         <TopBar
           project={selectedProject}
           gitVersion={gitVersion}
-          gitReady={gitDependency.status === "ready"}
+          gitReady={selectedProjectGitReady}
         />
 
-        {gitDependency.status !== "ready" ? (
+        {!selectedProjectGitReady ? (
           <section className="main-grid git-dependency-grid">
             <GitDependencyNotice
               state={gitDependency}
@@ -2362,6 +2392,14 @@ export function App() {
           visibleToasts={5}
           toastOptions={{ duration: 2000 }}
         />
+        {remoteProjectDialogOpen ? (
+          <RemoteProjectDialog
+            onClose={() => setRemoteProjectDialogOpen(false)}
+            onChooseIdentityFile={() => apiClient.chooseIdentityFile()}
+            onTest={handleTestRemoteProject}
+            onAdd={handleAddRemoteProject}
+          />
+        ) : null}
         {branchDialog ? (
           <BranchDialog
             state={branchDialog}
@@ -2757,10 +2795,23 @@ function mergeProjects(incoming: GitProject[], current: GitProject[]): GitProjec
   const map = new Map<string, GitProject>();
 
   for (const project of [...incoming, ...current]) {
-    map.set(project.path.toLowerCase(), project);
+    map.set(projectIdentityKey(project), project);
   }
 
   return orderProjectsWithPinnedFirst(Array.from(map.values()));
+}
+
+function projectIdentityKey(project: GitProject): string {
+  if (!project.remote) {
+    return `local:${project.path.toLowerCase()}`;
+  }
+  return [
+    "ssh",
+    project.remote.host.toLowerCase(),
+    project.remote.username?.toLowerCase() ?? "",
+    project.remote.port ?? 22,
+    project.path
+  ].join(":");
 }
 
 function reorderProjectsByIds(projects: GitProject[], projectIds: string[]): GitProject[] {
@@ -2892,6 +2943,15 @@ function projectInitial(project: GitProject): string {
   const source = (project.name.trim() || fallbackName.trim() || "?").trim();
   const alphaNumeric = source.match(/[a-z0-9]/i)?.[0];
   return (alphaNumeric ?? source[0] ?? "?").toUpperCase();
+}
+
+function remoteProjectAddress(project: GitProject): string | undefined {
+  if (!project.remote) {
+    return undefined;
+  }
+  const destination = project.remote.username ? `${project.remote.username}@${project.remote.host}` : project.remote.host;
+  const port = project.remote.port ? `:${project.remote.port}` : "";
+  return `${destination}${port}:${project.path}`;
 }
 
 function upsertWorktreeTab(tabs: WorktreeEditorTab[], incomingTab: WorktreeEditorTab, forcePinned: boolean): WorktreeEditorTab[] {

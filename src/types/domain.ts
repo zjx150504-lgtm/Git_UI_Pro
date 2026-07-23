@@ -2,12 +2,39 @@ export interface GitProject {
   id: string;
   name: string;
   path: string;
+  remote?: SshConnection;
   groupId?: string;
   favorite: boolean;
   lastOpenedAt?: string;
   createdAt: string;
   updatedAt: string;
   status?: GitStatusSummary;
+}
+
+export interface SshConnection {
+  type: "ssh";
+  host: string;
+  username?: string;
+  port?: number;
+  identityFile?: string;
+}
+
+export interface RepositoryTarget {
+  path: string;
+  remote?: SshConnection;
+}
+
+export interface RemoteProjectInput {
+  host: string;
+  username?: string;
+  port?: number;
+  repositoryPath: string;
+  identityFile?: string;
+}
+
+export interface RemoteProjectTestResult extends GitOperationResult {
+  repositoryRoot?: string;
+  projectName?: string;
 }
 
 export interface GitStatusSummary {

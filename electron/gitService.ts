@@ -3,6 +3,14 @@ import { createHash } from "node:crypto";
 import { access, mkdir, readFile, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { TextDecoder } from "node:util";
+import type { RemoteProjectInput, SshConnection } from "./configStore";
+
+export interface RepositoryTarget {
+  path: string;
+  remote?: SshConnection;
+}
+
+export type RepositoryLocation = string | RepositoryTarget;
 
 export interface GitOperationResult {
   ok: boolean;
@@ -246,89 +254,36 @@ function decodeGitOutput(buffer: Buffer): string {
 export class GitService {
   private readonly activeMergeRepositories = new Set<string>();
 
-  async run(cwd: string, args: string[], options: { timeoutMs?: number } = {}): Promise<GitOperationResult> {
-    return new Promise((resolve) => {
-      const command = `git ${args.join(" ")}`;
-      let settled = false;
-      const child = spawn("git", args, {
-        cwd,
-        env: createGitEnv(),
-        shell: false,
-        windowsHide: true
-      });
-
-      const stdoutChunks: Buffer[] = [];
-      const stderrChunks: Buffer[] = [];
-      const finish = (result: GitOperationResult) => {
-        if (settled) {
-          return;
-        }
-
-        settled = true;
-        if (timeoutId) {
-          clearTimeout(timeoutId);
-        }
-        resolve(result);
-      };
-      const timeoutId = options.timeoutMs
-        ? setTimeout(() => {
-            const timeoutText = `Git command timed out after ${Math.round((options.timeoutMs ?? 0) / 1000)}s.`;
-            const stdout = decodeGitOutput(Buffer.concat(stdoutChunks));
-            const stderrText = decodeGitOutput(Buffer.concat(stderrChunks));
-            const stderr = stderrText ? `${stderrText}\n${timeoutText}` : timeoutText;
-            child.kill();
-            finish({
-              ok: false,
-              command,
-              stdout,
-              stderr,
-              exitCode: -1,
-              messageZh: "Git 命令执行超时，请确认仓库未被其它进程锁定后重试"
-            });
-          }, options.timeoutMs)
-        : undefined;
-
-      child.stdout.on("data", (chunk: Buffer) => {
-        stdoutChunks.push(chunk);
-      });
-
-      child.stderr.on("data", (chunk: Buffer) => {
-        stderrChunks.push(chunk);
-      });
-
-      child.on("error", (error) => {
-        finish({
-          ok: false,
-          command,
-          stdout: decodeGitOutput(Buffer.concat(stdoutChunks)),
-          stderr: error.message,
-          exitCode: -1,
-          messageZh: "无法执行 Git 命令，请确认本机已安装 Git 并加入 PATH。"
-        });
-      });
-
-      child.on("close", (code) => {
-        const exitCode = code ?? -1;
-        const stdout = decodeGitOutput(Buffer.concat(stdoutChunks));
-        const stderr = decodeGitOutput(Buffer.concat(stderrChunks));
-        finish({
-          ok: exitCode === 0,
-          command,
-          stdout,
-          stderr,
-          exitCode,
-          messageZh: exitCode === 0 ? undefined : toChineseGitError(stdout, stderr)
-        });
-      });
-    });
+  async run(cwd: RepositoryLocation, args: string[], options: { timeoutMs?: number } = {}): Promise<GitOperationResult> {
+    const result = await this.runProcess(cwd, args, options);
+    return {
+      ...result,
+      stdout: decodeGitOutput(result.stdout)
+    };
   }
 
-  private async runBinary(cwd: string, args: string[], options: { timeoutMs?: number } = {}): Promise<Omit<GitOperationResult, "stdout"> & { stdout: Buffer }> {
+  private async runBinary(
+    cwd: RepositoryLocation,
+    args: string[],
+    options: { timeoutMs?: number } = {}
+  ): Promise<Omit<GitOperationResult, "stdout"> & { stdout: Buffer }> {
+    return this.runProcess(cwd, args, options);
+  }
+
+  private async runProcess(
+    cwd: RepositoryLocation,
+    args: string[],
+    options: { timeoutMs?: number } = {}
+  ): Promise<Omit<GitOperationResult, "stdout"> & { stdout: Buffer }> {
     return new Promise((resolve) => {
-      const command = `git ${args.join(" ")}`;
+      const target = normalizeRepositoryTarget(cwd);
+      const remoteCommand = target.remote ? buildRemoteGitCommand(target.path, args) : undefined;
+      const executable = target.remote ? "ssh" : "git";
+      const executableArgs = target.remote ? [...buildSshArgs(target.remote, true), remoteCommand!] : args;
+      const command = target.remote ? `ssh ${sshDestination(target.remote)} -- git ${args.join(" ")}` : `git ${args.join(" ")}`;
       let settled = false;
-      const child = spawn("git", args, {
-        cwd,
+      const child = spawn(executable, executableArgs, {
+        cwd: target.remote ? process.cwd() : target.path,
         env: createGitEnv(),
         shell: false,
         windowsHide: true
@@ -359,7 +314,7 @@ export class GitService {
               stdout: Buffer.concat(stdoutChunks),
               stderr,
               exitCode: -1,
-              messageZh: "Git 命令执行超时，请确认仓库未被其它进程锁定后重试"
+              messageZh: target.remote ? "远程 Git 命令执行超时，请检查 SSH 连接后重试" : "Git 命令执行超时，请确认仓库未被其它进程锁定后重试"
             });
           }, options.timeoutMs)
         : undefined;
@@ -379,7 +334,7 @@ export class GitService {
           stdout: Buffer.concat(stdoutChunks),
           stderr: error.message,
           exitCode: -1,
-          messageZh: "无法执行 Git 命令，请确认本机已安装 Git 并加入 PATH。"
+          messageZh: target.remote ? "无法执行 SSH，请确认本机已安装 OpenSSH 并加入 PATH。" : "无法执行 Git 命令，请确认本机已安装 Git 并加入 PATH。"
         });
       });
 
@@ -393,9 +348,10 @@ export class GitService {
           stdout,
           stderr,
           exitCode,
-          messageZh: exitCode === 0 ? undefined : toChineseGitError("", stderr)
+          messageZh: exitCode === 0 ? undefined : target.remote ? toChineseSshError(stderr) : toChineseGitError(decodeGitOutput(stdout), stderr)
         });
       });
+      child.stdin.end();
     });
   }
 
@@ -411,7 +367,36 @@ export class GitService {
     return result.stdout.trim();
   }
 
-  async getStatus(repositoryPath: string): Promise<GitStatusSummary> {
+  async testRemoteRepository(input: RemoteProjectInput): Promise<GitOperationResult & { repositoryRoot?: string; projectName?: string }> {
+    const validationError = validateRemoteProjectInput(input);
+    if (validationError) {
+      return gitFailure("ssh", validationError);
+    }
+
+    const target: RepositoryTarget = {
+      path: input.repositoryPath.trim(),
+      remote: {
+        type: "ssh",
+        host: input.host.trim(),
+        username: input.username?.trim() || undefined,
+        port: input.port,
+        identityFile: input.identityFile?.trim() || undefined
+      }
+    };
+    const result = await this.run(target, ["rev-parse", "--show-toplevel"], { timeoutMs: 20_000 });
+    if (!result.ok) {
+      return result;
+    }
+
+    const repositoryRoot = result.stdout.trim();
+    return {
+      ...result,
+      repositoryRoot,
+      projectName: path.posix.basename(repositoryRoot) || target.remote!.host
+    };
+  }
+
+  async getStatus(repositoryPath: RepositoryLocation): Promise<GitStatusSummary> {
     const result = await this.run(repositoryPath, ["status", "--porcelain=v2", "--branch", "--ignored=matching"]);
     if (!result.ok) {
       throw new Error(result.messageZh ?? "无法读取仓库状态。");
@@ -429,21 +414,31 @@ export class GitService {
     return summary;
   }
 
-  private async getOperationState(repositoryPath: string): Promise<GitOperationState | undefined> {
+  private async getOperationState(repositoryPath: RepositoryLocation): Promise<GitOperationState | undefined> {
     const result = await this.run(repositoryPath, ["rev-parse", ...gitOperationMarkers.flatMap((marker) => ["--git-path", marker.path])]);
     if (!result.ok) {
       return undefined;
     }
 
     const markerPaths = result.stdout.split(/\r?\n/).filter(Boolean);
+    const target = normalizeRepositoryTarget(repositoryPath);
+    if (target.remote) {
+      const checks = markerPaths
+        .map((markerPath, index) => `test -e ${shellQuote(resolveGitReportedPath(repositoryPath, markerPath))} && printf '${index}\\n'`)
+        .join("; ") + "; true";
+      const checkResult = await runSshShell(target.remote, checks, { timeoutMs: 10_000 });
+      const markerIndex = checkResult.ok ? Number(checkResult.stdout.toString("utf8").split(/\r?\n/).find(Boolean)) : Number.NaN;
+      return Number.isInteger(markerIndex) ? gitOperationMarkers[markerIndex]?.state : undefined;
+    }
+
     for (const [index, marker] of gitOperationMarkers.entries()) {
       const markerPath = markerPaths[index];
       if (!markerPath) {
         continue;
       }
 
-      const absoluteMarkerPath = path.isAbsolute(markerPath) ? markerPath : path.resolve(repositoryPath, markerPath);
-      if (await pathExists(absoluteMarkerPath)) {
+      const markerTargetPath = resolveGitReportedPath(repositoryPath, markerPath);
+      if (await pathExists(markerTargetPath)) {
         return marker.state;
       }
     }
@@ -451,7 +446,7 @@ export class GitService {
     return undefined;
   }
 
-  async getHistory(repositoryPath: string, filter: GitHistoryFilter = { mode: "auto" }, maxCount = 300): Promise<CommitNode[]> {
+  async getHistory(repositoryPath: RepositoryLocation, filter: GitHistoryFilter = { mode: "auto" }, maxCount = 300): Promise<CommitNode[]> {
     const status = await this.getStatus(repositoryPath).catch(() => undefined);
     const revisions = await this.getHistoryRevisions(repositoryPath, status, filter);
     const format = [
@@ -488,7 +483,7 @@ export class GitService {
     return parseCommitLog(result.stdout);
   }
 
-  async getHistoryRefs(repositoryPath: string): Promise<GitHistoryRef[]> {
+  async getHistoryRefs(repositoryPath: RepositoryLocation): Promise<GitHistoryRef[]> {
     const [status, refsResult] = await Promise.all([
       this.getStatus(repositoryPath).catch(() => undefined),
       this.run(repositoryPath, [
@@ -547,7 +542,7 @@ export class GitService {
       .sort(compareHistoryRefs);
   }
 
-  async getCommitDetails(repositoryPath: string, hash: string): Promise<CommitNode> {
+  async getCommitDetails(repositoryPath: RepositoryLocation, hash: string): Promise<CommitNode> {
     const commits = await this.getSingleCommit(repositoryPath, hash);
     const commit = commits[0];
     if (!commit) {
@@ -569,7 +564,7 @@ export class GitService {
     };
   }
 
-  async getCommitDiff(repositoryPath: string, hash: string, filePath?: string): Promise<DiffLine[]> {
+  async getCommitDiff(repositoryPath: RepositoryLocation, hash: string, filePath?: string): Promise<DiffLine[]> {
     const commits = await this.getSingleCommit(repositoryPath, hash);
     const commit = commits[0];
     if (!commit) {
@@ -592,7 +587,7 @@ export class GitService {
     return parseUnifiedDiff(result.stdout);
   }
 
-  async getCommitFilePreview(repositoryPath: string, hash: string, file: ChangedFile): Promise<FilePreview | null> {
+  async getCommitFilePreview(repositoryPath: RepositoryLocation, hash: string, file: ChangedFile): Promise<FilePreview | null> {
     const targetPath = file.status === "deleted" ? file.oldPath ?? file.path : file.path;
     const media = previewMediaFromPath(targetPath);
     if (!media) {
@@ -608,7 +603,7 @@ export class GitService {
     return createFilePreview(result, media, file.status === "deleted" ? "删除前版本" : "提交版本");
   }
 
-  async getWorktree(repositoryPath: string): Promise<WorktreeState> {
+  async getWorktree(repositoryPath: RepositoryLocation): Promise<WorktreeState> {
     const [statusResult, untrackedResult] = await Promise.all([
       this.run(repositoryPath, ["status", "--porcelain=v2"]),
       this.run(repositoryPath, ["ls-files", "--others", "--exclude-standard"])
@@ -631,7 +626,7 @@ export class GitService {
     return sortWorktree(worktree);
   }
 
-  async getWorktreeDiff(repositoryPath: string, filePath: string, staged: boolean): Promise<DiffLine[]> {
+  async getWorktreeDiff(repositoryPath: RepositoryLocation, filePath: string, staged: boolean): Promise<DiffLine[]> {
     const args = staged ? ["diff", "--cached", "--", filePath] : ["diff", "--", filePath];
     const result = await this.run(repositoryPath, args);
     if (!result.ok) {
@@ -642,14 +637,14 @@ export class GitService {
       return diffLines;
     }
 
-    if (await isUntrackedFile(repositoryPath, filePath)) {
-      return readFileAsAddedDiff(repositoryPath, filePath);
+    if (await this.isUntrackedFile(repositoryPath, filePath)) {
+      return this.readFileAsAddedDiff(repositoryPath, filePath);
     }
 
     return diffLines;
   }
 
-  async getConflictFileDetails(repositoryPath: string, filePath: string): Promise<ConflictFileDetails> {
+  async getConflictFileDetails(repositoryPath: RepositoryLocation, filePath: string): Promise<ConflictFileDetails> {
     const snapshot = await this.loadConflictSnapshot(repositoryPath, filePath);
     const [status, managedState, incomingLabel] = await Promise.all([
       this.getStatus(repositoryPath),
@@ -678,7 +673,7 @@ export class GitService {
     };
   }
 
-  async resolveConflictFile(repositoryPath: string, filePath: string, input: ConflictResolutionInput): Promise<GitOperationResult> {
+  async resolveConflictFile(repositoryPath: RepositoryLocation, filePath: string, input: ConflictResolutionInput): Promise<GitOperationResult> {
     try {
       const snapshot = await this.loadConflictSnapshot(repositoryPath, filePath);
       if (snapshot.token !== input.expectedToken) {
@@ -707,16 +702,14 @@ export class GitService {
         return this.run(repositoryPath, ["rm", "-f", "--", snapshot.path]);
       }
 
-      const absolutePath = resolveRepositoryFilePath(repositoryPath, snapshot.path);
-      await mkdir(path.dirname(absolutePath), { recursive: true });
-      await writeFile(absolutePath, resolvedContent);
+      await this.writeRepositoryFile(repositoryPath, snapshot.path, resolvedContent);
       return this.run(repositoryPath, ["add", "--", snapshot.path]);
     } catch (error) {
       return gitFailure("git add", errorMessage(error, "解决冲突文件失败。"));
     }
   }
 
-  async getWorktreeFilePreview(repositoryPath: string, file: ChangedFile): Promise<FilePreview | null> {
+  async getWorktreeFilePreview(repositoryPath: RepositoryLocation, file: ChangedFile): Promise<FilePreview | null> {
     const previewPath = file.status === "deleted" ? file.oldPath ?? file.path : file.path;
     const media = previewMediaFromPath(previewPath);
     if (!media) {
@@ -731,7 +724,7 @@ export class GitService {
     }
 
     if (file.status !== "deleted") {
-      const worktreeBlob = await readWorktreeFile(repositoryPath, file.path);
+      const worktreeBlob = await this.readRepositoryFile(repositoryPath, file.path);
       if (worktreeBlob) {
         return createFilePreview(worktreeBlob, media, file.staged ? "工作区版本" : "当前工作区版本");
       }
@@ -745,15 +738,15 @@ export class GitService {
     return null;
   }
 
-  async stageFile(repositoryPath: string, filePath: string): Promise<GitOperationResult> {
+  async stageFile(repositoryPath: RepositoryLocation, filePath: string): Promise<GitOperationResult> {
     return this.run(repositoryPath, ["add", "--", filePath]);
   }
 
-  async stageAll(repositoryPath: string): Promise<GitOperationResult> {
+  async stageAll(repositoryPath: RepositoryLocation): Promise<GitOperationResult> {
     return this.run(repositoryPath, ["add", "-A"]);
   }
 
-  async unstageFile(repositoryPath: string, filePath: string): Promise<GitOperationResult> {
+  async unstageFile(repositoryPath: RepositoryLocation, filePath: string): Promise<GitOperationResult> {
     return this.runWithFallbacks(repositoryPath, [
       ["restore", "--staged", "--", filePath],
       ["reset", "--", filePath],
@@ -761,7 +754,7 @@ export class GitService {
     ]);
   }
 
-  async unstageAll(repositoryPath: string): Promise<GitOperationResult> {
+  async unstageAll(repositoryPath: RepositoryLocation): Promise<GitOperationResult> {
     return this.runWithFallbacks(repositoryPath, [
       ["restore", "--staged", "--", "."],
       ["reset"],
@@ -769,7 +762,7 @@ export class GitService {
     ]);
   }
 
-  async discardFile(repositoryPath: string, file: ChangedFile): Promise<GitOperationResult> {
+  async discardFile(repositoryPath: RepositoryLocation, file: ChangedFile): Promise<GitOperationResult> {
     if (file.staged) {
       const unstageResult = await this.unstageFile(repositoryPath, file.path);
       if (!unstageResult.ok) {
@@ -784,7 +777,7 @@ export class GitService {
     return this.run(repositoryPath, ["restore", "--", file.path]);
   }
 
-  async commit(repositoryPath: string, input: CommitInput): Promise<GitOperationResult> {
+  async commit(repositoryPath: RepositoryLocation, input: CommitInput): Promise<GitOperationResult> {
     const subject = input.subject.trim();
     if (!subject && !input.amend) {
       throw new Error("提交标题不能为空。");
@@ -817,15 +810,15 @@ export class GitService {
     };
   }
 
-  async fetch(repositoryPath: string): Promise<GitOperationResult> {
+  async fetch(repositoryPath: RepositoryLocation): Promise<GitOperationResult> {
     return this.run(repositoryPath, ["fetch", "--prune"]);
   }
 
-  async pull(repositoryPath: string): Promise<GitOperationResult> {
+  async pull(repositoryPath: RepositoryLocation): Promise<GitOperationResult> {
     return this.run(repositoryPath, ["pull", "--ff-only"]);
   }
 
-  async mergeRemote(repositoryPath: string): Promise<GitOperationResult> {
+  async mergeRemote(repositoryPath: RepositoryLocation): Promise<GitOperationResult> {
     const repositoryKey = this.mergeRepositoryKey(repositoryPath);
     if (this.activeMergeRepositories.has(repositoryKey)) {
       return gitFailure("git merge", "当前仓库正在执行合并操作，请稍候。", "Another merge operation is already running.");
@@ -868,7 +861,7 @@ export class GitService {
     }
   }
 
-  async push(repositoryPath: string): Promise<GitOperationResult> {
+  async push(repositoryPath: RepositoryLocation): Promise<GitOperationResult> {
     const status = await this.getStatus(repositoryPath).catch(() => undefined);
     if (status?.upstream || !status?.currentBranch) {
       return this.run(repositoryPath, ["push"]);
@@ -889,7 +882,7 @@ export class GitService {
     return this.run(repositoryPath, ["push", "--set-upstream", remote, status.currentBranch]);
   }
 
-  async getBranches(repositoryPath: string): Promise<BranchInfo[]> {
+  async getBranches(repositoryPath: RepositoryLocation): Promise<BranchInfo[]> {
     const [status, refsResult] = await Promise.all([
       this.getStatus(repositoryPath).catch(() => undefined),
       this.run(repositoryPath, [
@@ -927,7 +920,7 @@ export class GitService {
       .sort(compareBranches);
   }
 
-  async createBranch(repositoryPath: string, branchName: string, checkout: boolean, startPoint?: string): Promise<GitOperationResult> {
+  async createBranch(repositoryPath: RepositoryLocation, branchName: string, checkout: boolean, startPoint?: string): Promise<GitOperationResult> {
     const name = branchName.trim();
     if (!name) {
       throw new Error("分支名不能为空。");
@@ -952,7 +945,7 @@ export class GitService {
     ]);
   }
 
-  async amendLastCommitMessage(repositoryPath: string, input: CommitMessageInput): Promise<GitOperationResult> {
+  async amendLastCommitMessage(repositoryPath: RepositoryLocation, input: CommitMessageInput): Promise<GitOperationResult> {
     const subject = input.subject.trim();
     if (!subject) {
       throw new Error("提交标题不能为空。");
@@ -966,11 +959,11 @@ export class GitService {
     return this.run(repositoryPath, args);
   }
 
-  async resetLastCommit(repositoryPath: string, mode: Exclude<GitResetMode, "hard">): Promise<GitOperationResult> {
+  async resetLastCommit(repositoryPath: RepositoryLocation, mode: Exclude<GitResetMode, "hard">): Promise<GitOperationResult> {
     return this.resetToCommit(repositoryPath, "HEAD~1", mode);
   }
 
-  async resetToCommit(repositoryPath: string, hash: string, mode: GitResetMode): Promise<GitOperationResult> {
+  async resetToCommit(repositoryPath: RepositoryLocation, hash: string, mode: GitResetMode): Promise<GitOperationResult> {
     const target = hash.trim();
     if (!target) {
       throw new Error("提交 hash 不能为空。");
@@ -979,7 +972,7 @@ export class GitService {
     return this.run(repositoryPath, ["reset", `--${mode}`, target], { timeoutMs: resetCommandTimeoutMs });
   }
 
-  async revertCommit(repositoryPath: string, hash: string): Promise<GitOperationResult> {
+  async revertCommit(repositoryPath: RepositoryLocation, hash: string): Promise<GitOperationResult> {
     const target = hash.trim();
     if (!target) {
       throw new Error("提交 hash 不能为空。");
@@ -988,7 +981,7 @@ export class GitService {
     return this.run(repositoryPath, ["revert", "--no-edit", target]);
   }
 
-  async cherryPickCommit(repositoryPath: string, hash: string): Promise<GitOperationResult> {
+  async cherryPickCommit(repositoryPath: RepositoryLocation, hash: string): Promise<GitOperationResult> {
     const target = hash.trim();
     if (!target) {
       throw new Error("提交 hash 不能为空。");
@@ -997,7 +990,7 @@ export class GitService {
     return this.run(repositoryPath, ["cherry-pick", target]);
   }
 
-  async switchBranch(repositoryPath: string, branch: BranchInfo): Promise<GitOperationResult> {
+  async switchBranch(repositoryPath: RepositoryLocation, branch: BranchInfo): Promise<GitOperationResult> {
     if (branch.type === "remote") {
       return this.runWithFallbacks(repositoryPath, [
         ["switch", "--track", branch.name],
@@ -1013,7 +1006,7 @@ export class GitService {
     ]);
   }
 
-  async getMergePreview(repositoryPath: string, targetBranch: string): Promise<GitMergePreview> {
+  async getMergePreview(repositoryPath: RepositoryLocation, targetBranch: string): Promise<GitMergePreview> {
     if (this.activeMergeRepositories.has(this.mergeRepositoryKey(repositoryPath))) {
       throw new Error("当前仓库正在执行合并操作，请稍候。");
     }
@@ -1021,7 +1014,7 @@ export class GitService {
     return this.buildMergePreview(repositoryPath, targetBranch);
   }
 
-  async mergeCurrentBranch(repositoryPath: string, targetBranch: string, strategy: GitMergeStrategy): Promise<GitOperationResult> {
+  async mergeCurrentBranch(repositoryPath: RepositoryLocation, targetBranch: string, strategy: GitMergeStrategy): Promise<GitOperationResult> {
     const repositoryKey = this.mergeRepositoryKey(repositoryPath);
     if (this.activeMergeRepositories.has(repositoryKey)) {
       return gitFailure("git merge", "当前仓库正在执行合并操作，请稍候。", "Another merge operation is already running.");
@@ -1092,7 +1085,7 @@ export class GitService {
     }
   }
 
-  async continueMerge(repositoryPath: string): Promise<GitOperationResult> {
+  async continueMerge(repositoryPath: RepositoryLocation): Promise<GitOperationResult> {
     const repositoryKey = this.mergeRepositoryKey(repositoryPath);
     if (this.activeMergeRepositories.has(repositoryKey)) {
       return gitFailure("git merge --continue", "当前仓库正在执行合并操作，请稍候。", "Another merge operation is already running.");
@@ -1122,7 +1115,7 @@ export class GitService {
     }
   }
 
-  async abortMerge(repositoryPath: string): Promise<GitOperationResult> {
+  async abortMerge(repositoryPath: RepositoryLocation): Promise<GitOperationResult> {
     const repositoryKey = this.mergeRepositoryKey(repositoryPath);
     if (this.activeMergeRepositories.has(repositoryKey)) {
       return gitFailure("git merge --abort", "当前仓库正在执行合并操作，请稍候。", "Another merge operation is already running.");
@@ -1162,7 +1155,7 @@ export class GitService {
     }
   }
 
-  async deleteBranch(repositoryPath: string, branchName: string): Promise<GitOperationResult> {
+  async deleteBranch(repositoryPath: RepositoryLocation, branchName: string): Promise<GitOperationResult> {
     const name = branchName.trim();
     if (!name) {
       throw new Error("分支名不能为空。");
@@ -1177,7 +1170,7 @@ export class GitService {
     return found;
   }
 
-  private async runWithFallbacks(repositoryPath: string, commands: string[][]): Promise<GitOperationResult> {
+  private async runWithFallbacks(repositoryPath: RepositoryLocation, commands: string[][]): Promise<GitOperationResult> {
     let lastResult: GitOperationResult | undefined;
 
     for (const args of commands) {
@@ -1191,7 +1184,7 @@ export class GitService {
     return lastResult!;
   }
 
-  private async loadConflictSnapshot(repositoryPath: string, filePath: string): Promise<ConflictSnapshot> {
+  private async loadConflictSnapshot(repositoryPath: RepositoryLocation, filePath: string): Promise<ConflictSnapshot> {
     const normalizedPath = toGitPath(filePath.trim());
     if (!normalizedPath) {
       throw new Error("冲突文件路径不能为空。");
@@ -1207,7 +1200,7 @@ export class GitService {
       this.readConflictStage(repositoryPath, normalizedPath, 1),
       this.readConflictStage(repositoryPath, normalizedPath, 2),
       this.readConflictStage(repositoryPath, normalizedPath, 3),
-      readWorktreeFile(repositoryPath, normalizedPath)
+      this.readRepositoryFile(repositoryPath, normalizedPath)
     ]);
     const token = createHash("sha256")
       .update(unmergedResult.stdout)
@@ -1227,12 +1220,12 @@ export class GitService {
     };
   }
 
-  private async readConflictStage(repositoryPath: string, filePath: string, stage: 1 | 2 | 3): Promise<Buffer | null> {
+  private async readConflictStage(repositoryPath: RepositoryLocation, filePath: string, stage: 1 | 2 | 3): Promise<Buffer | null> {
     const result = await this.runBinary(repositoryPath, ["show", `:${stage}:${filePath}`], { timeoutMs: 10_000 });
     return result.ok ? result.stdout : null;
   }
 
-  private async getMergeHeadLabel(repositoryPath: string): Promise<string | undefined> {
+  private async getMergeHeadLabel(repositoryPath: RepositoryLocation): Promise<string | undefined> {
     const result = await this.run(repositoryPath, ["for-each-ref", "--points-at", "MERGE_HEAD", "--format=%(refname:short)"]);
     if (!result.ok) {
       return undefined;
@@ -1242,7 +1235,7 @@ export class GitService {
     return refs.find((ref) => !ref.includes("/")) ?? refs[0];
   }
 
-  private async buildMergePreview(repositoryPath: string, targetBranch: string): Promise<GitMergePreview> {
+  private async buildMergePreview(repositoryPath: RepositoryLocation, targetBranch: string): Promise<GitMergePreview> {
     const status = await this.getStatus(repositoryPath);
     if (status.operationState || status.hasConflicts) {
       throw new Error("当前已有 Git 操作或冲突未完成，请先继续或终止当前操作。");
@@ -1312,19 +1305,23 @@ export class GitService {
     };
   }
 
-  private mergeRepositoryKey(repositoryPath: string): string {
-    const resolvedPath = path.resolve(repositoryPath);
+  private mergeRepositoryKey(repositoryPath: RepositoryLocation): string {
+    const target = normalizeRepositoryTarget(repositoryPath);
+    if (target.remote) {
+      return [sshDestination(target.remote), target.remote.port ?? 22, path.posix.normalize(target.path)].join("|");
+    }
+    const resolvedPath = path.resolve(target.path);
     return process.platform === "win32" ? resolvedPath.toLowerCase() : resolvedPath;
   }
 
-  private async switchToLocalBranch(repositoryPath: string, branchName: string): Promise<GitOperationResult> {
+  private async switchToLocalBranch(repositoryPath: RepositoryLocation, branchName: string): Promise<GitOperationResult> {
     return this.runWithFallbacks(repositoryPath, [
       ["switch", branchName],
       ["checkout", branchName]
     ]);
   }
 
-  private async managedMergeStatePath(repositoryPath: string): Promise<string | undefined> {
+  private async managedMergeStatePath(repositoryPath: RepositoryLocation): Promise<string | undefined> {
     const result = await this.run(repositoryPath, ["rev-parse", "--git-path", managedMergeStateFile]);
     if (!result.ok) {
       return undefined;
@@ -1334,17 +1331,21 @@ export class GitService {
     if (!statePath) {
       return undefined;
     }
-    return path.isAbsolute(statePath) ? statePath : path.resolve(repositoryPath, statePath);
+    return resolveGitReportedPath(repositoryPath, statePath);
   }
 
-  private async readManagedMergeState(repositoryPath: string): Promise<ManagedMergeState | undefined> {
+  private async readManagedMergeState(repositoryPath: RepositoryLocation): Promise<ManagedMergeState | undefined> {
     const statePath = await this.managedMergeStatePath(repositoryPath);
     if (!statePath) {
       return undefined;
     }
 
     try {
-      const parsed = JSON.parse(await readFile(statePath, "utf8")) as Partial<ManagedMergeState>;
+      const content = await this.readTargetFile(repositoryPath, statePath);
+      if (!content) {
+        return undefined;
+      }
+      const parsed = JSON.parse(decodeGitOutput(content)) as Partial<ManagedMergeState>;
       if (typeof parsed.sourceBranch !== "string" || typeof parsed.targetBranch !== "string" || typeof parsed.startedAt !== "string") {
         return undefined;
       }
@@ -1358,22 +1359,22 @@ export class GitService {
     }
   }
 
-  private async writeManagedMergeState(repositoryPath: string, state: ManagedMergeState): Promise<void> {
+  private async writeManagedMergeState(repositoryPath: RepositoryLocation, state: ManagedMergeState): Promise<void> {
     const statePath = await this.managedMergeStatePath(repositoryPath);
     if (!statePath) {
       throw new Error("无法定位 Git 合并状态目录。");
     }
-    await writeFile(statePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
+    await this.writeTargetFile(repositoryPath, statePath, Buffer.from(`${JSON.stringify(state, null, 2)}\n`, "utf8"));
   }
 
-  private async clearManagedMergeState(repositoryPath: string): Promise<void> {
+  private async clearManagedMergeState(repositoryPath: RepositoryLocation): Promise<void> {
     const statePath = await this.managedMergeStatePath(repositoryPath);
     if (!statePath) {
       return;
     }
 
     try {
-      await unlink(statePath);
+      await this.removeTargetFile(repositoryPath, statePath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
         return;
@@ -1381,7 +1382,86 @@ export class GitService {
     }
   }
 
-  private async getPushRemote(repositoryPath: string, branchName: string): Promise<string | undefined> {
+  private async readTargetFile(repositoryPath: RepositoryLocation, targetPath: string): Promise<Buffer | null> {
+    const target = normalizeRepositoryTarget(repositoryPath);
+    if (!target.remote) {
+      try {
+        const info = await stat(targetPath);
+        return info.isFile() ? readFile(targetPath) : null;
+      } catch {
+        return null;
+      }
+    }
+
+    const result = await runSshShell(target.remote, `test -f ${shellQuote(targetPath)} && cat -- ${shellQuote(targetPath)}`, { timeoutMs: 20_000 });
+    return result.ok ? result.stdout : null;
+  }
+
+  private async writeTargetFile(repositoryPath: RepositoryLocation, targetPath: string, content: Buffer): Promise<void> {
+    const target = normalizeRepositoryTarget(repositoryPath);
+    if (!target.remote) {
+      await mkdir(path.dirname(targetPath), { recursive: true });
+      await writeFile(targetPath, content);
+      return;
+    }
+
+    const targetDirectory = path.posix.dirname(targetPath);
+    const result = await runSshShell(
+      target.remote,
+      `mkdir -p -- ${shellQuote(targetDirectory)} && cat > ${shellQuote(targetPath)}`,
+      { timeoutMs: 20_000, stdin: content }
+    );
+    if (!result.ok) {
+      throw new Error(result.messageZh ?? "无法写入远程文件。");
+    }
+  }
+
+  private async removeTargetFile(repositoryPath: RepositoryLocation, targetPath: string): Promise<void> {
+    const target = normalizeRepositoryTarget(repositoryPath);
+    if (!target.remote) {
+      try {
+        await unlink(targetPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+          throw error;
+        }
+      }
+      return;
+    }
+
+    const result = await runSshShell(target.remote, `rm -f -- ${shellQuote(targetPath)}`, { timeoutMs: 10_000 });
+    if (!result.ok) {
+      throw new Error(result.messageZh ?? "无法删除远程状态文件。");
+    }
+  }
+
+  private async readRepositoryFile(repositoryPath: RepositoryLocation, filePath: string): Promise<Buffer | null> {
+    return this.readTargetFile(repositoryPath, resolveRepositoryFilePath(repositoryPath, filePath));
+  }
+
+  private async writeRepositoryFile(repositoryPath: RepositoryLocation, filePath: string, content: Buffer): Promise<void> {
+    await this.writeTargetFile(repositoryPath, resolveRepositoryFilePath(repositoryPath, filePath), content);
+  }
+
+  private async isUntrackedFile(repositoryPath: RepositoryLocation, filePath: string): Promise<boolean> {
+    const result = await this.run(repositoryPath, ["ls-files", "--others", "--exclude-standard", "--", filePath]);
+    return result.ok && result.stdout.split(/\r?\n/).filter(Boolean).includes(filePath);
+  }
+
+  private async readFileAsAddedDiff(repositoryPath: RepositoryLocation, filePath: string): Promise<DiffLine[]> {
+    const content = await this.readRepositoryFile(repositoryPath, filePath);
+    if (!content || isBinaryBuffer(content)) {
+      return [];
+    }
+
+    return decodeGitOutput(content).split(/\r?\n/).map((line, index) => ({
+      type: "add",
+      newLineNumber: index + 1,
+      content: line
+    }));
+  }
+
+  private async getPushRemote(repositoryPath: RepositoryLocation, branchName: string): Promise<string | undefined> {
     const configuredRemote = await this.getConfiguredPushRemote(repositoryPath, branchName);
     if (configuredRemote) {
       return configuredRemote;
@@ -1400,7 +1480,7 @@ export class GitService {
     return remotes.length === 1 ? remotes[0] : undefined;
   }
 
-  private async getConfiguredPushRemote(repositoryPath: string, branchName: string): Promise<string | undefined> {
+  private async getConfiguredPushRemote(repositoryPath: RepositoryLocation, branchName: string): Promise<string | undefined> {
     const configuredKeys = [`branch.${branchName}.pushRemote`, "remote.pushDefault", `branch.${branchName}.remote`];
     for (const key of configuredKeys) {
       const remote = await this.getGitConfigValue(repositoryPath, key);
@@ -1412,7 +1492,7 @@ export class GitService {
     return undefined;
   }
 
-  private async getGitConfigValue(repositoryPath: string, key: string): Promise<string | undefined> {
+  private async getGitConfigValue(repositoryPath: RepositoryLocation, key: string): Promise<string | undefined> {
     const result = await this.run(repositoryPath, ["config", "--get", key]);
     if (!result.ok) {
       return undefined;
@@ -1421,7 +1501,7 @@ export class GitService {
     return result.stdout.trim() || undefined;
   }
 
-  private async getHistoryRevisions(repositoryPath: string, status?: GitStatusSummary, filter: GitHistoryFilter = { mode: "auto" }): Promise<string[]> {
+  private async getHistoryRevisions(repositoryPath: RepositoryLocation, status?: GitStatusSummary, filter: GitHistoryFilter = { mode: "auto" }): Promise<string[]> {
     if (filter.mode === "all") {
       const refs = await this.getHistoryRefs(repositoryPath).catch(() => []);
       return refs.length > 0 ? refs.map((ref) => ref.id) : ["HEAD"];
@@ -1442,7 +1522,7 @@ export class GitService {
     return Array.from(revisions);
   }
 
-  private async getSingleCommit(repositoryPath: string, hash: string): Promise<CommitNode[]> {
+  private async getSingleCommit(repositoryPath: RepositoryLocation, hash: string): Promise<CommitNode[]> {
     const format = [
       "%H",
       "%P",
@@ -1473,7 +1553,7 @@ export class GitService {
     return parseCommitLog(result.stdout);
   }
 
-  private async readGitBlob(repositoryPath: string, revision: string, filePath: string, staged = false): Promise<Buffer | null> {
+  private async readGitBlob(repositoryPath: RepositoryLocation, revision: string, filePath: string, staged = false): Promise<Buffer | null> {
     const gitPath = toGitPath(filePath);
     const objectName = staged ? `:${gitPath}` : `${revision}:${gitPath}`;
     const result = await this.runBinary(repositoryPath, ["show", objectName], { timeoutMs: 10_000 });
@@ -1494,6 +1574,191 @@ function gitFailure(command: string, messageZh: string, stderr = ""): GitOperati
     exitCode: -1,
     messageZh
   };
+}
+
+export function normalizeRepositoryTarget(location: RepositoryLocation): RepositoryTarget {
+  if (typeof location === "string") {
+    return { path: location };
+  }
+  if (!location || typeof location.path !== "string" || !location.path.trim()) {
+    throw new Error("仓库路径不能为空。");
+  }
+  if (!location.remote) {
+    return { path: location.path };
+  }
+  if (
+    location.remote.type !== "ssh" ||
+    typeof location.remote.host !== "string" ||
+    (location.remote.username !== undefined && typeof location.remote.username !== "string") ||
+    (location.remote.port !== undefined && typeof location.remote.port !== "number") ||
+    (location.remote.identityFile !== undefined && typeof location.remote.identityFile !== "string")
+  ) {
+    throw new Error("SSH 连接信息格式不正确。");
+  }
+
+  const input: RemoteProjectInput = {
+    host: location.remote.host,
+    username: location.remote.username,
+    port: location.remote.port,
+    repositoryPath: location.path,
+    identityFile: location.remote.identityFile
+  };
+  const validationError = validateRemoteProjectInput(input);
+  if (validationError) {
+    throw new Error(validationError);
+  }
+
+  return {
+    path: input.repositoryPath.trim().replace(/\\/g, "/"),
+    remote: {
+      type: "ssh",
+      host: input.host.trim(),
+      username: input.username?.trim() || undefined,
+      port: input.port,
+      identityFile: input.identityFile?.trim() || undefined
+    }
+  };
+}
+
+export function sshDestination(connection: SshConnection): string {
+  return connection.username ? `${connection.username}@${connection.host}` : connection.host;
+}
+
+export function buildSshArgs(connection: SshConnection, batchMode = false): string[] {
+  const args = ["-o", "ConnectTimeout=12", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=2"];
+  if (batchMode) {
+    args.push("-T", "-o", "BatchMode=yes", "-o", "NumberOfPasswordPrompts=0");
+  }
+  if (connection.port) {
+    args.push("-p", String(connection.port));
+  }
+  if (connection.identityFile) {
+    args.push("-i", connection.identityFile);
+  }
+  args.push(sshDestination(connection));
+  return args;
+}
+
+function buildRemoteGitCommand(repositoryPath: string, args: string[]): string {
+  return [
+    "env",
+    "GIT_TERMINAL_PROMPT=0",
+    "GIT_PAGER=cat",
+    "LC_ALL=C.UTF-8",
+    "LANG=C.UTF-8",
+    "git",
+    "-c",
+    "core.quotepath=false",
+    "-c",
+    "i18n.commitEncoding=utf-8",
+    "-c",
+    "i18n.logOutputEncoding=utf-8",
+    "-C",
+    repositoryPath,
+    ...args
+  ]
+    .map(shellQuote)
+    .join(" ");
+}
+
+export function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`;
+}
+
+function validateRemoteProjectInput(input: RemoteProjectInput): string | undefined {
+  const host = input.host.trim();
+  const username = input.username?.trim();
+  const repositoryPath = input.repositoryPath.trim().replace(/\\/g, "/");
+  if (!host) {
+    return "请输入 SSH 主机或 SSH 配置别名。";
+  }
+  if (!/^[a-z0-9._:-]+$/i.test(host) || host.startsWith("-")) {
+    return "SSH 主机格式不正确。";
+  }
+  if (username && !/^[a-z0-9._-]+$/i.test(username)) {
+    return "SSH 用户名格式不正确。";
+  }
+  if (input.port !== undefined && (!Number.isInteger(input.port) || input.port < 1 || input.port > 65535)) {
+    return "SSH 端口必须是 1 到 65535 之间的整数。";
+  }
+  if (!repositoryPath.startsWith("/")) {
+    return "远程仓库路径必须是服务器上的绝对路径。";
+  }
+  if (repositoryPath.includes("\0")) {
+    return "远程仓库路径包含无效字符。";
+  }
+  return undefined;
+}
+
+function runSshShell(
+  connection: SshConnection,
+  remoteCommand: string,
+  options: { timeoutMs?: number; stdin?: Buffer } = {}
+): Promise<Omit<GitOperationResult, "stdout"> & { stdout: Buffer }> {
+  return new Promise((resolve) => {
+    const command = `ssh ${sshDestination(connection)} -- ${remoteCommand}`;
+    const child = spawn("ssh", [...buildSshArgs(connection, true), remoteCommand], {
+      cwd: process.cwd(),
+      env: createGitEnv(),
+      shell: false,
+      windowsHide: true
+    });
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+    let settled = false;
+    const finish = (result: Omit<GitOperationResult, "stdout"> & { stdout: Buffer }) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+      resolve(result);
+    };
+    const timeoutId = options.timeoutMs
+      ? setTimeout(() => {
+          child.kill();
+          const timeoutText = `SSH command timed out after ${Math.round((options.timeoutMs ?? 0) / 1000)}s.`;
+          const stderrText = decodeGitOutput(Buffer.concat(stderrChunks));
+          finish({
+            ok: false,
+            command,
+            stdout: Buffer.concat(stdoutChunks),
+            stderr: stderrText ? `${stderrText}\n${timeoutText}` : timeoutText,
+            exitCode: -1,
+            messageZh: "远程文件操作超时，请检查 SSH 连接后重试。"
+          });
+        }, options.timeoutMs)
+      : undefined;
+
+    child.stdout.on("data", (chunk: Buffer) => stdoutChunks.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderrChunks.push(chunk));
+    child.stdin.on("error", () => undefined);
+    child.on("error", (error) => {
+      finish({
+        ok: false,
+        command,
+        stdout: Buffer.concat(stdoutChunks),
+        stderr: error.message,
+        exitCode: -1,
+        messageZh: "无法执行 SSH，请确认本机已安装 OpenSSH 并加入 PATH。"
+      });
+    });
+    child.on("close", (code) => {
+      const exitCode = code ?? -1;
+      const stderr = decodeGitOutput(Buffer.concat(stderrChunks));
+      finish({
+        ok: exitCode === 0,
+        command,
+        stdout: Buffer.concat(stdoutChunks),
+        stderr,
+        exitCode,
+        messageZh: exitCode === 0 ? undefined : toChineseSshError(stderr)
+      });
+    });
+    child.stdin.end(options.stdin);
+  });
 }
 
 function validateRemoteMergeStatus(status: GitStatusSummary, requireDivergence = false): GitOperationResult | undefined {
@@ -1551,18 +1816,26 @@ function containsConflictMarkers(content: string): boolean {
   return /^<<<<<<<[^\r\n]*\r?$[\s\S]*?^======\=\r?$[\s\S]*?^>>>>>>>[^\r\n]*\r?$/m.test(content);
 }
 
-function resolveRepositoryFilePath(repositoryPath: string, filePath: string): string {
-  if (path.isAbsolute(filePath)) {
+function resolveRepositoryFilePath(repositoryPath: RepositoryLocation, filePath: string): string {
+  const target = normalizeRepositoryTarget(repositoryPath);
+  const pathApi = target.remote ? path.posix : path;
+  if (pathApi.isAbsolute(filePath)) {
     throw new Error("文件路径必须位于当前仓库内。");
   }
 
-  const root = path.resolve(repositoryPath);
-  const resolved = path.resolve(root, filePath);
-  const relative = path.relative(root, resolved);
-  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+  const root = pathApi.resolve(target.path);
+  const resolved = pathApi.resolve(root, filePath);
+  const relative = pathApi.relative(root, resolved);
+  if (relative === ".." || relative.startsWith(`..${pathApi.sep}`) || pathApi.isAbsolute(relative)) {
     throw new Error("文件路径超出当前仓库范围。");
   }
   return resolved;
+}
+
+function resolveGitReportedPath(repositoryPath: RepositoryLocation, reportedPath: string): string {
+  const target = normalizeRepositoryTarget(repositoryPath);
+  const pathApi = target.remote ? path.posix : path;
+  return pathApi.isAbsolute(reportedPath) ? pathApi.normalize(reportedPath) : pathApi.resolve(target.path, reportedPath);
 }
 
 function parseStatus(output: string): GitStatusSummary {
@@ -1830,47 +2103,6 @@ function compareHistoryRefs(left: GitHistoryRef, right: GitHistoryRef): number {
   return left.name.localeCompare(right.name, "zh-CN", { sensitivity: "base" });
 }
 
-async function isUntrackedFile(repositoryPath: string, filePath: string): Promise<boolean> {
-  const result = await new GitService().run(repositoryPath, ["ls-files", "--others", "--exclude-standard", "--", filePath]);
-  if (!result.ok) {
-    return false;
-  }
-
-  return result.stdout
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .includes(filePath);
-}
-
-async function readFileAsAddedDiff(repositoryPath: string, filePath: string): Promise<DiffLine[]> {
-  const absolutePath = path.join(repositoryPath, filePath);
-  const info = await stat(absolutePath);
-  if (!info.isFile()) {
-    return [];
-  }
-
-  const content = await readFile(absolutePath, "utf8");
-  return content.split(/\r?\n/).map((line, index) => ({
-    type: "add",
-    newLineNumber: index + 1,
-    content: line
-  }));
-}
-
-async function readWorktreeFile(repositoryPath: string, filePath: string): Promise<Buffer | null> {
-  try {
-    const absolutePath = path.join(repositoryPath, filePath);
-    const info = await stat(absolutePath);
-    if (!info.isFile()) {
-      return null;
-    }
-
-    return readFile(absolutePath);
-  } catch {
-    return null;
-  }
-}
-
 function createFilePreview(content: Buffer, media: { type: FilePreview["type"]; mimeType: string }, sourceDescription: string): FilePreview {
   const maxBytes = media.type === "video" ? maxPreviewVideoBytes : maxPreviewImageBytes;
   if (content.byteLength > maxBytes) {
@@ -2090,6 +2322,32 @@ function formatIsoDate(value?: string): string {
 
 function isEmptyRepositoryError(stderr: string): boolean {
   return stderr.includes("does not have any commits yet") || stderr.includes("bad default revision");
+}
+
+function toChineseSshError(stderr: string): string {
+  const text = stderr.toLowerCase();
+  if (text.includes("host key verification failed")) {
+    return "SSH 主机指纹尚未确认或已发生变化，请先在系统终端连接该主机并核对指纹。";
+  }
+  if (text.includes("permission denied")) {
+    return "SSH 认证失败，请检查用户名、SSH Agent、私钥和服务器授权。";
+  }
+  if (text.includes("could not resolve hostname") || text.includes("name or service not known")) {
+    return "无法解析 SSH 主机，请检查主机名或 SSH 配置别名。";
+  }
+  if (text.includes("connection refused")) {
+    return "SSH 连接被服务器拒绝，请检查主机、端口和 SSH 服务状态。";
+  }
+  if (text.includes("connection timed out") || text.includes("operation timed out")) {
+    return "SSH 连接超时，请检查服务器地址、端口和网络。";
+  }
+  if (text.includes("not a git repository")) {
+    return "远程路径不是 Git 仓库。";
+  }
+  if (text.includes("git: command not found") || text.includes("git: not found")) {
+    return "远程服务器未安装 Git，或 Git 不在远程 PATH 中。";
+  }
+  return toChineseGitError("", stderr);
 }
 
 function toChineseGitError(stdout: string, stderr: string): string {

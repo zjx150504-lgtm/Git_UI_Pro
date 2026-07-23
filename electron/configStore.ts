@@ -6,11 +6,28 @@ export interface GitProject {
   id: string;
   name: string;
   path: string;
+  remote?: SshConnection;
   groupId?: string;
   favorite: boolean;
   lastOpenedAt?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface SshConnection {
+  type: "ssh";
+  host: string;
+  username?: string;
+  port?: number;
+  identityFile?: string;
+}
+
+export interface RemoteProjectInput {
+  host: string;
+  username?: string;
+  port?: number;
+  repositoryPath: string;
+  identityFile?: string;
 }
 
 export interface ProjectGroup {
@@ -87,7 +104,7 @@ export class ConfigStore {
   async addProject(repositoryPath: string): Promise<GitProject> {
     const config = await this.read();
     const normalizedPath = path.resolve(repositoryPath);
-    const existing = config.projects.find((project) => path.resolve(project.path) === normalizedPath);
+    const existing = config.projects.find((project) => !project.remote && path.resolve(project.path) === normalizedPath);
 
     if (existing) {
       return existing;
@@ -98,6 +115,50 @@ export class ConfigStore {
       id: randomUUID(),
       name: path.basename(normalizedPath),
       path: normalizedPath,
+      favorite: false,
+      lastOpenedAt: now,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    config.projects = placeProjectAfterPinned(config.projects, project);
+    config.recentProjectIds = [project.id, ...config.recentProjectIds.filter((id) => id !== project.id)].slice(0, 20);
+    await this.write(config);
+
+    return project;
+  }
+
+  async addRemoteProject(input: RemoteProjectInput, repositoryRoot: string): Promise<GitProject> {
+    const config = await this.read();
+    const remote: SshConnection = {
+      type: "ssh",
+      host: input.host.trim(),
+      username: input.username?.trim() || undefined,
+      port: input.port,
+      identityFile: input.identityFile?.trim() || undefined
+    };
+    const normalizedPath = normalizeRemotePath(repositoryRoot);
+    const existing = config.projects.find(
+      (project) => project.remote && remoteProjectKey(project.remote, project.path) === remoteProjectKey(remote, normalizedPath)
+    );
+
+    if (existing) {
+      const updatedProject: GitProject = {
+        ...existing,
+        remote,
+        updatedAt: new Date().toISOString()
+      };
+      config.projects = config.projects.map((project) => (project.id === existing.id ? updatedProject : project));
+      await this.write(config);
+      return updatedProject;
+    }
+
+    const now = new Date().toISOString();
+    const project: GitProject = {
+      id: randomUUID(),
+      name: path.posix.basename(normalizedPath) || remote.host,
+      path: normalizedPath,
+      remote,
       favorite: false,
       lastOpenedAt: now,
       createdAt: now,
@@ -149,6 +210,20 @@ export class ConfigStore {
     config.recentProjectIds = config.recentProjectIds.filter((id) => id !== projectId);
     await this.write(config);
   }
+}
+
+function normalizeRemotePath(repositoryPath: string): string {
+  const normalized = path.posix.normalize(repositoryPath.trim().replace(/\\/g, "/"));
+  return normalized.length > 1 ? normalized.replace(/\/$/, "") : normalized;
+}
+
+function remoteProjectKey(remote: SshConnection, repositoryPath: string): string {
+  return [
+    remote.host.trim().toLowerCase(),
+    remote.username?.trim().toLowerCase() ?? "",
+    remote.port ?? 22,
+    normalizeRemotePath(repositoryPath)
+  ].join("\u0000");
 }
 
 function placeProjectAfterPinned(projects: GitProject[], project: GitProject): GitProject[] {

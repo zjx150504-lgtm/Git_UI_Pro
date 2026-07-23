@@ -2,8 +2,8 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, shell, type Web
 import path from "node:path";
 import { existsSync } from "node:fs";
 import * as pty from "@homebridge/node-pty-prebuilt-multiarch";
-import { ConfigStore } from "./configStore";
-import { GitService } from "./gitService";
+import { ConfigStore, type RemoteProjectInput } from "./configStore";
+import { buildSshArgs, GitService, normalizeRepositoryTarget, shellQuote, sshDestination, type RepositoryLocation } from "./gitService";
 
 let mainWindow: BrowserWindow | null = null;
 let configStore: ConfigStore;
@@ -75,7 +75,7 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("window:getState", () => getWindowState());
-  ipcMain.handle("terminal:start", (event, repositoryPath: string) => startTerminalSession(event.sender, repositoryPath));
+  ipcMain.handle("terminal:start", (event, repositoryPath: RepositoryLocation) => startTerminalSession(event.sender, repositoryPath));
   ipcMain.handle("terminal:write", (_event, sessionId: string, data: string) => writeTerminalSession(sessionId, data));
   ipcMain.handle("terminal:resize", (_event, sessionId: string, cols: number, rows: number) => resizeTerminalSession(sessionId, cols, rows));
   ipcMain.handle("terminal:dispose", (_event, sessionId: string) => disposeTerminalSession(sessionId));
@@ -91,11 +91,30 @@ function registerIpc(): void {
     return result.canceled ? null : result.filePaths[0];
   });
 
+  ipcMain.handle("dialog:chooseIdentityFile", async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      properties: ["openFile"],
+      title: "选择 SSH 私钥"
+    });
+
+    return result.canceled ? null : result.filePaths[0];
+  });
+
   ipcMain.handle("projects:list", () => configStore.listProjects());
 
   ipcMain.handle("projects:add", async (_event, directoryPath: string) => {
     const repositoryRoot = await gitService.getRepositoryRoot(directoryPath);
     return configStore.addProject(repositoryRoot);
+  });
+
+  ipcMain.handle("projects:testRemote", (_event, input: RemoteProjectInput) => gitService.testRemoteRepository(input));
+
+  ipcMain.handle("projects:addRemote", async (_event, input: RemoteProjectInput) => {
+    const result = await gitService.testRemoteRepository(input);
+    if (!result.ok || !result.repositoryRoot) {
+      throw new Error([result.messageZh ?? "无法连接远程 Git 仓库。", result.stderr.trim()].filter(Boolean).join("\n"));
+    }
+    return configStore.addRemoteProject(input, result.repositoryRoot);
   });
 
   ipcMain.handle("projects:scan", async (_event, rootPath: string) => {
@@ -121,58 +140,58 @@ function registerIpc(): void {
     return true;
   });
 
-  ipcMain.handle("git:getStatus", (_event, repositoryPath: string) => gitService.getStatus(repositoryPath));
-  ipcMain.handle("git:getHistory", (_event, repositoryPath: string, filter) => gitService.getHistory(repositoryPath, filter));
-  ipcMain.handle("git:getHistoryRefs", (_event, repositoryPath: string) => gitService.getHistoryRefs(repositoryPath));
-  ipcMain.handle("git:getCommitDetails", (_event, repositoryPath: string, hash: string) => gitService.getCommitDetails(repositoryPath, hash));
-  ipcMain.handle("git:getCommitDiff", (_event, repositoryPath: string, hash: string, filePath?: string) => gitService.getCommitDiff(repositoryPath, hash, filePath));
-  ipcMain.handle("git:getCommitFilePreview", (_event, repositoryPath: string, hash: string, file) => gitService.getCommitFilePreview(repositoryPath, hash, file));
-  ipcMain.handle("git:getWorktree", (_event, repositoryPath: string) => gitService.getWorktree(repositoryPath));
-  ipcMain.handle("git:getWorktreeDiff", (_event, repositoryPath: string, filePath: string, staged: boolean) =>
+  ipcMain.handle("git:getStatus", (_event, repositoryPath: RepositoryLocation) => gitService.getStatus(repositoryPath));
+  ipcMain.handle("git:getHistory", (_event, repositoryPath: RepositoryLocation, filter) => gitService.getHistory(repositoryPath, filter));
+  ipcMain.handle("git:getHistoryRefs", (_event, repositoryPath: RepositoryLocation) => gitService.getHistoryRefs(repositoryPath));
+  ipcMain.handle("git:getCommitDetails", (_event, repositoryPath: RepositoryLocation, hash: string) => gitService.getCommitDetails(repositoryPath, hash));
+  ipcMain.handle("git:getCommitDiff", (_event, repositoryPath: RepositoryLocation, hash: string, filePath?: string) => gitService.getCommitDiff(repositoryPath, hash, filePath));
+  ipcMain.handle("git:getCommitFilePreview", (_event, repositoryPath: RepositoryLocation, hash: string, file) => gitService.getCommitFilePreview(repositoryPath, hash, file));
+  ipcMain.handle("git:getWorktree", (_event, repositoryPath: RepositoryLocation) => gitService.getWorktree(repositoryPath));
+  ipcMain.handle("git:getWorktreeDiff", (_event, repositoryPath: RepositoryLocation, filePath: string, staged: boolean) =>
     gitService.getWorktreeDiff(repositoryPath, filePath, staged)
   );
-  ipcMain.handle("git:getWorktreeFilePreview", (_event, repositoryPath: string, file) => gitService.getWorktreeFilePreview(repositoryPath, file));
-  ipcMain.handle("git:getConflictFileDetails", (_event, repositoryPath: string, filePath: string) =>
+  ipcMain.handle("git:getWorktreeFilePreview", (_event, repositoryPath: RepositoryLocation, file) => gitService.getWorktreeFilePreview(repositoryPath, file));
+  ipcMain.handle("git:getConflictFileDetails", (_event, repositoryPath: RepositoryLocation, filePath: string) =>
     gitService.getConflictFileDetails(repositoryPath, filePath)
   );
-  ipcMain.handle("git:resolveConflictFile", (_event, repositoryPath: string, filePath: string, input) =>
+  ipcMain.handle("git:resolveConflictFile", (_event, repositoryPath: RepositoryLocation, filePath: string, input) =>
     gitService.resolveConflictFile(repositoryPath, filePath, input)
   );
-  ipcMain.handle("git:stageFile", (_event, repositoryPath: string, filePath: string) => gitService.stageFile(repositoryPath, filePath));
-  ipcMain.handle("git:stageAll", (_event, repositoryPath: string) => gitService.stageAll(repositoryPath));
-  ipcMain.handle("git:unstageFile", (_event, repositoryPath: string, filePath: string) => gitService.unstageFile(repositoryPath, filePath));
-  ipcMain.handle("git:unstageAll", (_event, repositoryPath: string) => gitService.unstageAll(repositoryPath));
-  ipcMain.handle("git:discardFile", (_event, repositoryPath: string, file) => gitService.discardFile(repositoryPath, file));
-  ipcMain.handle("git:commit", (_event, repositoryPath: string, input: { subject: string; body?: string; amend?: boolean; pushAfterCommit?: boolean }) =>
+  ipcMain.handle("git:stageFile", (_event, repositoryPath: RepositoryLocation, filePath: string) => gitService.stageFile(repositoryPath, filePath));
+  ipcMain.handle("git:stageAll", (_event, repositoryPath: RepositoryLocation) => gitService.stageAll(repositoryPath));
+  ipcMain.handle("git:unstageFile", (_event, repositoryPath: RepositoryLocation, filePath: string) => gitService.unstageFile(repositoryPath, filePath));
+  ipcMain.handle("git:unstageAll", (_event, repositoryPath: RepositoryLocation) => gitService.unstageAll(repositoryPath));
+  ipcMain.handle("git:discardFile", (_event, repositoryPath: RepositoryLocation, file) => gitService.discardFile(repositoryPath, file));
+  ipcMain.handle("git:commit", (_event, repositoryPath: RepositoryLocation, input: { subject: string; body?: string; amend?: boolean; pushAfterCommit?: boolean }) =>
     gitService.commit(repositoryPath, input)
   );
-  ipcMain.handle("git:fetch", (_event, repositoryPath: string) => gitService.fetch(repositoryPath));
-  ipcMain.handle("git:pull", (_event, repositoryPath: string) => gitService.pull(repositoryPath));
-  ipcMain.handle("git:mergeRemote", (_event, repositoryPath: string) => gitService.mergeRemote(repositoryPath));
-  ipcMain.handle("git:push", (_event, repositoryPath: string) => gitService.push(repositoryPath));
-  ipcMain.handle("git:getBranches", (_event, repositoryPath: string) => gitService.getBranches(repositoryPath));
-  ipcMain.handle("git:createBranch", (_event, repositoryPath: string, branchName: string, checkout: boolean, startPoint?: string) =>
+  ipcMain.handle("git:fetch", (_event, repositoryPath: RepositoryLocation) => gitService.fetch(repositoryPath));
+  ipcMain.handle("git:pull", (_event, repositoryPath: RepositoryLocation) => gitService.pull(repositoryPath));
+  ipcMain.handle("git:mergeRemote", (_event, repositoryPath: RepositoryLocation) => gitService.mergeRemote(repositoryPath));
+  ipcMain.handle("git:push", (_event, repositoryPath: RepositoryLocation) => gitService.push(repositoryPath));
+  ipcMain.handle("git:getBranches", (_event, repositoryPath: RepositoryLocation) => gitService.getBranches(repositoryPath));
+  ipcMain.handle("git:createBranch", (_event, repositoryPath: RepositoryLocation, branchName: string, checkout: boolean, startPoint?: string) =>
     gitService.createBranch(repositoryPath, branchName, checkout, startPoint)
   );
-  ipcMain.handle("git:switchBranch", (_event, repositoryPath: string, branch) => gitService.switchBranch(repositoryPath, branch));
-  ipcMain.handle("git:getMergePreview", (_event, repositoryPath: string, targetBranch: string) =>
+  ipcMain.handle("git:switchBranch", (_event, repositoryPath: RepositoryLocation, branch) => gitService.switchBranch(repositoryPath, branch));
+  ipcMain.handle("git:getMergePreview", (_event, repositoryPath: RepositoryLocation, targetBranch: string) =>
     gitService.getMergePreview(repositoryPath, targetBranch)
   );
-  ipcMain.handle("git:mergeCurrentBranch", (_event, repositoryPath: string, targetBranch: string, strategy: "ff" | "no-ff") =>
+  ipcMain.handle("git:mergeCurrentBranch", (_event, repositoryPath: RepositoryLocation, targetBranch: string, strategy: "ff" | "no-ff") =>
     gitService.mergeCurrentBranch(repositoryPath, targetBranch, strategy)
   );
-  ipcMain.handle("git:continueMerge", (_event, repositoryPath: string) => gitService.continueMerge(repositoryPath));
-  ipcMain.handle("git:abortMerge", (_event, repositoryPath: string) => gitService.abortMerge(repositoryPath));
-  ipcMain.handle("git:deleteBranch", (_event, repositoryPath: string, branchName: string) => gitService.deleteBranch(repositoryPath, branchName));
-  ipcMain.handle("git:amendLastCommitMessage", (_event, repositoryPath: string, input: { subject: string; body?: string }) =>
+  ipcMain.handle("git:continueMerge", (_event, repositoryPath: RepositoryLocation) => gitService.continueMerge(repositoryPath));
+  ipcMain.handle("git:abortMerge", (_event, repositoryPath: RepositoryLocation) => gitService.abortMerge(repositoryPath));
+  ipcMain.handle("git:deleteBranch", (_event, repositoryPath: RepositoryLocation, branchName: string) => gitService.deleteBranch(repositoryPath, branchName));
+  ipcMain.handle("git:amendLastCommitMessage", (_event, repositoryPath: RepositoryLocation, input: { subject: string; body?: string }) =>
     gitService.amendLastCommitMessage(repositoryPath, input)
   );
-  ipcMain.handle("git:resetLastCommit", (_event, repositoryPath: string, mode: "soft" | "mixed") => gitService.resetLastCommit(repositoryPath, mode));
-  ipcMain.handle("git:resetToCommit", (_event, repositoryPath: string, hash: string, mode: "soft" | "mixed" | "hard") =>
+  ipcMain.handle("git:resetLastCommit", (_event, repositoryPath: RepositoryLocation, mode: "soft" | "mixed") => gitService.resetLastCommit(repositoryPath, mode));
+  ipcMain.handle("git:resetToCommit", (_event, repositoryPath: RepositoryLocation, hash: string, mode: "soft" | "mixed" | "hard") =>
     gitService.resetToCommit(repositoryPath, hash, mode)
   );
-  ipcMain.handle("git:revertCommit", (_event, repositoryPath: string, hash: string) => gitService.revertCommit(repositoryPath, hash));
-  ipcMain.handle("git:cherryPickCommit", (_event, repositoryPath: string, hash: string) => gitService.cherryPickCommit(repositoryPath, hash));
+  ipcMain.handle("git:revertCommit", (_event, repositoryPath: RepositoryLocation, hash: string) => gitService.revertCommit(repositoryPath, hash));
+  ipcMain.handle("git:cherryPickCommit", (_event, repositoryPath: RepositoryLocation, hash: string) => gitService.cherryPickCommit(repositoryPath, hash));
 }
 
 function applyNativeTheme(themeSource: AppThemeSource): void {
@@ -323,11 +342,19 @@ if (!hasSingleInstanceLock) {
   });
 }
 
-function startTerminalSession(webContents: WebContents, repositoryPath: string): { sessionId: string; shell: string; cwd: string } {
-  const cwd = path.resolve(repositoryPath);
-  const shell = terminalShell();
+function startTerminalSession(webContents: WebContents, repositoryPath: RepositoryLocation): { sessionId: string; shell: string; cwd: string } {
+  const target = normalizeRepositoryTarget(repositoryPath);
+  const localShell = terminalShell();
+  const cwd = target.remote ? process.cwd() : path.resolve(target.path);
+  const sshArgs = target.remote ? buildSshArgs(target.remote) : [];
+  const sshHost = target.remote ? sshArgs.pop()! : "";
+  const command = target.remote ? "ssh" : localShell.command;
+  const args = target.remote
+    ? [...sshArgs, "-t", sshHost, `cd ${shellQuote(target.path)} && exec \"\${SHELL:-/bin/sh}\" -l`]
+    : localShell.args;
+  const shellLabel = target.remote ? `SSH ${sshDestination(target.remote)}` : localShell.label;
   const sessionId = `terminal-${Date.now()}-${++terminalSessionSeed}`;
-  const terminal = pty.spawn(shell.command, shell.args, {
+  const terminal = pty.spawn(command, args, {
     cols: 80,
     rows: 24,
     cwd,
@@ -344,7 +371,7 @@ function startTerminalSession(webContents: WebContents, repositoryPath: string):
     }
   });
 
-  return { sessionId, shell: shell.label, cwd };
+  return { sessionId, shell: shellLabel, cwd: target.remote ? `${sshDestination(target.remote)}:${target.path}` : cwd };
 }
 
 function writeTerminalSession(sessionId: string, data: string): boolean {

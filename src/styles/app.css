@@ -5138,6 +5138,196 @@ button {
   padding: 0 12px;
 }
 
+.remote-project-backdrop {
+  z-index: 300;
+}
+
+.remote-project-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(720px, calc(100vh - 112px));
+}
+
+.remote-project-form {
+  display: grid;
+  gap: 12px;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px;
+}
+
+.remote-project-fields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 112px;
+  gap: 10px 12px;
+}
+
+.remote-project-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.remote-host-field,
+.remote-path-field,
+.remote-key-field {
+  grid-column: 1 / -1;
+}
+
+.remote-project-field > input,
+.remote-key-input {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--border-strong);
+  border-radius: 5px;
+  outline: 0;
+  color: var(--text);
+  background: var(--sunken);
+}
+
+.remote-project-field > input {
+  padding: 0 9px;
+}
+
+.remote-key-input {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 28px;
+  gap: 4px;
+  align-items: center;
+  padding: 0 3px 0 8px;
+}
+
+.remote-key-input > svg {
+  color: var(--muted);
+}
+
+.remote-key-input input {
+  min-width: 0;
+  height: 30px;
+  border: 0;
+  outline: 0;
+  padding: 0 4px;
+  color: var(--text);
+  background: transparent;
+}
+
+.remote-project-field > input:focus,
+.remote-key-input:focus-within {
+  border-color: color-mix(in srgb, var(--blue) 72%, var(--border-strong));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 16%, transparent);
+}
+
+.remote-project-field.invalid > input,
+.remote-project-field.invalid .remote-key-input {
+  border-color: color-mix(in srgb, var(--danger) 72%, var(--border-strong));
+}
+
+.remote-field-error {
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.remote-auth-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  min-height: 32px;
+  border-block: 1px solid var(--border);
+  padding: 5px 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.remote-auth-summary strong {
+  color: var(--muted-strong);
+  font-size: 12px;
+}
+
+.remote-auth-summary small {
+  color: var(--muted);
+}
+
+.remote-connection-feedback {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  border-left: 3px solid var(--blue);
+  padding: 7px 9px;
+  color: var(--muted-strong);
+  background: color-mix(in srgb, var(--blue) 8%, var(--sunken));
+  font-size: 12px;
+}
+
+.remote-connection-feedback.error {
+  border-left-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, var(--sunken));
+}
+
+.remote-connection-feedback svg {
+  margin-top: 1px;
+  color: var(--blue);
+}
+
+.remote-connection-feedback.error svg {
+  color: var(--danger);
+}
+
+.remote-connection-feedback span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.remote-connection-feedback strong,
+.remote-connection-feedback small {
+  overflow-wrap: anywhere;
+}
+
+.remote-connection-feedback small {
+  color: var(--muted);
+  font-family: var(--mono-font);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.remote-project-actions {
+  flex-wrap: wrap;
+}
+
+.remote-test-button,
+.remote-connect-button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+}
+
+.remote-connect-button {
+  padding-inline: 12px;
+}
+
+@media (max-width: 560px) {
+  .remote-project-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .remote-host-field,
+  .remote-path-field,
+  .remote-key-field {
+    grid-column: auto;
+  }
+
+  .remote-project-actions .text-button:first-child {
+    margin-right: auto;
+  }
+}
+
 .branch-search {
   display: flex;
   flex-direction: row;
