@@ -24,6 +24,7 @@ const TARGET_PHASES = new Set<UpdatePhase>(["available", "downloading", "downloa
 const MOCK_PHASES = new Set<UpdatePhase>(["idle", "checking", "up-to-date", "available", "downloading", "downloaded", "error"]);
 const CURRENT_VERSION = packageInfo.version;
 const UPDATE_BRIDGE_UNAVAILABLE = "更新服务不可用：桌面进程未提供所需接口。";
+type UpdateStateWithoutCapabilities = Omit<UpdateState, "capabilities">;
 
 export function AppUpdateControl() {
   const mockState = useMemo(() => readMockUpdateState(), []);
@@ -47,6 +48,15 @@ export function AppUpdateControl() {
   const historyRequestRef = useRef(0);
   const detailsRequestRef = useRef(0);
   const detailsIdentityRef = useRef("");
+
+  function setStateWithCapabilities(
+    update: UpdateStateWithoutCapabilities | ((current: UpdateState) => UpdateStateWithoutCapabilities)
+  ) {
+    setState((current) => ({
+      ...(typeof update === "function" ? update(current) : update),
+      capabilities: current.capabilities
+    }));
+  }
 
   useEffect(() => {
     if (isMock) {
@@ -127,10 +137,10 @@ export function AppUpdateControl() {
   }, [open, detailsOpen]);
 
   useEffect(() => {
-    if (open && historyExpanded && historyItems.length === 0 && !historyLoading && !historyError) {
+    if (state.capabilities.rollback && open && historyExpanded && historyItems.length === 0 && !historyLoading && !historyError) {
       void loadReleaseHistory(false);
     }
-  }, [open, historyExpanded]);
+  }, [state.capabilities.rollback, open, historyExpanded]);
 
   useEffect(
     () => () => {
@@ -154,9 +164,12 @@ export function AppUpdateControl() {
   const triggerLabel = hasUpgradeNotification
     ? `发现新版本 v${stripVersionPrefix(state.availableVersion ?? state.currentVersion)}`
     : "关于、版本与更新";
-  const canCheck = !actionPending && state.operation !== "rollback" && !["checking", "downloading", "downloaded", "installing"].includes(state.phase);
+  const canCheck = state.capabilities.sources.length > 0 && !actionPending && state.operation !== "rollback" && !["checking", "downloading", "downloaded", "installing"].includes(state.phase);
   const rollbackNeedsPreparation = state.operation === "rollback" && state.phase === "error" && !state.progress;
-  const canChangeSource = !actionPending && state.operation !== "rollback" && !["checking", "downloading", "downloaded", "installing"].includes(state.phase);
+  const canChangeSource = state.capabilities.sources.length > 1 &&
+    (!actionPending || state.phase === "checking") &&
+    state.operation !== "rollback" &&
+    !["downloading", "downloaded", "installing"].includes(state.phase);
   const detailVersion = stripVersionPrefix(hasTarget ? state.availableVersion ?? state.currentVersion : state.currentVersion);
   const detailHistoryItem = historyItems.find((item) => stripVersionPrefix(item.version) === detailVersion);
   const detailItems = releaseDetails?.contentSource === "compare"
@@ -275,7 +288,7 @@ export function AppUpdateControl() {
     if (isMock) {
       setState((current) => ({ ...current, revision: current.revision + 1, phase: "checking", operation: "upgrade", error: undefined }));
       mockTimerRef.current = window.setTimeout(() => {
-        setState((current) => ({
+        setStateWithCapabilities((current) => ({
           revision: current.revision + 1,
           source: current.source,
           phase: "up-to-date",
@@ -295,6 +308,40 @@ export function AppUpdateControl() {
         throw new Error(UPDATE_BRIDGE_UNAVAILABLE);
       }
       const nextState = await window.gitUI.checkForUpdates();
+      setState((current) => acceptAuthoritativeUpdateState(current, nextState));
+    } catch (error) {
+      setRecoverableError(error, "upgrade");
+    } finally {
+      setActionPending(false);
+    }
+  }
+
+  async function cancelUpdateCheck() {
+    if (state.phase !== "checking" || state.operation !== "upgrade") {
+      return;
+    }
+
+    if (isMock) {
+      if (mockTimerRef.current !== undefined) {
+        window.clearTimeout(mockTimerRef.current);
+        mockTimerRef.current = undefined;
+      }
+      setStateWithCapabilities((current) => ({
+        revision: current.revision + 1,
+        source: current.source,
+        phase: "idle",
+        operation: "upgrade",
+        currentVersion: current.currentVersion
+      }));
+      setActionPending(false);
+      return;
+    }
+
+    try {
+      if (!window.gitUI?.cancelUpdateCheck) {
+        throw new Error(UPDATE_BRIDGE_UNAVAILABLE);
+      }
+      const nextState = await window.gitUI.cancelUpdateCheck();
       setState((current) => acceptAuthoritativeUpdateState(current, nextState));
     } catch (error) {
       setRecoverableError(error, "upgrade");
@@ -366,18 +413,18 @@ export function AppUpdateControl() {
     setActionPending(true);
     setHistoryError("");
     if (isMock) {
-      setState({
-        revision: state.revision + 1,
-        source: state.source,
+      setStateWithCapabilities((current) => ({
+        revision: current.revision + 1,
+        source: current.source,
         phase: "available",
         operation: "rollback",
-        currentVersion: state.currentVersion,
+        currentVersion: current.currentVersion,
         availableVersion: selected.version,
         releaseName: selected.releaseName,
         releaseNotes: selected.releaseNotes,
         releaseDate: selected.publishedAt,
         releaseUrl: selected.releaseUrl
-      });
+      }));
       setActionPending(false);
       return;
     }
@@ -406,7 +453,13 @@ export function AppUpdateControl() {
         window.clearTimeout(mockTimerRef.current);
         mockTimerRef.current = undefined;
       }
-      setState({ revision: state.revision + 1, source: state.source, phase: "idle", operation: "upgrade", currentVersion: state.currentVersion });
+      setStateWithCapabilities((current) => ({
+        revision: current.revision + 1,
+        source: current.source,
+        phase: "idle",
+        operation: "upgrade",
+        currentVersion: current.currentVersion
+      }));
       setSelectedHistoryVersion("");
       setActionPending(false);
       return;
@@ -576,7 +629,7 @@ export function AppUpdateControl() {
           <div className="app-update-panel-header">
             <h2 id="app-update-title">当前版本</h2>
             <div className="app-update-header-actions">
-              <div className="app-update-header-source-actions" role="radiogroup" aria-label="选择更新源">
+              {state.capabilities.sources.length > 1 ? <div className="app-update-header-source-actions" role="radiogroup" aria-label="选择更新源">
                 <PathTooltip content="使用 GitHub 更新源" className="app-update-action-tooltip">
                   <button
                     type="button"
@@ -590,7 +643,7 @@ export function AppUpdateControl() {
                     <Github size={15} />
                   </button>
                 </PathTooltip>
-                <PathTooltip content="使用 Gitee 更新源" className="app-update-action-tooltip">
+                {state.capabilities.sources.includes("gitee") ? <PathTooltip content="使用 Gitee 更新源" className="app-update-action-tooltip">
                   <button
                     type="button"
                     className="app-update-icon-button app-update-source-icon"
@@ -602,8 +655,8 @@ export function AppUpdateControl() {
                   >
                     <Cloud size={15} />
                   </button>
-                </PathTooltip>
-              </div>
+                </PathTooltip> : null}
+              </div> : null}
               <PathTooltip content="悬停查看本次更新内容" className="app-update-action-tooltip">
                 <button
                   type="button"
@@ -620,9 +673,15 @@ export function AppUpdateControl() {
                   <FileText size={15} />
                 </button>
               </PathTooltip>
-              <PathTooltip content="检查最新版本" className="app-update-action-tooltip">
-                <button type="button" className="app-update-icon-button" aria-label="检查最新版本" disabled={!canCheck} onClick={() => void checkForUpdates()}>
-                  <RefreshCw className={state.phase === "checking" ? "app-update-spin" : ""} size={15} />
+              <PathTooltip content={state.phase === "checking" ? "取消检查" : "检查最新版本"} className="app-update-action-tooltip">
+                <button
+                  type="button"
+                  className="app-update-icon-button"
+                  aria-label={state.phase === "checking" ? "取消检查" : "检查最新版本"}
+                  disabled={state.phase !== "checking" && !canCheck}
+                  onClick={state.phase === "checking" ? () => void cancelUpdateCheck() : () => void checkForUpdates()}
+                >
+                  {state.phase === "checking" ? <X size={15} /> : <RefreshCw size={15} />}
                 </button>
               </PathTooltip>
             </div>
@@ -686,7 +745,7 @@ export function AppUpdateControl() {
               </div>
             ) : null}
 
-            <section className="app-update-history" data-expanded={historyExpanded}>
+            {state.capabilities.rollback ? <section className="app-update-history" data-expanded={historyExpanded}>
               <PathTooltip content="仅显示带 SHA-256 校验的同类型正式版本" className="app-update-history-tooltip">
                 <button
                   type="button"
@@ -743,7 +802,7 @@ export function AppUpdateControl() {
 
                 </> : null}
               </div>
-            </section>
+            </section> : null}
           </div>
 
           {hasTarget || state.operation === "rollback" ? (
@@ -846,7 +905,7 @@ function phaseLabel(state: UpdateState): string {
   const rollback = state.operation === "rollback";
   switch (state.phase) {
     case "unsupported":
-      return "仅支持 Windows 正式版";
+      return "当前系统不支持应用内更新";
     case "idle":
       return "正式版";
     case "checking":
@@ -890,7 +949,14 @@ function hasTargetVersion(state: UpdateState): boolean {
 }
 
 function unsupportedUpdateState(): UpdateState {
-  return { revision: 0, source: storedUpdateSource(), phase: "unsupported", operation: "upgrade", currentVersion: CURRENT_VERSION };
+  return {
+    revision: 0,
+    source: storedUpdateSource(),
+    capabilities: { sources: [], rollback: false },
+    phase: "unsupported",
+    operation: "upgrade",
+    currentVersion: CURRENT_VERSION
+  };
 }
 
 function requireUpdateBridgeMethod<T>(method: T | undefined): T {
@@ -1002,6 +1068,7 @@ function readMockUpdateState(): UpdateState | null {
   const baseState: UpdateState = {
     revision: 0,
     source,
+    capabilities: { sources: ["github", "gitee"], rollback: true },
     phase,
     operation: "upgrade",
     currentVersion,

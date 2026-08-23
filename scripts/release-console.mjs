@@ -1371,7 +1371,7 @@ export async function waitForGitHubReleaseReady(repositoryInfo, tag, version, op
     onProgress({ key, level, message });
   };
 
-  report("waiting-release", "info", `${tag} 标签已推送，等待 GitHub Actions 生成 Windows 正式版`);
+  report("waiting-release", "info", `${tag} 标签已推送，等待 GitHub Actions 生成多平台正式版`);
   while (now() < deadline) {
     const cacheBuster = now();
     const requestOptions = {
@@ -1385,7 +1385,7 @@ export async function waitForGitHubReleaseReady(repositoryInfo, tag, version, op
     try {
       const metadata = await readGitHubReleaseMetadata(`${downloadBaseUrl}/${expected.metadata}`, requestOptions);
       if (metadata === null) {
-        report("waiting-release", "info", `${tag} 标签已推送，等待 GitHub Actions 生成 Windows 正式版`);
+        report("waiting-release", "info", `${tag} 标签已推送，等待 GitHub Actions 生成多平台正式版`);
       } else if (!releaseMetadataHasVersion(metadata, version) || !metadata.includes(expected.installer)) {
         report("waiting-metadata", "warning", "GitHub 已生成 latest.yml，但版本或安装包信息尚未同步完成");
       } else {

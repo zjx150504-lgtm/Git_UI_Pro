@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
+import { EventEmitter } from "node:events";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
@@ -23,10 +24,15 @@ const {
 const {
   UPDATE_CHECK_INITIAL_DELAY_MS,
   UPDATE_CHECK_INTERVAL_MS,
+  ReusableInstance,
   UpdateCheckGate,
+  macUpdateProgress,
   parseLatestStableGithubRelease,
   resolveFreshUpgradeCheck,
-  startFreshUpgradeDownload
+  runUpgradeCheck,
+  settleMacUpgradeDownload,
+  startFreshUpgradeDownload,
+  updateCapabilities
 } = updateService;
 const { githubReleaseUrl, normalizeReleaseNotes, updateErrorMessage } = updateUtils;
 const {
@@ -62,6 +68,88 @@ const SHA256 = "a".repeat(64);
 test("正式版后台更新检查使用短周期调度", () => {
   assert.equal(UPDATE_CHECK_INITIAL_DELAY_MS, 8_000);
   assert.equal(UPDATE_CHECK_INTERVAL_MS, 5 * 60 * 1_000);
+});
+
+test("应用内更新能力按平台和打包状态开放", () => {
+  assert.deepEqual(updateCapabilities("darwin", true), { sources: ["github"], rollback: false });
+  assert.deepEqual(updateCapabilities("win32", true), { sources: ["github", "gitee"], rollback: true });
+  assert.deepEqual(updateCapabilities("darwin", false), { sources: [], rollback: false });
+  assert.deepEqual(updateCapabilities("linux", true), { sources: [], rollback: false });
+});
+
+test("macOS 更新器持有器复用实例并在服务销毁时精确释放监听器", () => {
+  let created = 0;
+  let disposed = 0;
+  const nativeUpdater = new EventEmitter();
+  const existingErrorListener = () => {};
+  let ownedNativeListeners = [];
+  nativeUpdater.on("error", existingErrorListener);
+  const holder = new ReusableInstance(() => {
+    created += 1;
+    const updater = new EventEmitter();
+    updater.id = created;
+    updater.on("download-progress", () => {});
+    ownedNativeListeners = [
+      { event: "error", listener: () => {} },
+      { event: "update-downloaded", listener: () => {} }
+    ];
+    for (const { event, listener } of ownedNativeListeners) {
+      nativeUpdater.on(event, listener);
+    }
+    return updater;
+  }, () => {
+    disposed += 1;
+    for (const { event, listener } of ownedNativeListeners) {
+      nativeUpdater.removeListener(event, listener);
+    }
+    ownedNativeListeners = [];
+  });
+
+  const backgroundCheckUpdater = holder.get();
+  const manualCheckUpdater = holder.get();
+  const downloadUpdater = holder.get();
+
+  assert.equal(backgroundCheckUpdater, manualCheckUpdater);
+  assert.equal(manualCheckUpdater, downloadUpdater);
+  assert.equal(holder.current(), backgroundCheckUpdater);
+  assert.equal(created, 1);
+  assert.equal(nativeUpdater.listenerCount("error"), 2);
+  assert.equal(nativeUpdater.listenerCount("update-downloaded"), 1);
+
+  holder.dispose();
+  holder.dispose();
+
+  assert.equal(holder.current(), null);
+  assert.equal(backgroundCheckUpdater.listenerCount("download-progress"), 0);
+  assert.equal(disposed, 1);
+  assert.equal(nativeUpdater.listenerCount("error"), 1);
+  assert.equal(nativeUpdater.listeners("error")[0], existingErrorListener);
+  assert.equal(nativeUpdater.listenerCount("update-downloaded"), 0);
+
+  const recreatedUpdater = holder.get();
+  assert.notEqual(recreatedUpdater, backgroundCheckUpdater);
+  assert.equal(recreatedUpdater.id, 2);
+  assert.equal(created, 2);
+  assert.equal(nativeUpdater.listenerCount("error"), 2);
+  assert.equal(nativeUpdater.listenerCount("update-downloaded"), 1);
+});
+
+test("macOS 下载进度始终标记为 GitHub 更新源", () => {
+  assert.deepEqual(
+    macUpdateProgress(
+      { percent: 42.4, transferred: 424, total: 1000, bytesPerSecond: 128 },
+      "https://github.com/zjx150504-lgtm/Git_UI_Pro/releases/tag/v0.2.0"
+    ),
+    {
+      percent: 42.4,
+      transferred: 424,
+      total: 1000,
+      bytesPerSecond: 128,
+      sourceId: "github",
+      sourceLabel: "GitHub 更新源",
+      sourceReleaseUrl: "https://github.com/zjx150504-lgtm/Git_UI_Pro/releases/tag/v0.2.0"
+    }
+  );
 });
 
 test("后台检查与手动刷新共享同一个进行中请求", async () => {
@@ -103,6 +191,106 @@ test("失败的更新检查完成后允许下一次定时检查", async () => {
   await assert.rejects(failedRequest, /network unavailable/);
   assert.equal(gate.getActiveRequest(), null);
   assert.equal(await gate.run(async () => "recovered"), "recovered");
+});
+
+test("取消旧检查后可立即启动新更新源检查", async () => {
+  const gate = new UpdateCheckGate();
+  let resolveOldCheck;
+  let resolveNewCheck;
+  const oldRequest = gate.run(() => new Promise((resolve) => {
+    resolveOldCheck = resolve;
+  }));
+  await Promise.resolve();
+
+  gate.cancel();
+  const newRequest = gate.run(() => new Promise((resolve) => {
+    resolveNewCheck = resolve;
+  }));
+  await Promise.resolve();
+  assert.notEqual(newRequest, oldRequest);
+  assert.equal(gate.getActiveRequest(), newRequest);
+
+  resolveOldCheck("github");
+  assert.equal(await oldRequest, "github");
+  assert.equal(gate.getActiveRequest(), newRequest);
+
+  resolveNewCheck("gitee");
+  assert.equal(await newRequest, "gitee");
+  assert.equal(gate.getActiveRequest(), null);
+});
+
+test("macOS 与 Windows 更新检查共享结果和空结果错误语义", async () => {
+  const macOutcome = await runUpgradeCheck(
+    { checkForUpdates: async () => updateCheckResult("0.1.44") },
+    (info) => `https://github.com/example/releases/tag/v${info.version}`
+  );
+  assert.equal(macOutcome.result.updateInfo.version, "0.1.44");
+  assert.equal(macOutcome.releaseUrl, "https://github.com/example/releases/tag/v0.1.44");
+
+  const windowsOutcome = await runUpgradeCheck(
+    { checkForUpdates: async () => updateCheckResult("0.1.44") },
+    () => "https://gitee.com/example/releases/tag/v0.1.44",
+    async () => ({ version: "0.1.44", tagName: "v0.1.44", target: null })
+  );
+  assert.equal(windowsOutcome.result.updateInfo.version, "0.1.44");
+  assert.equal(windowsOutcome.releaseUrl, "https://gitee.com/example/releases/tag/v0.1.44");
+
+  await assert.rejects(
+    () => runUpgradeCheck({ checkForUpdates: async () => null }, () => "unused"),
+    /更新检查未返回结果/
+  );
+});
+
+test("macOS 下载失败时先清理 generation 与取消令牌再写入错误", async () => {
+  const failure = new Error("download failed");
+  let active = true;
+  const currentGeneration = true;
+  let resetCalls = 0;
+  let observedError;
+  let activeWhenReportingError = true;
+
+  await settleMacUpgradeDownload(
+    Promise.reject(failure),
+    () => active,
+    () => currentGeneration,
+    () => {
+      resetCalls += 1;
+      active = false;
+    },
+    (error) => {
+      observedError = error;
+      activeWhenReportingError = active;
+    }
+  );
+
+  assert.equal(resetCalls, 2);
+  assert.equal(observedError, failure);
+  assert.equal(activeWhenReportingError, false);
+});
+
+test("macOS 下载结束时兜底清理且不影响已失效下载", async () => {
+  let active = true;
+  const currentGeneration = true;
+  let resetCalls = 0;
+  await settleMacUpgradeDownload(
+    Promise.resolve([]),
+    () => active,
+    () => currentGeneration,
+    () => {
+      resetCalls += 1;
+      active = false;
+    },
+    () => assert.fail("成功下载不应写入错误")
+  );
+  assert.equal(resetCalls, 1);
+
+  await settleMacUpgradeDownload(
+    Promise.resolve([]),
+    () => false,
+    () => false,
+    () => assert.fail("旧下载不应清理新下载状态"),
+    () => assert.fail("旧下载不应写入错误")
+  );
 });
 
 function githubRelease(version, overrides = {}) {

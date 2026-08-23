@@ -28,6 +28,18 @@ jobs:
             os: ubuntu-latest
             script: dist:linux
             artifact: linux-x64
+          - name: macOS x64
+            os: macos-15-intel
+            script: dist:mac
+            artifact: macos-x64
+            mac_app_dir: mac
+            mac_arch: x86_64
+          - name: macOS arm64
+            os: macos-15
+            script: dist:mac
+            artifact: macos-arm64
+            mac_app_dir: mac-arm64
+            mac_arch: arm64
 
     steps:
       - name: Checkout
@@ -51,8 +63,30 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Build installer
+      - name: Build non-macOS installer
+        if: runner.os != 'macOS'
         run: npm run ${{ matrix.script }} -- --publish never
+
+      - name: Build unsigned macOS installer
+        if: runner.os == 'macOS'
+        run: npm run ${{ matrix.script }} -- --publish never
+
+      - name: Verify macOS installer
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          dmg_files=(release/*.dmg)
+          zip_files=(release/*.zip)
+          test "${#dmg_files[@]}" -eq 1
+          test "${#zip_files[@]}" -eq 1
+          test -f "${zip_files[0]}.blockmap"
+          test -f release/latest-mac.yml
+          hdiutil verify "${dmg_files[0]}"
+          app_path="release/${{ matrix.mac_app_dir }}/Git UI Pro.app"
+          file "$app_path/Contents/MacOS/Git UI Pro" | grep -q "${{ matrix.mac_arch }}"
+          file "$app_path/Contents/Resources/app.asar.unpacked/node_modules/@homebridge/node-pty-prebuilt-multiarch/build/Release/pty.node" | grep -q "${{ matrix.mac_arch }}"
 
       - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
@@ -65,6 +99,10 @@ jobs:
             release/latest.yml
             release/*.AppImage
             release/*.deb
+            release/*.dmg
+            release/*.zip
+            release/*.zip.blockmap
+            release/latest-mac.yml
           if-no-files-found: error
 
   publish-github-release:
@@ -82,10 +120,22 @@ jobs:
         with:
           node-version: 20
 
+      - name: Install publication dependencies
+        run: npm ci --ignore-scripts
+
       - name: Download installer artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
+
+      - name: Merge macOS update metadata
+        run: |
+          node scripts/merge-mac-update-metadata.mjs \
+            release-artifacts/git-ui-pro-macos-x64/latest-mac.yml \
+            release-artifacts/git-ui-pro-macos-arm64/latest-mac.yml \
+            release-artifacts/latest-mac.yml
+          rm release-artifacts/git-ui-pro-macos-x64/latest-mac.yml
+          rm release-artifacts/git-ui-pro-macos-arm64/latest-mac.yml
 
       - name: Publish release
         uses: softprops/action-gh-release@v2

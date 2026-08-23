@@ -27,6 +27,7 @@ contextBridge.exposeInMainWorld("gitUI", {
   listUpdateReleases: (force = false): Promise<ReleaseHistoryItem[]> => ipcRenderer.invoke("update:listReleases", force),
   getUpdateReleaseDetails: (force = false): Promise<UpdateReleaseDetails> => ipcRenderer.invoke("update:getReleaseDetails", force),
   checkForUpdates: (): Promise<UpdateState> => ipcRenderer.invoke("update:check"),
+  cancelUpdateCheck: (): Promise<UpdateState> => ipcRenderer.invoke("update:cancelCheck"),
   prepareRollback: (version: string): Promise<UpdateState> => ipcRenderer.invoke("update:prepareRollback", version),
   cancelRollback: (): Promise<UpdateState> => ipcRenderer.invoke("update:cancelRollback"),
   downloadUpdate: (): Promise<UpdateState> => ipcRenderer.invoke("update:download"),

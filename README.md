@@ -46,7 +46,7 @@ Git UI Pro 不重新实现 Git 内核，所有仓库操作都调用用户本机�
 - 远程同步：支持 fetch、pull、push，以及无 upstream 分支的推送引导。
 - 控制台：在当前项目目录中打开辅助终端。
 - 发布控制台：规划语义化版本、记录发布说明、构建 Windows 安装版与 Portable，并跟踪 Gitee 与 GitHub 双远端发布进度。
-- 版本更新：Windows 安装版与 Portable 均支持检查、下载和应用新版本，并可查看历史版本和选择安全回退目标。
+- 版本更新：Windows 安装版与 Portable 支持检查、下载和应用新版本，并可查看历史版本和选择安全回退目标；macOS 更新代码与发布元数据已集成，待启用 Developer ID 后作为正式更新通道。
 - 外观主题：支持明亮、深色主题和完全收起的项目侧栏。
 - 中文反馈：Git 操作成功、失败、危险操作确认和原始输出查看都使用中文界面。
 
@@ -69,6 +69,10 @@ Windows x64 发行版提供两种形式：
 - `Git-UI-Pro-Portable-<版本号>-x64.exe`：便携版，无需安装，项目配置默认保存在程序旁边的 `Git-UI-Pro-Data` 目录。
 
 两种 Windows 正式版都支持应用内更新，并优先使用 Gitee 国内更新源、失败后回退 GitHub。Portable 更新会在退出后替换自身；新版本未能正常启动时会自动恢复上一版本。
+
+macOS 发行版提供 `Git-UI-Pro-<版本号>-mac-x64.dmg` 和 `Git-UI-Pro-<版本号>-mac-arm64.dmg` 镜像包。当前暂不使用 Developer ID，DMG 未签名且未公证，首次打开需要按 macOS 安全提示手动授权。普通用户只需下载对应架构的 DMG；GitHub Release 中同时保留 `.zip`、`.zip.blockmap` 和 `latest-mac.yml`，供以后启用签名更新通道时使用。
+
+macOS 应用内更新要求 Developer ID 签名。当前未签名版本不作为应用内更新基线；以后启用签名和公证后，用户需要先手动安装首个签名 DMG，后续版本才能可靠地在应用内更新。
 
 当前项目仍处于早期版本。如果 Releases 中还没有安装包，可以在 GitHub Actions 的 `Build Installers` 工作流中下载对应系统的 artifacts。
 
@@ -122,7 +126,7 @@ npm run release:win
    git push origin v0.1.0
    ```
 
-4. GitHub Actions 会自动构建 Windows、Linux 安装包，在 tag 触发时创建 GitHub Release，并同步 Gitee 国内更新源。
+4. GitHub Actions 会自动构建 Windows、Linux 和 macOS 安装包，全部构建成功后创建 GitHub Release；Gitee 国内更新源由本地发布控制台单独同步。
 
 ## 隐私说明
 

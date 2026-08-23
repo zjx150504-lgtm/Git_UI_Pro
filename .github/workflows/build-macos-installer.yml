@@ -12,7 +12,7 @@ env:
 jobs:
   build-macos:
     name: Build macOS x64
-    runs-on: macos-13
+    runs-on: macos-15-intel
 
     steps:
       - name: Checkout
@@ -33,12 +33,28 @@ jobs:
       - name: Build macOS installer
         run: npm run dist:mac -- --publish never
 
+      - name: Verify macOS installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          dmg_files=(release/*.dmg)
+          zip_files=(release/*.zip)
+          test "${#dmg_files[@]}" -eq 1
+          test "${#zip_files[@]}" -eq 1
+          test -f "${zip_files[0]}.blockmap"
+          test -f release/latest-mac.yml
+          hdiutil verify "${dmg_files[0]}"
+          file "release/mac/Git UI Pro.app/Contents/MacOS/Git UI Pro" | grep -q "x86_64"
+          file "release/mac/Git UI Pro.app/Contents/Resources/app.asar.unpacked/node_modules/@homebridge/node-pty-prebuilt-multiarch/build/Release/pty.node" | grep -q "x86_64"
+
       - name: Upload macOS installer artifacts
         uses: actions/upload-artifact@v4
         with:
           name: git-ui-pro-macos-x64
           path: |
             release/*.dmg
-            release/*.dmg.blockmap
             release/*.zip
+            release/*.zip.blockmap
+            release/latest-mac.yml
           if-no-files-found: error

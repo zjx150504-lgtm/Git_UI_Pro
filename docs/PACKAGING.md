@@ -7,7 +7,7 @@
 - `npm run dist:dir`: 生成未安装目录包到 `release/win-unpacked`，用于快速验证打包内容。
 - `npm run dist:win`: 生成未签名 Windows NSIS 安装包和 Portable 便携版到 `release/`。
 - `npm run dist:linux`: 生成 Linux AppImage 和 deb 包到 `release/`。
-- `npm run dist:mac`: 生成 macOS dmg 和 zip 包到 `release/`，建议在 macOS 环境执行。
+- `npm run dist:mac`: 按当前 Mac 架构生成 macOS DMG，以及应用内更新所需的 ZIP、ZIP blockmap 和 `latest-mac.yml`。
 - `npm run dist:win:signed`: 生成签名 Windows 包，需先配置代码签名证书环境变量。
 
 所有正式和验证打包产物统一输出到 `release/`，不要使用 `release-*` 临时输出目录。
@@ -64,6 +64,18 @@ Portable 默认把项目列表、分组、偏好设置、终端历史和更新�
 
 打包后的 Windows 应用会保留 `contextIsolation` 并关闭 renderer sandbox，以规避部分自定义安装目录下 Electron renderer 子进程启动失败导致的黑屏问题。
 
+## macOS 应用内更新
+
+macOS x64 与 arm64 已集成通过 GitHub 检查、下载并安装新版本的代码。DMG 是用户手动下载安装时使用的镜像包；electron-updater 在 macOS 上通过 Squirrel.Mac 安装更新，必须使用同版本、同架构的 ZIP 载荷，因此 Release 继续包含 `.zip`、`.zip.blockmap` 和 `latest-mac.yml`。这些 ZIP 文件不是额外提供给用户的安装方式。
+
+两个 macOS runner 会分别生成架构专属元数据。发布 job 使用 `scripts/merge-mac-update-metadata.mjs` 校验版本、架构、文件名、大小与 SHA-512 后，将它们合并成一个 `latest-mac.yml`，供 x64 和 arm64 客户端共同读取。macOS 当前只开放 GitHub 更新源，不提供 Gitee 更新源和历史版本回退；Windows 行为保持不变。
+
+当前阶段暂不使用 Developer ID。`package.json` 和 GitHub Actions 均显式设置 `identity=null`、`notarize=false`，不需要配置 Apple 证书或公证 Secrets。生成的应用未签名、未公证，首次打开可能被 Gatekeeper 阻止，用户需要在 Finder 中右键选择“打开”并按系统提示确认。
+
+macOS 应用内更新仍要求 Developer ID 签名，因此当前未签名版本不作为可靠的自动更新基线。ZIP 和更新元数据暂时保留，便于以后恢复签名时直接启用发布链路。届时用户需要先手动安装首个已经签名、公证且包含更新器的基线 DMG；更早的未签名版本不能通过补充 Release 附件远程转换为签名基线。
+
+恢复 Developer ID 后，应重新开启签名、公证及流水线验证，并至少用两个连续版本在 Intel Mac 和 Apple Silicon Mac 上分别验证检查、ZIP 下载、退出安装、重启和版本号。
+
 ## Windows 签名
 
 默认配置保留图标和版本资源编辑，但将 `win.signExecutable` 设为 `false`，方便本地生成未签名包。
@@ -108,6 +120,8 @@ Portable 默认把项目列表、分组、偏好设置、终端历史和更新�
 
 - `windows-latest`: `npm run dist:win`
 - `ubuntu-latest`: `npm run dist:linux`
+- `macos-15-intel`: `npm run dist:mac`，生成未签名 macOS x64 DMG 与更新载荷
+- `macos-15`: `npm run dist:mac`，生成未签名 macOS arm64 DMG 与更新载荷
 
 每个系统都会独立执行 `npm ci`，避免复用其它系统的 `node_modules`，这对 `node-pty` 这类原生依赖很重要。
 
@@ -115,10 +129,12 @@ Portable 默认把项目列表、分组、偏好设置、终端历史和更新�
 
 - `git-ui-pro-windows-x64`
 - `git-ui-pro-linux-x64`
+- `git-ui-pro-macos-x64`
+- `git-ui-pro-macos-arm64`
 
-Actions 只上传安装包、Portable、必要的 blockmap 和 Windows `latest.yml`，不上传 `win-unpacked`、`linux-unpacked` 等解包目录，避免 Release 阶段上传过多文件触发 GitHub secondary rate limit。
+Actions 只上传安装包、Portable、各平台更新元数据和必要的 blockmap，不上传各平台解包目录。两个 macOS job 会在上传前确认 DMG、ZIP、ZIP blockmap 和 `latest-mac.yml` 均已生成，校验 DMG 完整性，并确认应用主程序和 `node-pty` 原生模块符合目标架构；当前不执行签名或公证票据校验。发布 job 会合并两个架构的 macOS 元数据，GitHub Release 最终只保留一个 `latest-mac.yml`。
 
-当工作流由 `v*` 格式 tag 触发时，会在 Windows 和 Linux 构建完成后自动创建 GitHub Release，并把安装包和 Portable 上传到该 Release。主工作流到此即视为正式发布完成，不再从 GitHub Actions 直接向 Gitee 上传大文件。
+当工作流由 `v*` 格式 tag 触发时，会在 Windows、Linux 和 macOS 构建全部完成后自动创建 GitHub Release，并把各平台安装包上传到该 Release。主工作流到此即视为正式发布完成，不再从 GitHub Actions 直接向 Gitee 上传大文件。
 
 Gitee 国内镜像由本地发布控制台执行。控制台会先从 GitHub Release 读取权威附件清单：本地产物或缓存与 GitHub 的大小、SHA-256 一致时直接复用，否则通过本机 GitHub 代理下载到系统临时缓存。随后从本机国内网络依次上传安装包、blockmap、Portable、`latest.yml`，最后上传 `update-manifest.json`。
 
@@ -128,7 +144,7 @@ Gitee 国内镜像由本地发布控制台执行。控制台会先从 GitHub Rel
 
 尚未包含双更新源逻辑的 v0.1.25 及更早客户端仍只会访问 GitHub，无法通过服务端配置让旧程序自动改用 Gitee。需要开启代理完成一次升级，或在 Gitee 附件修复后手动下载并覆盖安装基线版本；从包含双更新源逻辑的版本开始，后续检查会优先直连 Gitee。
 
-macOS runner 在免费 GitHub Actions 中经常长时间排队，因此 macOS 构建拆分到 `.github/workflows/build-macos-installer.yml`，需要时进入 `Actions` -> `Build macOS Installer` -> `Run workflow` 手动触发。macOS artifacts 生成后，可手动上传到对应 GitHub Release。
+`.github/workflows/build-macos-installer.yml` 继续提供单独的 macOS x64 验证入口；正式 `v*` tag 发布不需要额外触发该工作流。macOS runner 排队或构建失败会阻止 GitHub Release 创建，确保 Release 不会缺少 DMG 或预留的应用内更新载荷。
 
 首次运行时，electron-builder 可能会下载对应系统的打包工具链，耗时会比本地构建更长。
 
