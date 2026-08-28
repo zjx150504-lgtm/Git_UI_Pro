@@ -190,6 +190,7 @@ export interface GitUIBridge {
   renameProjectGroup: (groupId: string, name: string) => Promise<ProjectGroup>;
   deleteProjectGroup: (groupId: string) => Promise<boolean>;
   setProjectGroup: (projectId: string, groupId?: string) => Promise<GitProject>;
+  renameProject: (projectId: string, name: string) => Promise<GitProject>;
   setRemoteProjectConnectionEnabled: (projectId: string, enabled: boolean) => Promise<GitProject>;
   markProjectOpened: (projectId: string) => Promise<GitProject>;
   removeRecentProject: (projectId: string) => Promise<boolean>;

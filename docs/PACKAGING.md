@@ -10,6 +10,17 @@
 - `npm run dist:mac`: 按当前 Mac 架构生成 macOS DMG，以及应用内更新所需的 ZIP、ZIP blockmap 和 `latest-mac.yml`。
 - `npm run dist:win:signed`: 生成签名 Windows 包，需先配置代码签名证书环境变量。
 
+## Pull Request 检查
+
+`.github/workflows/pull-request-checks.yml` 会在每个 Pull Request 上使用 Node.js 20 和全新依赖环境执行以下检查：
+
+- `npm run typecheck`
+- `npm run test:update`
+- `npm run test:mac-update-metadata`
+- `npm run build`
+
+该工作流也支持手动触发。安装包构建仍由 `Build Installers` 工作流负责，不会因为普通 Pull Request 而触发 Windows、Linux 或 macOS 打包矩阵。
+
 所有正式和验证打包产物统一输出到 `release/`，不要使用 `release-*` 临时输出目录。
 
 ## 本地发布控制台
@@ -48,7 +59,7 @@ Windows 正式版同时发布 NSIS x64 安装版和 Portable x64 便携版。发
 
 应用内更新同时支持 Windows x64 NSIS 安装版和 Portable 便携版。开发环境、网页预览和其他操作系统不检查 Windows 在线更新源。
 
-Windows 正式版启动后会静默检查 Gitee 国内更新源，Gitee 不可用或镜像尚未同步完整时自动回退到 GitHub。发现比当前版本更高的稳定版时，左上角显示更新入口。用户打开更新面板后手动开始下载，下载完成后再确认更新；应用不会在后台自动下载，也不会未经确认退出并替换程序。
+Windows 正式版启动后会静默检查 Gitee 国内更新源，Gitee 不可用或镜像尚未同步完整时自动回退到 GitHub。发现比当前版本更高的稳定版时，左上角显示更新入口。用户打开更新面板后手动开始下载，应用不会在后台自动下载，也不会在用户正常关闭应用时自动安装。安装版下载完成后，用户需要点击“打开更新安装程序”；应用退出并显示 NSIS 安装界面，安装完成后自动启动新版本。
 
 首次启用时需要先发布并手动安装一个包含双更新源逻辑的基线版本。更早、尚未集成该更新器的旧版本不会自动切换到国内源；从基线版本开始，后续 Gitee 或 GitHub Release 均可完成应用内升级。
 
@@ -70,11 +81,11 @@ macOS x64 与 arm64 已集成通过 GitHub 检查、下载并安装新版本的�
 
 两个 macOS runner 会分别生成架构专属元数据。发布 job 使用 `scripts/merge-mac-update-metadata.mjs` 校验版本、架构、文件名、大小与 SHA-512 后，将它们合并成一个 `latest-mac.yml`，供 x64 和 arm64 客户端共同读取。macOS 当前只开放 GitHub 更新源，不提供 Gitee 更新源和历史版本回退；Windows 行为保持不变。
 
-当前阶段暂不使用 Developer ID。`package.json` 和 GitHub Actions 均显式设置 `identity=null`、`notarize=false`，不需要配置 Apple 证书或公证 Secrets。生成的应用未签名、未公证，首次打开可能被 Gatekeeper 阻止，用户需要在 Finder 中右键选择“打开”并按系统提示确认。
+当前阶段暂不使用 Developer ID。`package.json` 和 GitHub Actions 均显式设置 `identity=null`、`notarize=false`，不需要配置 Apple 证书或公证 Secrets。生成的应用未签名、未公证，首次打开可能被 Gatekeeper 阻止，用户需要在 Finder 中右键选择“打开”并按系统提示确认。与此同时，`package.json` 的 `featureFlags.macosInAppUpdates` 保持为 `false`，应用不会显示 macOS 更新入口，也不会启动后台更新检查；DMG、ZIP、blockmap、`latest-mac.yml` 和 `MacUpdater` 代码仍正常构建和保留。
 
 macOS 应用内更新仍要求 Developer ID 签名，因此当前未签名版本不作为可靠的自动更新基线。ZIP 和更新元数据暂时保留，便于以后恢复签名时直接启用发布链路。届时用户需要先手动安装首个已经签名、公证且包含更新器的基线 DMG；更早的未签名版本不能通过补充 Release 附件远程转换为签名基线。
 
-恢复 Developer ID 后，应重新开启签名、公证及流水线验证，并至少用两个连续版本在 Intel Mac 和 Apple Silicon Mac 上分别验证检查、ZIP 下载、退出安装、重启和版本号。
+恢复 Developer ID 后，将 `featureFlags.macosInAppUpdates` 改为 `true`，再重新开启签名、公证及流水线验证，并至少用两个连续版本在 Intel Mac 和 Apple Silicon Mac 上分别验证检查、ZIP 下载、退出安装、重启和版本号。该开关关闭时，`updateCapabilities` 会让 macOS 返回空更新源，因此不会创建 `MacUpdater`、安排后台检查或提供手动更新操作。
 
 ## Windows 签名
 

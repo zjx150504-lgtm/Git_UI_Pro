@@ -24,10 +24,13 @@ const {
 const {
   UPDATE_CHECK_INITIAL_DELAY_MS,
   UPDATE_CHECK_INTERVAL_MS,
+  MACOS_IN_APP_UPDATES_ENABLED,
   ReusableInstance,
   UpdateCheckGate,
+  configureUpgradeUpdater,
   macUpdateProgress,
   parseLatestStableGithubRelease,
+  restartAndInstallNsisUpdate,
   resolveFreshUpgradeCheck,
   runUpgradeCheck,
   settleMacUpgradeDownload,
@@ -71,7 +74,9 @@ test("正式版后台更新检查使用短周期调度", () => {
 });
 
 test("应用内更新能力按平台和打包状态开放", () => {
-  assert.deepEqual(updateCapabilities("darwin", true), { sources: ["github"], rollback: false });
+  assert.equal(MACOS_IN_APP_UPDATES_ENABLED, false);
+  assert.deepEqual(updateCapabilities("darwin", true), { sources: [], rollback: false });
+  assert.deepEqual(updateCapabilities("darwin", true, true), { sources: ["github"], rollback: false });
   assert.deepEqual(updateCapabilities("win32", true), { sources: ["github", "gitee"], rollback: true });
   assert.deepEqual(updateCapabilities("darwin", false), { sources: [], rollback: false });
   assert.deepEqual(updateCapabilities("linux", true), { sources: [], rollback: false });
@@ -452,6 +457,34 @@ test("统一字符串与多版本发布说明格式", () => {
     ]),
     "v0.1.13\n修复更新流程\n\nv0.1.12\n完善发布控制台"
   );
+});
+
+test("安装版下载完成后仅在用户确认时打开安装程序", () => {
+  const preferences = {
+    autoDownload: true,
+    autoInstallOnAppQuit: false,
+    allowPrerelease: true,
+    allowDowngrade: true,
+    fullChangelog: true,
+    disableWebInstaller: false,
+    disableDifferentialDownload: true
+  };
+  configureUpgradeUpdater(preferences);
+  assert.deepEqual(preferences, {
+    autoDownload: false,
+    autoInstallOnAppQuit: false,
+    allowPrerelease: false,
+    allowDowngrade: false,
+    fullChangelog: false,
+    disableWebInstaller: true,
+    disableDifferentialDownload: false
+  });
+
+  const installCalls = [];
+  restartAndInstallNsisUpdate({
+    quitAndInstall: (...args) => installCalls.push(args)
+  });
+  assert.deepEqual(installCalls, [[false, true]]);
 });
 
 test("更新详情选择目标版本的上一正式版", () => {
@@ -1145,5 +1178,35 @@ test("没有新版本时保留本次 latest 结果且不触发下载", async () 
   assert.equal(checked.isUpdateAvailable, false);
   assert.equal(download.info.version, "0.1.16");
   assert.equal(download.downloadPromise, null);
+  assert.equal(downloadCalls, 0);
+});
+
+test("取消下载前检查后不得继续触发实际下载", async () => {
+  let resolveCheck;
+  let downloadCalls = 0;
+  let active = true;
+  const updater = {
+    checkForUpdates: () => new Promise((resolve) => {
+      resolveCheck = resolve;
+    }),
+    async downloadUpdate() {
+      downloadCalls += 1;
+      return [];
+    }
+  };
+
+  const pending = startFreshUpgradeDownload(
+    updater,
+    async () => ({ version: "0.1.17", tagName: "v0.1.17" }),
+    () => assert.fail("取消后的检查不应进入下载态"),
+    () => active
+  );
+  await Promise.resolve();
+  active = false;
+  resolveCheck(updateCheckResult("0.1.17"));
+
+  const result = await pending;
+  assert.equal(result.cancelled, true);
+  assert.equal(result.downloadPromise, null);
   assert.equal(downloadCalls, 0);
 });

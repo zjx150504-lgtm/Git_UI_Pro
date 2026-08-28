@@ -365,6 +365,21 @@ export const apiClient = {
     return mockProjects.find((project) => project.id === projectId) ? { ...mockProjects.find((project) => project.id === projectId)!, favorite } : undefined;
   },
 
+  async renameProject(projectId: string, name: string): Promise<GitProject> {
+    if (window.gitUI) {
+      return window.gitUI.renameProject(projectId, name);
+    }
+
+    await wait(mockDelay);
+    const project = mockProjects.find((item) => item.id === projectId);
+    if (!project) {
+      throw new Error("项目不存在。");
+    }
+    project.name = name.trim();
+    project.updatedAt = new Date().toISOString();
+    return { ...project };
+  },
+
   async setRemoteProjectConnectionEnabled(projectId: string, enabled: boolean): Promise<GitProject> {
     if (window.gitUI) {
       return window.gitUI.setRemoteProjectConnectionEnabled(projectId, enabled);

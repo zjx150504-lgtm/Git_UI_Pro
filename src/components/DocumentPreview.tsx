@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -24,6 +25,25 @@ interface RichPreviewState {
   warnings: string[];
 }
 
+interface MarkdownPreviewBatch {
+  start: number;
+  end: number;
+  html: string;
+}
+
+interface MarkdownPreviewCacheEntry {
+  content: string;
+  batches: MarkdownPreviewBatch[];
+  nextOffset: number;
+  pending?: Promise<MarkdownPreviewBatch>;
+}
+
+interface MarkdownWorkerResponse {
+  id: number;
+  html?: string;
+  error?: string;
+}
+
 interface SpreadsheetTable {
   name: string;
   rows: string[][];
@@ -45,11 +65,21 @@ interface SpreadsheetWorkbook {
 const SPREADSHEET_MAX_ROWS = 200;
 const SPREADSHEET_MAX_COLUMNS = 50;
 const MARKDOWN_CACHE_LIMIT = 8;
+const MARKDOWN_BATCH_TARGET_CHARACTERS = 24_000;
+const MARKDOWN_BATCH_TARGET_LINES = 400;
+const MARKDOWN_BATCH_MIN_CHARACTERS = 8_000;
+const MARKDOWN_BATCH_ABSOLUTE_MAX_CHARACTERS = 80_000;
 const pdfBlobCache = new WeakMap<FilePreview, Promise<Blob>>();
 const wordPreviewCache = new WeakMap<FilePreview, Promise<RichPreviewState>>();
 const spreadsheetWorkbookCache = new WeakMap<FilePreview, Promise<SpreadsheetWorkbook>>();
 const presentationPreviewCache = new WeakMap<FilePreview, Promise<PresentationSlide[]>>();
-const markdownPreviewCache = new Map<string, Promise<RichPreviewState>>();
+const markdownPreviewCache = new Map<string, MarkdownPreviewCacheEntry>();
+const markdownWorkerRequests = new Map<number, {
+  resolve: (html: string) => void;
+  reject: (error: Error) => void;
+}>();
+let markdownWorker: Worker | undefined;
+let markdownWorkerRequestId = 0;
 
 export function BinaryDocumentPreview({ preview, filePath }: DocumentPreviewProps) {
   if (preview.type === "pdf") {
@@ -140,58 +170,137 @@ function PdfPreview({ preview, filePath }: DocumentPreviewProps) {
 }
 
 function MarkdownPreview({ content, filePath }: { content: string; filePath: string }) {
-  const [state, setState] = useState<RichPreviewState>();
+  const [batches, setBatches] = useState<MarkdownPreviewBatch[]>([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const cacheEntryRef = useRef<MarkdownPreviewCacheEntry>();
+  const scrollRootRef = useRef<HTMLElement>(null);
+  const loadSentinelRef = useRef<HTMLDivElement>(null);
+  const viewGenerationRef = useRef(0);
+
+  const loadNextBatch = useCallback(async () => {
+    const entry = cacheEntryRef.current;
+    if (!entry || entry.nextOffset >= entry.content.length) {
+      return;
+    }
+
+    const generation = viewGenerationRef.current;
+    setLoading(true);
+    setError("");
+    try {
+      await loadNextMarkdownBatch(entry);
+      if (viewGenerationRef.current === generation && cacheEntryRef.current === entry) {
+        setBatches([...entry.batches]);
+      }
+    } catch (reason) {
+      if (viewGenerationRef.current === generation && cacheEntryRef.current === entry) {
+        setError(errorMessage(reason, "无法继续排版 Markdown。"));
+      }
+    } finally {
+      if (viewGenerationRef.current === generation && cacheEntryRef.current === entry) {
+        setLoading(false);
+      }
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    setState(undefined);
+    const generation = viewGenerationRef.current + 1;
+    viewGenerationRef.current = generation;
+    const entry = cachedMarkdownPreviewEntry(filePath, content);
+    cacheEntryRef.current = entry;
+    setBatches([...entry.batches]);
+    setLoading(Boolean(entry.pending));
     setError("");
 
-    const cacheKey = `${filePath}\u0000${content}`;
-    void cachedMarkdownPreview(cacheKey, async () => {
-      const [markedModule, purifierModule] = await Promise.all([import("marked"), import("dompurify")]);
-      const parsed = await markedModule.marked.parse(content, {
-        gfm: true,
-        breaks: false
-      });
-      return {
-        html: sanitizeRichHtml(purifierModule.default, parsed, false),
-        warnings: []
-      };
-    })
-      .then((result) => {
-        if (!cancelled) {
-          setState(result);
-        }
-      })
-      .catch((reason) => {
-        if (!cancelled) {
-          setError(errorMessage(reason, "无法生成 Markdown 阅读视图。"));
-        }
-      });
+    if (entry.batches.length === 0 || entry.pending) {
+      void loadNextBatch();
+    }
 
     return () => {
-      cancelled = true;
+      if (viewGenerationRef.current === generation) {
+        viewGenerationRef.current += 1;
+      }
     };
-  }, [content, filePath]);
+  }, [content, filePath, loadNextBatch]);
 
-  if (error) {
-    return <DocumentPreviewError message={error} />;
-  }
-  if (!state) {
+  const loadedCharacters = batches.at(-1)?.end ?? 0;
+  const hasMore = loadedCharacters < content.length;
+
+  useEffect(() => {
+    const scrollRoot = scrollRootRef.current;
+    const sentinel = loadSentinelRef.current;
+    if (!scrollRoot || !sentinel || !hasMore || loading || error || typeof IntersectionObserver === "undefined") {
+      return;
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        void loadNextBatch();
+      }
+    }, {
+      root: scrollRoot,
+      rootMargin: "0px 0px 320px 0px",
+      threshold: 0
+    });
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [batches.length, error, hasMore, loading, loadNextBatch]);
+
+  if (batches.length === 0 && loading) {
     return <DocumentPreviewLoading label="正在排版 Markdown" />;
   }
 
   return (
     <div className="document-preview text-document-preview">
       <article
+        ref={scrollRootRef}
         className="rich-document markdown-document"
         aria-label={`${fileName(filePath)} Markdown 阅读视图`}
+        aria-busy={loading}
+        data-loaded-characters={loadedCharacters}
+        data-total-characters={content.length}
         onClick={handleRichContentClick}
-        dangerouslySetInnerHTML={{ __html: state.html }}
-      />
-      <div className="document-preview-footnote">Markdown 阅读模式 · 远程图片和嵌入内容已禁用</div>
+        onScroll={(event) => {
+          const target = event.currentTarget;
+          if (hasMore && !loading && !error && target.scrollHeight - target.scrollTop - target.clientHeight < 320) {
+            void loadNextBatch();
+          }
+        }}
+      >
+        {batches.map((batch, index) => (
+          <section
+            className="markdown-document-batch"
+            data-markdown-batch-index={index}
+            dangerouslySetInnerHTML={{ __html: batch.html }}
+            key={`${batch.start}-${batch.end}`}
+          />
+        ))}
+        {hasMore || loading || error ? (
+          <div ref={loadSentinelRef} className={`markdown-load-more ${error ? "error" : ""}`} role="status" aria-live="polite">
+            {error ? (
+              <>
+                <span>{error}</span>
+                <button type="button" onClick={() => void loadNextBatch()}>重试加载下一批</button>
+              </>
+            ) : loading ? (
+              <>
+                <span className="editor-diff-loading-spinner" aria-hidden="true" />
+                <span>正在排版下一批内容…</span>
+              </>
+            ) : (
+              <>
+                <span>继续向下滚动即可加载后续内容</span>
+                <button type="button" onClick={() => void loadNextBatch()}>加载下一批</button>
+              </>
+            )}
+          </div>
+        ) : null}
+      </article>
+      <div className="document-preview-footnote" aria-live="polite">
+        {hasMore
+          ? `Markdown 阅读模式 · 已排版 ${loadedCharacters.toLocaleString("zh-CN")} / ${content.length.toLocaleString("zh-CN")} 个字符 · 向下滚动继续加载`
+          : "Markdown 阅读模式 · 已加载完整文档 · 远程图片和嵌入内容已禁用"}
+      </div>
     </div>
   );
 }
@@ -563,16 +672,20 @@ function cachedPreviewResult<T>(
   return pending;
 }
 
-function cachedMarkdownPreview(cacheKey: string, load: () => Promise<RichPreviewState>): Promise<RichPreviewState> {
-  const cached = markdownPreviewCache.get(cacheKey);
-  if (cached) {
-    markdownPreviewCache.delete(cacheKey);
-    markdownPreviewCache.set(cacheKey, cached);
+function cachedMarkdownPreviewEntry(filePath: string, content: string): MarkdownPreviewCacheEntry {
+  const cached = markdownPreviewCache.get(filePath);
+  if (cached?.content === content) {
+    markdownPreviewCache.delete(filePath);
+    markdownPreviewCache.set(filePath, cached);
     return cached;
   }
 
-  const pending = load();
-  markdownPreviewCache.set(cacheKey, pending);
+  const entry: MarkdownPreviewCacheEntry = {
+    content,
+    batches: [],
+    nextOffset: 0
+  };
+  markdownPreviewCache.set(filePath, entry);
   while (markdownPreviewCache.size > MARKDOWN_CACHE_LIMIT) {
     const oldestKey = markdownPreviewCache.keys().next().value as string | undefined;
     if (oldestKey === undefined) {
@@ -580,12 +693,141 @@ function cachedMarkdownPreview(cacheKey: string, load: () => Promise<RichPreview
     }
     markdownPreviewCache.delete(oldestKey);
   }
-  void pending.catch(() => {
-    if (markdownPreviewCache.get(cacheKey) === pending) {
-      markdownPreviewCache.delete(cacheKey);
+  return entry;
+}
+
+function loadNextMarkdownBatch(entry: MarkdownPreviewCacheEntry): Promise<MarkdownPreviewBatch> {
+  if (entry.pending) {
+    return entry.pending;
+  }
+
+  const start = entry.nextOffset;
+  const end = markdownBatchEnd(entry.content, start);
+  const markdown = entry.content.slice(start, end);
+  const pending = Promise.all([
+    parseMarkdownOffMainThread(markdown),
+    import("dompurify")
+  ]).then(([parsed, purifierModule]) => {
+    const batch = {
+      start,
+      end,
+      html: sanitizeRichHtml(purifierModule.default, parsed, false)
+    };
+    entry.batches.push(batch);
+    entry.nextOffset = end;
+    return batch;
+  }).finally(() => {
+    if (entry.pending === pending) {
+      entry.pending = undefined;
     }
   });
+  entry.pending = pending;
   return pending;
+}
+
+function markdownBatchEnd(content: string, start: number): number {
+  if (start >= content.length) {
+    return content.length;
+  }
+
+  const targetEnd = Math.min(content.length, start + MARKDOWN_BATCH_TARGET_CHARACTERS);
+  let cursor = start;
+  let lineCount = 0;
+  let lastSafeBoundary = start;
+  let fence: { marker: "`" | "~"; length: number } | undefined;
+
+  while (cursor < content.length) {
+    const nextLineBreak = content.indexOf("\n", cursor);
+    const lineEnd = nextLineBreak < 0 ? content.length : nextLineBreak + 1;
+    const line = content.slice(cursor, nextLineBreak < 0 ? content.length : nextLineBreak);
+    const fenceMatch = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+    if (fenceMatch) {
+      const marker = fenceMatch[1][0] as "`" | "~";
+      const markerLength = fenceMatch[1].length;
+      if (!fence) {
+        fence = { marker, length: markerLength };
+      } else if (
+        fence.marker === marker
+        && markerLength >= fence.length
+        && line.slice(fenceMatch[0].length).trim().length === 0
+      ) {
+        fence = undefined;
+      }
+    }
+
+    lineCount += 1;
+    if (!fence && line.trim().length === 0) {
+      lastSafeBoundary = lineEnd;
+    }
+
+    if (lineEnd > targetEnd + 4_096) {
+      const safeBoundaryIsUseful = !fence && lastSafeBoundary >= start + MARKDOWN_BATCH_MIN_CHARACTERS;
+      return safeBoundaryIsUseful ? lastSafeBoundary : targetEnd;
+    }
+
+    const targetReached = lineEnd >= targetEnd || lineCount >= MARKDOWN_BATCH_TARGET_LINES;
+    if (targetReached && !fence) {
+      const safeBoundaryIsUseful = lastSafeBoundary >= start + MARKDOWN_BATCH_MIN_CHARACTERS;
+      return safeBoundaryIsUseful ? lastSafeBoundary : lineEnd;
+    }
+
+    if (lineEnd >= start + MARKDOWN_BATCH_ABSOLUTE_MAX_CHARACTERS) {
+      return lineEnd;
+    }
+
+    cursor = lineEnd;
+  }
+
+  return content.length;
+}
+
+function parseMarkdownOffMainThread(content: string): Promise<string> {
+  if (typeof Worker === "undefined") {
+    return import("marked").then((module) => module.marked.parse(content, { gfm: true, breaks: false }));
+  }
+
+  const worker = getMarkdownWorker();
+  const id = ++markdownWorkerRequestId;
+  return new Promise<string>((resolve, reject) => {
+    markdownWorkerRequests.set(id, { resolve, reject });
+    worker.postMessage({ id, content });
+  });
+}
+
+function getMarkdownWorker(): Worker {
+  if (markdownWorker) {
+    return markdownWorker;
+  }
+
+  const worker = new Worker(new URL("../workers/markdownPreview.worker.ts", import.meta.url), {
+    type: "module",
+    name: "markdown-preview"
+  });
+  worker.onmessage = (event: MessageEvent<MarkdownWorkerResponse>) => {
+    const request = markdownWorkerRequests.get(event.data.id);
+    if (!request) {
+      return;
+    }
+    markdownWorkerRequests.delete(event.data.id);
+    if (event.data.error) {
+      request.reject(new Error(event.data.error));
+      return;
+    }
+    request.resolve(event.data.html ?? "");
+  };
+  worker.onerror = (event) => {
+    const error = new Error(event.message || "Markdown 排版线程异常退出。");
+    for (const request of markdownWorkerRequests.values()) {
+      request.reject(error);
+    }
+    markdownWorkerRequests.clear();
+    worker.terminate();
+    if (markdownWorker === worker) {
+      markdownWorker = undefined;
+    }
+  };
+  markdownWorker = worker;
+  return worker;
 }
 
 function handleRichContentClick(event: ReactMouseEvent<HTMLElement>) {

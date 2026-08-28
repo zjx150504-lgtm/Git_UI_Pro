@@ -64,11 +64,14 @@ test("项目分组、最近项目和界面偏好保持一致", async () => {
     const second = await store.addProject(path.join(directory, "repo-b"));
     const group = await store.createProjectGroup("产品仓库");
     await store.setProjectGroup(first.id, group.id);
+    await store.renameProject(first.id, "核心产品仓库");
+    await store.renameProjectGroup(group.id, "核心项目");
     await store.markProjectOpened(first.id);
     await store.markProjectOpened(second.id);
 
     const library = await store.getProjectLibrary();
-    assert.equal(library.groups.some((item) => item.id === group.id && item.name === "产品仓库"), true);
+    assert.equal(library.groups.some((item) => item.id === group.id && item.name === "核心项目"), true);
+    assert.equal((await store.listProjects()).find((item) => item.id === first.id)?.name, "核心产品仓库");
     assert.deepEqual(library.recentProjectIds.slice(0, 2), [second.id, first.id]);
 
     const preferences = await store.updateUiPreferences({
@@ -97,6 +100,17 @@ test("项目分组、最近项目和界面偏好保持一致", async () => {
     assert.equal((await store.listProjects()).find((item) => item.id === first.id)?.groupId, undefined);
     await store.removeRecentProject(second.id);
     assert.equal((await store.getProjectLibrary()).recentProjectIds.includes(second.id), false);
+  });
+});
+
+test("项目与分组重命名会校验空白和长度", async () => {
+  await withTemporaryStore(async (store, directory) => {
+    const project = await store.addProject(path.join(directory, "repo-name"));
+    const group = await store.createProjectGroup("可重命名分组");
+
+    await assert.rejects(store.renameProject(project.id, "   "), /项目名称不能为空/);
+    await assert.rejects(store.renameProject(project.id, "x".repeat(81)), /不能超过 80/);
+    await assert.rejects(store.renameProjectGroup(group.id, "   "), /分组名称不能为空/);
   });
 });
 

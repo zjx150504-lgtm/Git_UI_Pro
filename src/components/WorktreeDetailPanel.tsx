@@ -95,8 +95,11 @@ export function WorktreeDetailPanel({
   const mediaPreview = isMediaFilePreview(filePreview) ? filePreview : undefined;
   const binaryDocumentPreview = filePreview && !mediaPreview ? filePreview : undefined;
   const activeTextReaderKind = activeTab && !filePreview ? textReaderKind(activeTab.file.path) : undefined;
-  const [sourceViewTabIds, setSourceViewTabIds] = useState<Set<string>>(() => new Set());
-  const showTextReader = Boolean(!filePreview && activeTab && activeTextReaderKind && !sourceViewTabIds.has(activeTab.id));
+  const [textViewByTabId, setTextViewByTabId] = useState<Map<string, "reader" | "source">>(() => new Map());
+  const activeTextView = activeTab && activeTextReaderKind
+    ? textViewByTabId.get(activeTab.id) ?? (activeTextReaderKind === "markdown" ? "source" : "reader")
+    : undefined;
+  const showTextReader = Boolean(!filePreview && activeTab && activeTextReaderKind && activeTextView === "reader");
   const showDiffMinimap = !filePreview && !showTextReader && activeDiffLines.some((line) => line.type !== "context");
   const splitDiffRows = useMemo(() => buildSplitDiffRows(activeDiffLines), [activeDiffLines]);
   const [splitMaxScroll, setSplitMaxScroll] = useState(0);
@@ -322,13 +325,9 @@ export function WorktreeDetailPanel({
     if (!activeTab) {
       return;
     }
-    setSourceViewTabIds((current) => {
-      const next = new Set(current);
-      if (sourceView) {
-        next.add(activeTab.id);
-      } else {
-        next.delete(activeTab.id);
-      }
+    setTextViewByTabId((current) => {
+      const next = new Map(current);
+      next.set(activeTab.id, sourceView ? "source" : "reader");
       return next;
     });
   }

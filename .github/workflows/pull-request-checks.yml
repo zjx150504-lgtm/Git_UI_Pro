@@ -1,0 +1,38 @@
+name: Pull Request Checks
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate renderer, Electron, and update flows
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test update flows
+        run: npm run test:update
+
+      - name: Test macOS update metadata
+        run: npm run test:mac-update-metadata
+
+      - name: Build
+        run: npm run build

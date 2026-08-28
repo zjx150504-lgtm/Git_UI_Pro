@@ -285,6 +285,26 @@ export class ConfigStore {
     });
   }
 
+  async renameProject(projectId: string, name: string): Promise<GitProject> {
+    return this.enqueue(async () => {
+      const normalizedName = requireProjectName(name);
+      const config = await this.readUnlocked();
+      const projectIndex = config.projects.findIndex((project) => project.id === projectId);
+      if (projectIndex < 0) {
+        throw new Error("项目不存在");
+      }
+
+      const project: GitProject = {
+        ...config.projects[projectIndex],
+        name: normalizedName,
+        updatedAt: new Date().toISOString()
+      };
+      config.projects[projectIndex] = project;
+      await this.writeUnlocked(config);
+      return project;
+    });
+  }
+
   async setRemoteProjectConnectionEnabled(projectId: string, enabled: boolean): Promise<GitProject> {
     return this.enqueue(async () => {
       const config = await this.readUnlocked();
@@ -752,6 +772,20 @@ function requireGroupName(name: string): string {
   }
   if (normalizedName.length > 40) {
     throw new Error("项目分组名称不能超过 40 个字符");
+  }
+  return normalizedName;
+}
+
+function requireProjectName(name: string): string {
+  const normalizedName = name.trim();
+  if (!normalizedName) {
+    throw new Error("项目名称不能为空");
+  }
+  if (normalizedName.length > 80) {
+    throw new Error("项目名称不能超过 80 个字符");
+  }
+  if (/[\r\n\u0000]/u.test(normalizedName)) {
+    throw new Error("项目名称只能使用单行文本");
   }
   return normalizedName;
 }

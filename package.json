@@ -1,7 +1,10 @@
 {
   "name": "git-ui-pro",
-  "version": "0.1.45",
+  "version": "0.1.48",
   "private": true,
+  "featureFlags": {
+    "macosInAppUpdates": false
+  },
   "description": "中文桌面 Git 可视化管理软件",
   "author": {
     "name": "Git UI Pro",

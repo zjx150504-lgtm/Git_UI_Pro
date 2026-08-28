@@ -1,4 +1,4 @@
-import { Check, ChevronDown, ChevronRight, Filter, FolderClosed, FolderOpen, FolderPlus, FolderSearch, GitBranch, Pin, PinOff, Search, Server, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Filter, FolderClosed, FolderOpen, FolderPlus, FolderSearch, GitBranch, Pencil, Pin, PinOff, Search, Server, Trash2 } from "lucide-react";
 import {
   useEffect,
   useLayoutEffect,
@@ -27,15 +27,21 @@ interface ProjectRailProps {
   onReorderProjects: (projectIds: string[]) => void;
   onToggleProjectPinned: (projectId: string) => void;
   onSetProjectGroup: (projectId: string, groupId?: string) => void | Promise<void>;
+  onRenameProject: (projectId: string, name: string) => void | Promise<void>;
+  onRenameGroup: (groupId: string, name: string) => void | Promise<void>;
   onSetRemoteConnectionEnabled: (projectId: string, enabled: boolean) => void | Promise<void>;
   onSwitchBranch: (project: GitProject) => void;
   footer?: ReactNode;
 }
 
-type ProjectContextMenuState = {
-  project: GitProject;
+type ProjectContextMenuState = ({ kind: "project"; project: GitProject } | { kind: "group"; group: ProjectGroup }) & {
   x: number;
   y: number;
+};
+
+type InlineRenameTarget = {
+  kind: "project" | "group";
+  id: string;
 };
 
 type ProjectStatusFilterId = "pinned" | "dirty" | "clean" | "conflict" | "ahead" | "behind" | "diverged" | "unloaded";
@@ -84,6 +90,8 @@ export function ProjectRail({
   onReorderProjects,
   onToggleProjectPinned,
   onSetProjectGroup,
+  onRenameProject,
+  onRenameGroup,
   onSetRemoteConnectionEnabled,
   onSwitchBranch,
   footer
@@ -93,6 +101,7 @@ export function ProjectRail({
   const [dragOverProjectId, setDragOverProjectId] = useState<string | null>(null);
   const [dragOverPlacement, setDragOverPlacement] = useState<"before" | "after">("before");
   const [contextMenu, setContextMenu] = useState<ProjectContextMenuState | null>(null);
+  const [renameTarget, setRenameTarget] = useState<InlineRenameTarget | null>(null);
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [filterMenuPosition, setFilterMenuPosition] = useState<CSSProperties>({ top: 0, left: 0, width: PROJECT_STATUS_FILTER_MENU_WIDTH });
   const [statusFilters, setStatusFilters] = useState<ProjectStatusFilterId[]>([]);
@@ -106,6 +115,7 @@ export function ProjectRail({
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const contextMenuOpenerRef = useRef<HTMLElement | null>(null);
   const projectItemRefs = useRef(new Map<string, HTMLDivElement>());
+  const groupHeaderRefs = useRef(new Map<string, HTMLButtonElement>());
   const contextMenuCloseTimerRef = useRef<number | undefined>();
   const keyword = query.trim();
   const filteredProjects = useMemo(() => {
@@ -277,9 +287,39 @@ export function ProjectRail({
     keepContextMenuOpen();
     contextMenuOpenerRef.current = opener;
     setContextMenu({
+      kind: "project",
       project,
       x: Math.max(PROJECT_CONTEXT_MENU_VIEWPORT_GAP, Math.min(x, window.innerWidth - PROJECT_CONTEXT_MENU_WIDTH - PROJECT_CONTEXT_MENU_VIEWPORT_GAP)),
       y: Math.max(PROJECT_CONTEXT_MENU_VIEWPORT_GAP, Math.min(y, window.innerHeight - PROJECT_CONTEXT_MENU_VIEWPORT_GAP))
+    });
+  }
+
+  function openGroupContextMenu(event: MouseEvent<HTMLButtonElement>, group: ProjectGroup) {
+    event.preventDefault();
+    event.stopPropagation();
+    keepContextMenuOpen();
+    contextMenuOpenerRef.current = event.currentTarget;
+    setContextMenu({
+      kind: "group",
+      group,
+      x: Math.max(PROJECT_CONTEXT_MENU_VIEWPORT_GAP, Math.min(event.clientX, window.innerWidth - PROJECT_CONTEXT_MENU_WIDTH - PROJECT_CONTEXT_MENU_VIEWPORT_GAP)),
+      y: Math.max(PROJECT_CONTEXT_MENU_VIEWPORT_GAP, Math.min(event.clientY, window.innerHeight - PROJECT_CONTEXT_MENU_VIEWPORT_GAP))
+    });
+  }
+
+  function beginInlineRename(target: InlineRenameTarget) {
+    closeContextMenu();
+    setRenameTarget(target);
+  }
+
+  function finishInlineRename(target: InlineRenameTarget) {
+    setRenameTarget((current) => current?.kind === target.kind && current.id === target.id ? null : current);
+    window.requestAnimationFrame(() => {
+      if (target.kind === "project") {
+        projectItemRefs.current.get(target.id)?.focus();
+      } else {
+        groupHeaderRefs.current.get(target.id)?.focus();
+      }
     });
   }
 
@@ -377,6 +417,7 @@ export function ProjectRail({
   }
 
   function renderProjectItem(project: GitProject) {
+    const renaming = renameTarget?.kind === "project" && renameTarget.id === project.id;
     const remoteConnectionEnabled = project.remote?.connectionEnabled !== false;
     const remoteConnectionPending = remoteConnectionPendingIds.includes(project.id);
     const branchLabel = !remoteConnectionEnabled
@@ -399,10 +440,10 @@ export function ProjectRail({
         ref={(node) => setProjectItemRef(project.id, node)}
         role="button"
         tabIndex={0}
-        draggable={canReorder}
+        draggable={canReorder && !renaming}
         aria-grabbed={draggedProjectId === project.id}
         aria-haspopup="menu"
-        aria-expanded={contextMenu?.project.id === project.id}
+        aria-expanded={contextMenu?.kind === "project" && contextMenu.project.id === project.id}
         aria-describedby="project-reorder-help"
         aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown Shift+F10"
         className={`project-rail-item ${project.id === selectedProjectId ? "active" : ""} ${project.favorite ? "pinned" : ""} ${project.remote ? "remote-project" : ""} ${project.remote && !remoteConnectionEnabled ? "remote-paused" : ""} ${draggedProjectId === project.id ? "dragging" : ""} ${dragOverProjectId === project.id ? `drag-over drag-over-${dragOverPlacement}` : ""}`}
@@ -432,7 +473,13 @@ export function ProjectRail({
         onDragLeave={() => { if (dragOverProjectId === project.id) setDragOverProjectId(null); }}
         onDrop={(event) => handleDrop(event, project.id)}
         onDragEnd={clearDragState}
-        onContextMenu={(event) => openProjectContextMenu(event, project)}
+        onContextMenu={(event) => {
+          if (renaming) {
+            event.preventDefault();
+            return;
+          }
+          openProjectContextMenu(event, project);
+        }}
       >
         <span className="project-rail-icon">
           {project.id === selectedProjectId
@@ -441,7 +488,17 @@ export function ProjectRail({
         </span>
         <span className="project-rail-main">
           <span className="project-rail-heading">
-            <PathTooltip content={projectLocationLabel(project)} className="project-rail-name"><span className="project-rail-name-text">{project.name}</span></PathTooltip>
+            {renaming ? (
+              <InlineRenameInput
+                ariaLabel={`修改项目名称：${project.name}`}
+                initialValue={project.name}
+                maxLength={80}
+                onCommit={(name) => onRenameProject(project.id, name)}
+                onFinish={() => finishInlineRename({ kind: "project", id: project.id })}
+              />
+            ) : (
+              <PathTooltip content={projectLocationLabel(project)} className="project-rail-name"><span className="project-rail-name-text">{project.name}</span></PathTooltip>
+            )}
             {project.remote ? (
               <PathTooltip
                 content={remoteConnectionPending ? "正在保存连接状态" : remoteConnectionEnabled ? "关闭远程连接" : "开启远程连接"}
@@ -629,14 +686,40 @@ export function ProjectRail({
         <span className="sr-only" aria-live="polite">{reorderAnnouncement}</span>
         {groupedProjects.map((group) => {
           const collapsed = showGroupHeaders && !hasActiveFiltering && collapsedGroupIds.includes(group.id);
+          const configuredGroup = groups.find((item) => item.id === group.id);
+          const renaming = renameTarget?.kind === "group" && renameTarget.id === group.id;
           return (
             <section className="project-rail-group" key={group.id}>
-              {showGroupHeaders ? (
+              {showGroupHeaders && renaming && configuredGroup ? (
+                <div className="project-rail-group-header editing">
+                  {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                  <InlineRenameInput
+                    ariaLabel={`修改项目分组名称：${configuredGroup.name}`}
+                    initialValue={configuredGroup.name}
+                    maxLength={40}
+                    onCommit={(name) => onRenameGroup(configuredGroup.id, name)}
+                    onFinish={() => finishInlineRename({ kind: "group", id: configuredGroup.id })}
+                  />
+                  <small>{group.projects.length}</small>
+                </div>
+              ) : showGroupHeaders ? (
                 <button
+                  ref={(node) => {
+                    if (node) {
+                      groupHeaderRefs.current.set(group.id, node);
+                    } else {
+                      groupHeaderRefs.current.delete(group.id);
+                    }
+                  }}
                   type="button"
                   className="project-rail-group-header"
                   aria-expanded={!collapsed}
                   onClick={() => toggleGroup(group.id)}
+                  onContextMenu={(event) => {
+                    if (configuredGroup) {
+                      openGroupContextMenu(event, configuredGroup);
+                    }
+                  }}
                 >
                   {collapsed ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
                   <span>{group.name}</span>
@@ -662,76 +745,189 @@ export function ProjectRail({
               onMouseLeave={scheduleContextMenuClose}
               onKeyDown={(event) => handleMenuKeyDown(event, () => closeContextMenu(true))}
             >
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  onToggleProjectPinned(contextMenu.project.id);
-                  closeContextMenu(true);
-                }}
-              >
-                {contextMenu.project.favorite ? <PinOff size={14} /> : <Pin size={14} />}
-                {contextMenu.project.favorite ? "取消置顶" : "置顶项目"}
-              </button>
-              <div className="menu-separator" role="separator" />
-              <div className="project-context-menu-label">项目分组</div>
-              <div className="project-context-group-options" role="group" aria-label={`设置 ${contextMenu.project.name} 的项目分组`}>
+              {contextMenu.kind === "group" ? (
                 <button
                   type="button"
-                  role="menuitemradio"
-                  aria-checked={!contextMenu.project.groupId}
-                  className={!contextMenu.project.groupId ? "active" : ""}
+                  role="menuitem"
                   onClick={() => {
-                    if (contextMenu.project.groupId) {
-                      void onSetProjectGroup(contextMenu.project.id, undefined);
-                    }
-                    closeContextMenu(true);
+                    beginInlineRename({ kind: "group", id: contextMenu.group.id });
                   }}
                 >
-                  <span className="project-context-group-check" aria-hidden="true"><Check size={13} /></span>
-                  <span>未分组</span>
+                  <Pencil size={14} />
+                  重命名分组
                 </button>
-                {[...groups].sort((left, right) => left.sortOrder - right.sortOrder).map((group) => {
-                  const selected = contextMenu.project.groupId === group.id;
-                  return (
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => beginInlineRename({ kind: "project", id: contextMenu.project.id })}
+                  >
+                    <Pencil size={14} />
+                    重命名项目
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      onToggleProjectPinned(contextMenu.project.id);
+                      closeContextMenu(true);
+                    }}
+                  >
+                    {contextMenu.project.favorite ? <PinOff size={14} /> : <Pin size={14} />}
+                    {contextMenu.project.favorite ? "取消置顶" : "置顶项目"}
+                  </button>
+                  <div className="menu-separator" role="separator" />
+                  <div className="project-context-menu-label">项目分组</div>
+                  <div className="project-context-group-options" role="group" aria-label={`设置 ${contextMenu.project.name} 的项目分组`}>
                     <button
                       type="button"
                       role="menuitemradio"
-                      aria-checked={selected}
-                      className={selected ? "active" : ""}
-                      key={group.id}
+                      aria-checked={!contextMenu.project.groupId}
+                      className={!contextMenu.project.groupId ? "active" : ""}
                       onClick={() => {
-                        if (!selected) {
-                          void onSetProjectGroup(contextMenu.project.id, group.id);
+                        if (contextMenu.project.groupId) {
+                          void onSetProjectGroup(contextMenu.project.id, undefined);
                         }
                         closeContextMenu(true);
                       }}
                     >
                       <span className="project-context-group-check" aria-hidden="true"><Check size={13} /></span>
-                      <span>{group.name}</span>
+                      <span>未分组</span>
                     </button>
-                  );
-                })}
-              </div>
-              <div className="menu-separator" role="separator" />
-              <button
-                type="button"
-                role="menuitem"
-                className="danger"
-                onClick={() => {
-                  onRemoveProject(contextMenu.project.id);
-                  closeContextMenu();
-                }}
-              >
-                <Trash2 size={14} />
-                移除项目记录
-              </button>
+                    {[...groups].sort((left, right) => left.sortOrder - right.sortOrder).map((group) => {
+                      const selected = contextMenu.project.groupId === group.id;
+                      return (
+                        <button
+                          type="button"
+                          role="menuitemradio"
+                          aria-checked={selected}
+                          className={selected ? "active" : ""}
+                          key={group.id}
+                          onClick={() => {
+                            if (!selected) {
+                              void onSetProjectGroup(contextMenu.project.id, group.id);
+                            }
+                            closeContextMenu(true);
+                          }}
+                        >
+                          <span className="project-context-group-check" aria-hidden="true"><Check size={13} /></span>
+                          <span>{group.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="menu-separator" role="separator" />
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="danger"
+                    onClick={() => {
+                      onRemoveProject(contextMenu.project.id);
+                      closeContextMenu();
+                    }}
+                  >
+                    <Trash2 size={14} />
+                    移除项目记录
+                  </button>
+                </>
+              )}
             </div>,
             document.querySelector(".app-shell") ?? document.body
           )
         : null}
       {footer ? <div className="project-rail-footer">{footer}</div> : null}
     </aside>
+  );
+}
+
+function InlineRenameInput({
+  ariaLabel,
+  initialValue,
+  maxLength,
+  onCommit,
+  onFinish
+}: {
+  ariaLabel: string;
+  initialValue: string;
+  maxLength: number;
+  onCommit: (name: string) => void | Promise<void>;
+  onFinish: () => void;
+}) {
+  const [value, setValue] = useState(initialValue);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const submittingRef = useRef(false);
+  const cancelledRef = useRef(false);
+
+  useLayoutEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  async function submit() {
+    if (submittingRef.current || cancelledRef.current) {
+      return;
+    }
+    const name = value.trim();
+    if (!name) {
+      setError("名称不能为空");
+      window.requestAnimationFrame(() => inputRef.current?.focus());
+      return;
+    }
+    if (name === initialValue) {
+      onFinish();
+      return;
+    }
+
+    submittingRef.current = true;
+    setSaving(true);
+    setError("");
+    try {
+      await onCommit(name);
+      onFinish();
+    } catch (reason) {
+      submittingRef.current = false;
+      setSaving(false);
+      setError(reason instanceof Error ? reason.message : "保存失败");
+      window.requestAnimationFrame(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      });
+    }
+  }
+
+  return (
+    <input
+      ref={inputRef}
+      className="project-inline-rename"
+      value={value}
+      maxLength={maxLength}
+      disabled={saving}
+      aria-label={ariaLabel}
+      aria-invalid={Boolean(error)}
+      title={error || "Enter 保存，Esc 取消"}
+      onChange={(event) => {
+        setValue(event.target.value);
+        setError("");
+      }}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+      onContextMenu={(event) => event.stopPropagation()}
+      onBlur={() => void submit()}
+      onKeyDown={(event) => {
+        event.stopPropagation();
+        if (event.key === "Enter") {
+          event.preventDefault();
+          void submit();
+        } else if (event.key === "Escape") {
+          event.preventDefault();
+          cancelledRef.current = true;
+          onFinish();
+        }
+      }}
+    />
   );
 }
 

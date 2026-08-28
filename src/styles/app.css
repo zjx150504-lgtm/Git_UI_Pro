@@ -3756,6 +3756,65 @@ button {
   overflow: auto;
 }
 
+.markdown-document {
+  width: calc(100% - 16px);
+  min-height: calc(100% - 16px);
+  margin: 8px auto;
+  padding: clamp(20px, 3vw, 40px) clamp(18px, 3.5vw, 48px);
+}
+
+.markdown-document-batch {
+  display: flow-root;
+}
+
+.markdown-document-batch:first-child > :first-child {
+  margin-top: 0;
+}
+
+.markdown-load-more {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  justify-content: center;
+  min-height: 54px;
+  margin: 22px 0 2px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 68%, transparent);
+  padding: 14px 8px 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.markdown-load-more .editor-diff-loading-spinner {
+  width: 15px;
+  height: 15px;
+}
+
+.markdown-load-more button {
+  min-height: 28px;
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--border));
+  border-radius: 7px;
+  padding: 4px 10px;
+  color: var(--accent-strong);
+  background: color-mix(in srgb, var(--accent-soft) 48%, var(--panel));
+  font-size: 12px;
+}
+
+.markdown-load-more button:hover {
+  border-color: color-mix(in srgb, var(--accent) 56%, var(--border));
+  background: color-mix(in srgb, var(--accent-soft) 72%, var(--panel));
+}
+
+.markdown-load-more button:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.markdown-load-more.error {
+  color: var(--danger);
+}
+
 .rich-document > :first-child {
   margin-top: 0;
 }
@@ -4961,6 +5020,49 @@ button {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.project-inline-rename {
+  width: 100%;
+  min-width: 0;
+  height: 25px;
+  border: 1px solid color-mix(in srgb, var(--accent) 62%, var(--border));
+  border-radius: 6px;
+  padding: 0 7px;
+  color: var(--text-strong);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 13%, transparent);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 23px;
+}
+
+.project-inline-rename:focus {
+  outline: 0;
+  border-color: var(--accent);
+}
+
+.project-inline-rename[aria-invalid="true"] {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 12%, transparent);
+}
+
+.project-inline-rename:disabled {
+  opacity: 0.72;
+  cursor: wait;
+}
+
+.project-rail-group-header.editing {
+  cursor: text;
+  background: color-mix(in srgb, var(--surface) 72%, transparent);
+}
+
+.project-rail-group-header.editing .project-inline-rename {
+  height: 24px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 22px;
 }
 
 .project-rail-pin-indicator {

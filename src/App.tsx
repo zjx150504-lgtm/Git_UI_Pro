@@ -1723,6 +1723,48 @@ export function App() {
     }
   }
 
+  async function handleRenameProject(projectId: string, name: string) {
+    const currentProject = projectsRef.current.find((project) => project.id === projectId);
+    if (!currentProject || currentProject.name === name) {
+      return;
+    }
+
+    try {
+      const savedProject = await apiClient.renameProject(projectId, name);
+      const nextProjects = projectsRef.current.map((project) => project.id === projectId ? {
+        ...project,
+        ...savedProject,
+        status: project.status,
+        statusError: project.statusError
+      } : project);
+      projectsRef.current = nextProjects;
+      setProjects(nextProjects);
+      notifySuccess("已重命名项目", `${currentProject.name} → ${savedProject.name}`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "重命名项目失败");
+      throw error;
+    }
+  }
+
+  async function handleRenameProjectGroup(groupId: string, name: string) {
+    const currentGroup = projectLibrary.groups.find((group) => group.id === groupId);
+    if (!currentGroup || currentGroup.name === name) {
+      return;
+    }
+
+    try {
+      const savedGroup = await apiClient.renameProjectGroup(groupId, name);
+      setProjectLibrary((current) => ({
+        ...current,
+        groups: current.groups.map((group) => group.id === groupId ? savedGroup : group)
+      }));
+      notifySuccess("已重命名项目分组", `${currentGroup.name} → ${savedGroup.name}`);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "重命名项目分组失败");
+      throw error;
+    }
+  }
+
   async function handleSetRemoteProjectConnectionEnabled(projectId: string, enabled: boolean) {
     const currentProject = projectsRef.current.find((project) => project.id === projectId);
     if (!currentProject?.remote) {
@@ -3038,6 +3080,8 @@ export function App() {
           onReorderProjects={(projectIds) => void handleReorderProjects(projectIds)}
           onToggleProjectPinned={(projectId) => void handleToggleProjectPinned(projectId)}
           onSetProjectGroup={handleSetProjectGroup}
+          onRenameProject={handleRenameProject}
+          onRenameGroup={handleRenameProjectGroup}
           onSetRemoteConnectionEnabled={handleSetRemoteProjectConnectionEnabled}
           onSwitchBranch={(project) => void switchBranchFromToolbar(project)}
         />

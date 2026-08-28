@@ -24,6 +24,7 @@ const TARGET_PHASES = new Set<UpdatePhase>(["available", "downloading", "downloa
 const MOCK_PHASES = new Set<UpdatePhase>(["idle", "checking", "up-to-date", "available", "downloading", "downloaded", "error"]);
 const CURRENT_VERSION = packageInfo.version;
 const UPDATE_BRIDGE_UNAVAILABLE = "更新服务不可用：桌面进程未提供所需接口。";
+const IS_MACOS = /Macintosh|Mac OS X/.test(window.navigator.userAgent);
 type UpdateStateWithoutCapabilities = Omit<UpdateState, "capabilities">;
 
 export function AppUpdateControl() {
@@ -164,7 +165,8 @@ export function AppUpdateControl() {
   const triggerLabel = hasUpgradeNotification
     ? `发现新版本 v${stripVersionPrefix(state.availableVersion ?? state.currentVersion)}`
     : "关于、版本与更新";
-  const canCheck = state.capabilities.sources.length > 0 && !actionPending && state.operation !== "rollback" && !["checking", "downloading", "downloaded", "installing"].includes(state.phase);
+  const updatesEnabled = state.capabilities.sources.length > 0;
+  const canCheck = updatesEnabled && !actionPending && state.operation !== "rollback" && !["checking", "downloading", "downloaded", "installing"].includes(state.phase);
   const rollbackNeedsPreparation = state.operation === "rollback" && state.phase === "error" && !state.progress;
   const canChangeSource = state.capabilities.sources.length > 1 &&
     (!actionPending || state.phase === "checking") &&
@@ -199,6 +201,10 @@ export function AppUpdateControl() {
       void loadReleaseDetails(false);
     }
   }, [open, detailsOpen, detailVersion, detailsLoading, detailsError, releaseDetails, state.source]);
+
+  if (!isMock && IS_MACOS && !packageInfo.featureFlags.macosInAppUpdates) {
+    return null;
+  }
 
   function closePanel() {
     setDetailsOpen(false);
@@ -657,33 +663,35 @@ export function AppUpdateControl() {
                   </button>
                 </PathTooltip> : null}
               </div> : null}
-              <PathTooltip content="悬停查看本次更新内容" className="app-update-action-tooltip">
-                <button
-                  type="button"
-                  className="app-update-icon-button"
-                  aria-label="查看本次更新内容"
-                  aria-expanded={detailsOpen}
-                  aria-controls="app-update-details"
-                  onPointerEnter={showDetails}
-                  onPointerLeave={scheduleDetailsClose}
-                  onFocus={showDetails}
-                  onBlur={scheduleDetailsClose}
-                  onClick={showDetails}
-                >
-                  <FileText size={15} />
-                </button>
-              </PathTooltip>
-              <PathTooltip content={state.phase === "checking" ? "取消检查" : "检查最新版本"} className="app-update-action-tooltip">
-                <button
-                  type="button"
-                  className="app-update-icon-button"
-                  aria-label={state.phase === "checking" ? "取消检查" : "检查最新版本"}
-                  disabled={state.phase !== "checking" && !canCheck}
-                  onClick={state.phase === "checking" ? () => void cancelUpdateCheck() : () => void checkForUpdates()}
-                >
-                  {state.phase === "checking" ? <X size={15} /> : <RefreshCw size={15} />}
-                </button>
-              </PathTooltip>
+              {updatesEnabled ? <>
+                <PathTooltip content="悬停查看本次更新内容" className="app-update-action-tooltip">
+                  <button
+                    type="button"
+                    className="app-update-icon-button"
+                    aria-label="查看本次更新内容"
+                    aria-expanded={detailsOpen}
+                    aria-controls="app-update-details"
+                    onPointerEnter={showDetails}
+                    onPointerLeave={scheduleDetailsClose}
+                    onFocus={showDetails}
+                    onBlur={scheduleDetailsClose}
+                    onClick={showDetails}
+                  >
+                    <FileText size={15} />
+                  </button>
+                </PathTooltip>
+                <PathTooltip content={state.phase === "checking" ? "取消检查" : "检查最新版本"} className="app-update-action-tooltip">
+                  <button
+                    type="button"
+                    className="app-update-icon-button"
+                    aria-label={state.phase === "checking" ? "取消检查" : "检查最新版本"}
+                    disabled={state.phase !== "checking" && !canCheck}
+                    onClick={state.phase === "checking" ? () => void cancelUpdateCheck() : () => void checkForUpdates()}
+                  >
+                    {state.phase === "checking" ? <X size={15} /> : <RefreshCw size={15} />}
+                  </button>
+                </PathTooltip>
+              </> : null}
             </div>
           </div>
 
@@ -915,9 +923,9 @@ function phaseLabel(state: UpdateState): string {
     case "downloading":
       return rollback ? "正在下载回退版本" : "正在下载更新";
     case "downloaded":
-      return rollback ? "回退版本已就绪" : "更新已就绪";
+      return rollback ? "回退安装包已就绪" : "更新安装包已就绪";
     case "installing":
-      return "正在应用更新";
+      return rollback ? "正在启动回退安装程序" : "正在启动更新安装程序";
     case "error":
       return rollback ? "回退未完成" : "更新未完成";
     default:
@@ -933,10 +941,10 @@ function primaryActionLabel(state: UpdateState, actionPending: boolean): string 
     return "正在下载";
   }
   if (state.phase === "downloaded") {
-    return actionPending ? "正在启动" : state.operation === "rollback" ? "回退并重启" : "更新并重启";
+    return actionPending ? "正在启动" : state.operation === "rollback" ? "打开回退安装程序" : "打开更新安装程序";
   }
   if (state.phase === "installing") {
-    return "正在应用更新";
+    return "正在启动安装程序";
   }
   if (state.phase === "error") {
     return actionPending ? "正在重试" : state.operation === "rollback" ? "重新下载回退包" : "重新下载";

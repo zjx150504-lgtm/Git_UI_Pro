@@ -2,6 +2,7 @@ import { app, autoUpdater as nativeAutoUpdater, net } from "electron";
 import { MacUpdater, NsisUpdater, type ProgressInfo, type UpdateCheckResult, type UpdateInfo } from "electron-updater";
 import type { CancellationToken } from "builder-util-runtime";
 import type { EventEmitter } from "node:events";
+import packageInfo from "../package.json";
 import {
   buildReleaseHistoryCatalog,
   createRollbackUpdaterOptions,
@@ -63,6 +64,7 @@ const INSTALLER_LOW_SPEED_WINDOW_MS = 8_000;
 const INSTALLER_STALL_TIMEOUT_MS = 20_000;
 const SHA256_DIGEST_PATTERN = /^sha256:([a-f\d]{64})$/i;
 const MAC_NATIVE_UPDATER_EVENTS = ["error", "update-downloaded"] as const;
+export const MACOS_IN_APP_UPDATES_ENABLED = packageInfo.featureFlags.macosInAppUpdates === true;
 
 type ReusableResource = {
   removeAllListeners(): unknown;
@@ -122,12 +124,16 @@ export class ReusableInstance<T extends ReusableResource> {
   }
 }
 
-export function updateCapabilities(platform: NodeJS.Platform, packaged: boolean): UpdateCapabilities {
+export function updateCapabilities(
+  platform: NodeJS.Platform,
+  packaged: boolean,
+  macosInAppUpdatesEnabled = MACOS_IN_APP_UPDATES_ENABLED
+): UpdateCapabilities {
   if (!packaged) {
     return { sources: [], rollback: false };
   }
   if (platform === "darwin") {
-    return { sources: ["github"], rollback: false };
+    return macosInAppUpdatesEnabled ? { sources: ["github"], rollback: false } : { sources: [], rollback: false };
   }
   if (platform === "win32") {
     return { sources: ["github", "gitee"], rollback: true };
@@ -175,6 +181,20 @@ type UpgradeDownloadUpdater = {
   downloadUpdate: (cancellationToken?: CancellationToken) => Promise<string[]>;
 };
 
+type UpgradeUpdaterPreferences = {
+  autoDownload: boolean;
+  autoInstallOnAppQuit: boolean;
+  allowPrerelease: boolean;
+  allowDowngrade: boolean;
+  fullChangelog: boolean;
+  disableWebInstaller: boolean;
+  disableDifferentialDownload: boolean;
+};
+
+type InstallableNsisUpdater = {
+  quitAndInstall: (isSilent?: boolean, isForceRunAfter?: boolean) => void;
+};
+
 export type LatestStableRelease = {
   version: string;
   tagName: string;
@@ -193,6 +213,7 @@ export type FreshUpgradeDownload = {
   info: UpdateInfo;
   downloadPromise: Promise<string[]> | null;
   cancellationToken: CancellationToken | null;
+  cancelled?: boolean;
 };
 
 export class UpdateCheckGate<T> {
@@ -290,9 +311,13 @@ export async function resolveFreshUpgradeCheck(
 export async function startFreshUpgradeDownload(
   updater: UpgradeDownloadUpdater,
   loadLatestRelease: () => Promise<LatestStableRelease>,
-  onCandidate: (info: UpdateInfo) => void
+  onCandidate: (info: UpdateInfo) => void,
+  isActive: () => boolean = () => true
 ): Promise<FreshUpgradeDownload> {
   const result = await resolveFreshUpgradeCheck(updater, loadLatestRelease);
+  if (!isActive()) {
+    return { info: result.updateInfo, downloadPromise: null, cancellationToken: null, cancelled: true };
+  }
   if (!result.isUpdateAvailable) {
     return { info: result.updateInfo, downloadPromise: null, cancellationToken: null };
   }
@@ -303,6 +328,20 @@ export async function startFreshUpgradeDownload(
     downloadPromise: updater.downloadUpdate(result.cancellationToken),
     cancellationToken: result.cancellationToken ?? null
   };
+}
+
+export function configureUpgradeUpdater(updater: UpgradeUpdaterPreferences): void {
+  updater.autoDownload = false;
+  updater.autoInstallOnAppQuit = false;
+  updater.allowPrerelease = false;
+  updater.allowDowngrade = false;
+  updater.fullChangelog = false;
+  updater.disableWebInstaller = true;
+  updater.disableDifferentialDownload = false;
+}
+
+export function restartAndInstallNsisUpdate(updater: InstallableNsisUpdater): void {
+  updater.quitAndInstall(false, true);
 }
 
 export function parseLatestStableGithubRelease(value: unknown): LatestStableRelease {
@@ -419,7 +458,12 @@ export class UpdateService {
   private backgroundCheckTimer: NodeJS.Timeout | null = null;
   private readonly updateCheckGate = new UpdateCheckGate<UpdateState>();
   private updateCheckGeneration = 0;
-  private activeUpdateCheck: { generation: number; source: UpdateSource; controller: AbortController } | null = null;
+  private activeUpdateCheck: {
+    generation: number;
+    source: UpdateSource;
+    controller: AbortController;
+    kind: "check" | "download";
+  } | null = null;
   private upgradeUpdater: NsisUpdater | null = null;
   // MacUpdater registers listeners on Electron's global autoUpdater, so reuse it for the service lifetime.
   private readonly macUpdater: ReusableInstance<MacUpdater> | null;
@@ -808,7 +852,15 @@ export class UpdateService {
       return this.getState();
     }
 
+    const checkKind = this.activeUpdateCheck?.kind;
     this.cancelActiveUpdateCheck();
+    if (checkKind === "download") {
+      if (this.portable) {
+        this.disposePortableDownload();
+      } else {
+        this.disposeUpgradeUpdater();
+      }
+    }
     this.setState({
       phase: "idle",
       operation: "upgrade",
@@ -937,7 +989,7 @@ export class UpdateService {
         // MacUpdater exposes a zero-argument API; silent and force-run flags only apply to Windows installers.
         updater.quitAndInstall();
       } else {
-        updater.quitAndInstall(false, true);
+        restartAndInstallNsisUpdate(updater);
       }
     });
     return true;
@@ -1001,13 +1053,7 @@ export class UpdateService {
 
   private createUpgradeUpdater(target: RollbackTarget): NsisUpdater {
     const updater = new NsisUpdater(createRollbackUpdaterOptions(target) as any);
-    updater.autoDownload = false;
-    updater.autoInstallOnAppQuit = false;
-    updater.allowPrerelease = false;
-    updater.allowDowngrade = false;
-    updater.fullChangelog = false;
-    updater.disableWebInstaller = true;
-    updater.disableDifferentialDownload = false;
+    configureUpgradeUpdater(updater);
     updater.logger = console;
     return updater;
   }
@@ -1058,7 +1104,8 @@ export class UpdateService {
   private async startUpgradeDownloadAttempt(
     source: InstallerDownloadSource,
     fallbackSource: InstallerDownloadSource | null,
-    expectedVersion: string
+    expectedVersion: string,
+    isCheckActive: () => boolean = () => true
   ): Promise<void> {
     const updater = this.createUpgradeUpdater(source.target);
     const generation = ++this.upgradeGeneration;
@@ -1072,7 +1119,7 @@ export class UpdateService {
         updater,
         async () => ({ version: expectedVersion, tagName: `v${expectedVersion}`, target: source.target }),
         (info) => {
-          if (this.upgradeUpdater !== updater || this.upgradeGeneration !== generation) {
+          if (!isCheckActive() || this.upgradeUpdater !== updater || this.upgradeGeneration !== generation) {
             return;
           }
           this.upgradeSourceStartedAt = Date.now();
@@ -1085,9 +1132,11 @@ export class UpdateService {
             progress: emptyInstallerProgress(source),
             error: undefined
           });
-        }
+        },
+        isCheckActive
       );
-      if (this.upgradeUpdater !== updater || this.upgradeGeneration !== generation) {
+      if (!isCheckActive() || this.upgradeUpdater !== updater || this.upgradeGeneration !== generation || freshDownload.cancelled) {
+        this.disposeUpgradeUpdater();
         return;
       }
       this.upgradeCancellationToken = freshDownload.cancellationToken;
@@ -1198,6 +1247,7 @@ export class UpdateService {
   }
 
   private async downloadLatestUpgrade(): Promise<UpdateState> {
+    const check = this.beginUpdateCheck("download");
     this.setState({
       phase: "checking",
       operation: "upgrade",
@@ -1210,7 +1260,7 @@ export class UpdateService {
         const updater = this.requireMacUpdater();
         const generation = ++this.upgradeGeneration;
         const result = await updater.checkForUpdates();
-        if (this.upgradeGeneration !== generation) {
+        if (!this.isActiveUpdateCheck(check) || this.upgradeGeneration !== generation) {
           return this.getState();
         }
         if (!result) {
@@ -1255,20 +1305,31 @@ export class UpdateService {
           (error) => this.setError(error, "upgrade")
         );
       } catch (error) {
-        this.disposeUpgradeUpdater();
-        this.setError(error, "upgrade");
+        if (this.isActiveUpdateCheck(check)) {
+          this.disposeUpgradeUpdater();
+          this.setError(error, "upgrade");
+        }
+      } finally {
+        this.completeUpdateCheck(check);
       }
       return this.getState();
     }
 
     try {
       this.disposeUpgradeUpdater();
-      const latestRelease = await this.fetchLatestStableRelease();
+      const latestRelease = await this.fetchLatestStableRelease(check.source, check.controller.signal);
+      if (!this.isActiveUpdateCheck(check)) {
+        return this.getState();
+      }
       const sources = installerDownloadSources(requireRollbackTarget(latestRelease.target), this.state.source);
-      await this.startUpgradeDownloadAttempt(sources[0], null, latestRelease.version);
+      await this.startUpgradeDownloadAttempt(sources[0], null, latestRelease.version, () => this.isActiveUpdateCheck(check));
     } catch (error) {
-      this.disposeUpgradeUpdater();
-      this.setError(error, "upgrade");
+      if (this.isActiveUpdateCheck(check)) {
+        this.disposeUpgradeUpdater();
+        this.setError(error, "upgrade");
+      }
+    } finally {
+      this.completeUpdateCheck(check);
     }
     return this.getState();
   }
@@ -1312,6 +1373,7 @@ export class UpdateService {
   }
 
   private async downloadLatestPortableUpgrade(): Promise<UpdateState> {
+    const check = this.beginUpdateCheck("download");
     this.setState({
       phase: "checking",
       operation: "upgrade",
@@ -1319,7 +1381,10 @@ export class UpdateService {
     });
     try {
       this.disposePortableDownload();
-      const latestRelease = await this.fetchLatestStableRelease();
+      const latestRelease = await this.fetchLatestStableRelease(check.source, check.controller.signal);
+      if (!this.isActiveUpdateCheck(check)) {
+        return this.getState();
+      }
       if (comparePortableVersions(latestRelease.version, this.state.currentVersion) <= 0) {
         const target = latestRelease.target && "artifactName" in latestRelease.target
           ? latestRelease.target
@@ -1339,8 +1404,12 @@ export class UpdateService {
       const target = requirePortableTarget(latestRelease.target);
       return this.startPortableDownload(target, "upgrade");
     } catch (error) {
-      this.setError(error, "upgrade");
+      if (this.isActiveUpdateCheck(check)) {
+        this.setError(error, "upgrade");
+      }
       return this.getState();
+    } finally {
+      this.completeUpdateCheck(check);
     }
   }
 
@@ -1502,12 +1571,18 @@ export class UpdateService {
     this.portableTarget = null;
   }
 
-  private beginUpdateCheck(): { generation: number; source: UpdateSource; controller: AbortController } {
+  private beginUpdateCheck(kind: "check" | "download" = "check"): {
+    generation: number;
+    source: UpdateSource;
+    controller: AbortController;
+    kind: "check" | "download";
+  } {
     this.activeUpdateCheck?.controller.abort();
     const check = {
       generation: ++this.updateCheckGeneration,
       source: this.state.source,
-      controller: new AbortController()
+      controller: new AbortController(),
+      kind
     };
     this.activeUpdateCheck = check;
     return check;

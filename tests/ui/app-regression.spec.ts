@@ -805,6 +805,32 @@ test("项目右键菜单可以快速调整分组", async ({ page }) => {
   await expect(page.getByLabel("Notifications alt+T").getByText("已更新项目分组")).toBeVisible();
 });
 
+test("项目和分组名称可从右键菜单进入原位编辑", async ({ page }) => {
+  await page.goto("/");
+  const project = page.locator(".project-rail-item").filter({ hasText: "Git UI Pro" }).first();
+  await project.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "重命名项目" }).click();
+
+  const projectNameInput = page.getByRole("textbox", { name: "修改项目名称：Git UI Pro" });
+  await expect(projectNameInput).toBeVisible();
+  await expect(projectNameInput).toBeFocused();
+  await projectNameInput.fill("Git UI Pro 桌面端");
+  await projectNameInput.press("Enter");
+  await expect(project.locator(".project-rail-name-text")).toHaveText("Git UI Pro 桌面端");
+  await expect(page.getByLabel("Notifications alt+T").getByText("已重命名项目")).toBeVisible();
+
+  const groupHeader = page.locator(".project-rail-group-header").filter({ hasText: "个人项目" });
+  await groupHeader.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "重命名分组" }).click();
+
+  const groupNameInput = page.getByRole("textbox", { name: "修改项目分组名称：个人项目" });
+  await expect(groupNameInput).toBeFocused();
+  await groupNameInput.fill("桌面工具");
+  await groupNameInput.press("Enter");
+  await expect(page.locator(".project-rail-group-header").filter({ hasText: "桌面工具" })).toBeVisible();
+  await expect(page.getByLabel("Notifications alt+T").getByText("已重命名项目分组")).toBeVisible();
+});
+
 test("提交信息草稿按项目隔离并在切回后恢复", async ({ page }) => {
   await page.goto("/");
   const messageInput = page.locator(".scm-commit-box textarea");
@@ -1034,10 +1060,10 @@ test("打开提交文件时使用圆形加载状态且不闪现空 diff 提示",
 
   await page.evaluate(() => (window as typeof window & { __finishCommitDiff?: () => void }).__finishCommitDiff?.());
   await expect(loadingState).toBeHidden();
-  await expect(page.locator(".markdown-document")).toContainText("新增内容");
+  await expect(page.locator(".editor-diff-panel .diff-line")).toHaveCount(2);
 });
 
-test("Markdown 默认使用阅读视图并可切回源码差异", async ({ page }) => {
+test("Markdown 默认使用源码差异并可按需切换阅读视图", async ({ page }) => {
   await page.goto("/");
   await page.locator(".graph-commit-row").first().click();
   await page.evaluate(() => {
@@ -1053,11 +1079,20 @@ test("Markdown 默认使用阅读视图并可切回源码差异", async ({ page 
   });
 
   await page.locator(".graph-commit-file-row").filter({ hasText: "PRD.md" }).click();
-  await expect(page.locator(".markdown-document h1")).toHaveText("Markdown 阅读标题");
-  await expect(page.locator(".markdown-document li")).toHaveCount(2);
   const readButton = page.getByRole("button", { name: "阅读", exact: true });
   const sourceButton = page.getByRole("button", { name: "源码", exact: true });
-  await expect(readButton).toHaveAttribute("aria-pressed", "true");
+  await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
+  await expect(page.locator(".editor-diff-panel .diff-line")).toHaveCount(4);
+  await expect(page.locator(".markdown-document")).toHaveCount(0);
+
+  await readButton.click();
+  await expect(page.locator(".markdown-document h1")).toHaveText("Markdown 阅读标题");
+  await expect(page.locator(".markdown-document li")).toHaveCount(2);
+  const markdownWidthUsage = await page.locator(".markdown-document").evaluate((documentElement) => {
+    const panel = documentElement.closest(".editor-diff-panel");
+    return panel ? documentElement.getBoundingClientRect().width / panel.getBoundingClientRect().width : 0;
+  });
+  expect(markdownWidthUsage).toBeGreaterThan(0.9);
 
   await sourceButton.click();
   await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
@@ -1065,6 +1100,52 @@ test("Markdown 默认使用阅读视图并可切回源码差异", async ({ page 
 
   await readButton.click();
   await expect(page.locator(".markdown-document h1")).toHaveText("Markdown 阅读标题");
+});
+
+test("大型 Markdown 阅读排版可被源码切换打断并在触底时分批加载", async ({ page }) => {
+  await page.goto("/");
+  await page.locator(".graph-commit-row").first().click();
+  await page.evaluate(() => {
+    const longParagraph = "用于验证大型 Markdown 阅读排版不会锁死主界面的内容。".repeat(8);
+    window.gitUI = {
+      getCommitFilePreview: async () => null,
+      getCommitDiff: async () => Array.from({ length: 4_000 }, (_, index) => ({
+        type: "context" as const,
+        oldLineNumber: index + 1,
+        newLineNumber: index + 1,
+        content: index % 20 === 0 ? `## 第 ${index / 20 + 1} 节` : longParagraph
+      }))
+    } as unknown as typeof window.gitUI;
+  });
+
+  await page.locator(".graph-commit-file-row").filter({ hasText: "PRD.md" }).click();
+  const readButton = page.getByRole("button", { name: "阅读", exact: true });
+  const sourceButton = page.getByRole("button", { name: "源码", exact: true });
+  await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
+
+  await readButton.click();
+  await sourceButton.click();
+  await expect(sourceButton).toHaveAttribute("aria-pressed", "true");
+
+  await readButton.click();
+  const markdownDocument = page.locator(".markdown-document");
+  const markdownBatches = page.locator(".markdown-document-batch");
+  await expect(markdownDocument).toBeVisible();
+  await expect(page.locator(".document-preview-footnote")).toContainText("向下滚动继续加载");
+  await expect.poll(() => markdownBatches.count()).toBeGreaterThan(0);
+
+  const initialBatchCount = await markdownBatches.count();
+  const initialLoadedCharacters = Number(await markdownDocument.getAttribute("data-loaded-characters"));
+  const totalCharacters = Number(await markdownDocument.getAttribute("data-total-characters"));
+  expect(initialLoadedCharacters).toBeGreaterThan(0);
+  expect(initialLoadedCharacters).toBeLessThan(totalCharacters);
+
+  await markdownDocument.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    element.dispatchEvent(new Event("scroll"));
+  });
+  await expect.poll(() => markdownBatches.count()).toBeGreaterThan(initialBatchCount);
+  await expect.poll(async () => Number(await markdownDocument.getAttribute("data-loaded-characters"))).toBeGreaterThan(initialLoadedCharacters);
 });
 
 test("Word 和表格二进制文件在右侧使用专用阅读器", async ({ page }) => {
