@@ -87,22 +87,20 @@ function contrastRatio(foreground: string, background: string) {
 async function captureThemeSmoke(page: Page, testInfo: TestInfo, theme: "light" | "dark") {
   const styles = await page.locator(".app-shell").evaluate((element) => {
     const appStyle = getComputedStyle(element);
-    const topBarStyle = getComputedStyle(document.querySelector(".top-bar")!);
+    const chromeStyle = getComputedStyle(document.querySelector(".app-chrome")!);
     return {
       background: appStyle.getPropertyValue("--bg").trim(),
       text: appStyle.getPropertyValue("--text").trim(),
-      topBarColor: topBarStyle.color,
-      topBarBackground: topBarStyle.backgroundColor,
-      topBarBorderRadius: topBarStyle.borderRadius,
-      topBarBoxShadow: topBarStyle.boxShadow
+      chromeColor: chromeStyle.color,
+      chromeBackground: chromeStyle.backgroundColor,
+      chromeBoxShadow: chromeStyle.boxShadow
     };
   });
 
   expect(contrastRatio(styles.text, styles.background)).toBeGreaterThanOrEqual(7);
-  expect(styles.topBarColor).not.toBe("rgba(0, 0, 0, 0)");
-  expect(styles.topBarBackground).not.toBe("rgba(0, 0, 0, 0)");
-  expect(styles.topBarBorderRadius).not.toBe("0px");
-  expect(styles.topBarBoxShadow).not.toBe("none");
+  expect(styles.chromeColor).not.toBe("rgba(0, 0, 0, 0)");
+  expect(styles.chromeBackground).not.toBe("rgba(0, 0, 0, 0)");
+  expect(styles.chromeBoxShadow).not.toBe("none");
   await testInfo.attach(`${theme}-theme`, {
     body: await page.screenshot({ fullPage: false }),
     contentType: "image/png"
@@ -266,10 +264,13 @@ test("切换项目分组使用局部更新并快速完成", async ({ page }) => 
 
   const groupSelect = dialog.getByRole("combobox", { name: "设置 Git UI Pro 的分组" });
   await expect(groupSelect).toBeVisible();
-  const currentGroup = await groupSelect.inputValue();
-  const nextGroup = await groupSelect.locator("option").evaluateAll((options, selected) => (
-    options.map((option) => (option as HTMLOptionElement).value).find((value) => value && value !== selected)
-  ), currentGroup);
+  const currentGroup = (await groupSelect.textContent())?.trim() ?? "";
+  await groupSelect.click();
+  const groupOptions = page.getByRole("listbox", { name: "设置 Git UI Pro 的分组" });
+  await expect(groupOptions).toBeVisible();
+  const nextGroup = (await groupOptions.getByRole("option").allTextContents())
+    .map((label) => label.trim())
+    .find((label) => label && label !== "未分组" && label !== currentGroup);
   expect(nextGroup).toBeTruthy();
 
   await page.evaluate(() => {
@@ -289,9 +290,9 @@ test("切换项目分组使用局部更新并快速完成", async ({ page }) => 
     } as typeof window.gitUI;
   });
 
-  await groupSelect.selectOption(nextGroup!);
+  await groupOptions.getByRole("option", { name: nextGroup! }).click();
   await page.waitForTimeout(50);
-  await expect(groupSelect).toHaveValue(nextGroup!);
+  await expect(groupSelect).toHaveText(nextGroup!);
   await expect(dialog).toHaveAttribute("aria-busy", "false");
   const calls = await page.evaluate(() => (window as unknown as { __projectGroupCalls: { setProjectGroup: number; getProjects: number } }).__projectGroupCalls);
   expect(calls).toEqual({ setProjectGroup: 1, getProjects: 0 });
@@ -368,7 +369,6 @@ test("项目栏头部使用单行等尺寸图标且搜索可展开", async ({ pa
   });
 
   const metrics = await page.evaluate(() => {
-    const topBar = document.querySelector<HTMLElement>(".top-bar")!;
     const search = document.querySelector<HTMLElement>(".project-rail-search")!;
     const searchInput = search.querySelector<HTMLInputElement>("input")!;
     const title = document.querySelector<HTMLElement>(".project-rail-header > strong")!;
@@ -376,7 +376,6 @@ test("项目栏头部使用单行等尺寸图标且搜索可展开", async ({ pa
     const controlRects = headerControls.map((control) => control.getBoundingClientRect());
     const titleRect = title.getBoundingClientRect();
     return {
-      topBarHeight: topBar.getBoundingClientRect().height,
       searchWidth: search.getBoundingClientRect().width,
       searchInputOpacity: getComputedStyle(searchInput).opacity,
       controlCount: controlRects.length,
@@ -386,7 +385,6 @@ test("项目栏头部使用单行等尺寸图标且搜索可展开", async ({ pa
     };
   });
 
-  expect(metrics.topBarHeight).toBeLessThanOrEqual(54);
   expect(metrics.searchWidth).toBeLessThanOrEqual(44);
   expect(metrics.searchInputOpacity).toBe("0");
   expect(metrics.controlCount).toBe(5);
@@ -433,12 +431,12 @@ test("项目栏头部使用单行等尺寸图标且搜索可展开", async ({ pa
   expect(focusVisual.inputBoxShadow).toBe("none");
   expect(focusVisual.inputOutlineWidth).toBe("0px");
 
-  await page.locator(".top-bar").hover();
+  await page.mouse.move(0, 0);
   await searchInput.hover();
   await expect(searchTooltip).toBeVisible();
   expect(await readTooltipVisual(searchTooltip)).toEqual(referenceTooltipVisual);
 
-  await page.locator(".top-bar .project-heading").click();
+  await page.locator(".workspace-shell").click({ position: { x: 518, y: 3 } });
   await expect(searchInput).not.toBeFocused();
   await expect.poll(async () => searchControl.evaluate((element) => element.getBoundingClientRect().width)).toBeLessThanOrEqual(44);
 });
@@ -1393,22 +1391,20 @@ test("切换回已查看的提交文件时复用缓存", async ({ page }) => {
   expect(calls.parents).toEqual(["b13c48e", "b13c48e"]);
 });
 
-test("提交变更文件默认使用可折叠树形视图", async ({ page }) => {
+test("提交变更文件默认使用平铺列表视图", async ({ page }) => {
   await page.goto("/");
   const firstCommit = page.locator(".graph-commit-row").first();
   await expect(firstCommit).toBeVisible();
   await firstCommit.click();
 
-  const tree = page.locator(".graph-commit-file-tree");
-  await expect(tree).toBeVisible();
-  const docsFolder = tree.locator(".graph-commit-folder-row").filter({ hasText: "docs" });
-  await expect(docsFolder).toHaveAttribute("aria-expanded", "true");
-  await expect(docsFolder.locator(".graph-commit-folder-icon")).toBeVisible();
-  await expect(tree.locator(".graph-commit-file-row").filter({ hasText: "PRD.md" })).toBeVisible();
+  const expansion = page.locator(".graph-commit-expansion").first();
+  await expect(expansion).toBeVisible();
+  await expect(expansion.locator(".graph-commit-file-tree")).toHaveCount(0);
+  await expect(expansion.locator(".graph-commit-folder-row")).toHaveCount(0);
 
-  await docsFolder.click();
-  await expect(docsFolder).toHaveAttribute("aria-expanded", "false");
-  await expect(tree.locator(".graph-commit-file-row").filter({ hasText: "PRD.md" })).toBeHidden();
+  const changedFile = expansion.locator(".graph-commit-file-row").filter({ hasText: "PRD.md" });
+  await expect(changedFile).toBeVisible();
+  await expect(changedFile.locator(".graph-commit-file-dir")).toHaveText("docs");
 });
 
 test("提交文件列表突出显示当前预览文件", async ({ page }) => {
@@ -1508,7 +1504,8 @@ test("亮色和暗色主题保持关键文字可读并完成截图 smoke", async
   await expect(page.locator(".app-shell")).toHaveClass(/theme-light/);
   await captureThemeSmoke(page, testInfo, "light");
 
-  await page.getByRole("button", { name: "切换深色主题" }).click();
+  await page.getByRole("button", { name: "主题" }).click();
+  await page.getByRole("menuitemradio", { name: "黑暗" }).click();
   await expect(page.locator(".app-shell")).toHaveClass(/theme-dark/);
   await captureThemeSmoke(page, testInfo, "dark");
 });

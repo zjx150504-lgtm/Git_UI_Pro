@@ -2,6 +2,7 @@ import { Check, ChevronDown, Copy, Minus, Moon, PanelLeftClose, PanelLeftOpen, S
 import { useEffect, useRef, useState } from "react";
 import type { WindowState } from "../types/electron";
 import { AppUpdateControl } from "./AppUpdateControl";
+import { PathTooltip } from "./PathTooltip";
 
 /** In-app brand mark — SVG stays sharp at titlebar size (~22px). */
 const APP_ICON_URL = new URL("../assets/git-ui-pro-mark.svg", import.meta.url).href;
@@ -92,9 +93,11 @@ export function AppChrome({
           {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </button>
         <div className="app-chrome-tools" aria-label="应用工具">
-          <button type="button" className="app-chrome-settings-button" aria-label="打开设置" onClick={onOpenRepositoryCenter}>
-            设置
-          </button>
+          <PathTooltip content="打开仓库中心" className="app-chrome-settings-tooltip" showOnFocus={false}>
+            <button type="button" className="app-chrome-settings-button" aria-label="打开仓库中心" onClick={onOpenRepositoryCenter}>
+              设置
+            </button>
+          </PathTooltip>
           <div className="app-chrome-theme-control" ref={themeControlRef}>
             <button
               type="button"

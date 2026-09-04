@@ -1,0 +1,134 @@
+/* Shared custom select control that replaces native <select> dropdowns. */
+
+.select-menu-trigger {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+  cursor: pointer;
+}
+
+.select-menu-trigger:disabled {
+  cursor: not-allowed;
+}
+
+.select-menu-trigger-label {
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-menu-trigger-label.placeholder {
+  color: var(--muted);
+}
+
+.select-menu-trigger-hint {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.select-menu-chevron {
+  flex: 0 0 auto;
+  color: var(--muted);
+  transition: transform 150ms ease;
+}
+
+.select-menu-trigger[aria-expanded="true"] .select-menu-chevron {
+  transform: rotate(180deg);
+}
+
+/* Overrides `.floating-menu` absolute placement: the popup is portalled and
+   anchored to viewport coordinates, above the repository center backdrop. */
+/* Two class names so these win over `.floating-menu` in liquid-glass.css,
+   which is emitted later in the bundle and sets `overflow: hidden`. */
+.floating-menu.select-menu-popup {
+  position: fixed;
+  z-index: 1300;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+.select-menu-popup {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 5px;
+  font-family: var(--app-font);
+  overscroll-behavior: contain;
+}
+
+/* Scoped with two class names so the flex layout survives
+   `.floating-menu button { display: block }` from app.css. */
+.select-menu-popup .select-menu-option {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-radius: 10px;
+  padding: 5px 8px;
+  color: var(--text);
+  background: transparent;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.select-menu-popup .select-menu-option.active,
+.select-menu-popup .select-menu-option:hover {
+  background: var(--surface-hover);
+}
+
+.select-menu-popup .select-menu-option[aria-selected="true"] {
+  color: var(--text-strong);
+  font-weight: 600;
+}
+
+.select-menu-popup .select-menu-option[aria-disabled="true"] {
+  color: var(--muted);
+  opacity: 0.62;
+  cursor: not-allowed;
+}
+
+.select-menu-popup .select-menu-option[aria-disabled="true"]:hover {
+  background: transparent;
+}
+
+.select-menu-option-mark {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 14px;
+  color: var(--blue);
+  opacity: 0;
+}
+
+.select-menu-option[aria-selected="true"] .select-menu-option-mark {
+  opacity: 1;
+}
+
+.select-menu-option-label {
+  overflow: hidden;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.select-menu-option-hint {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.select-menu-empty {
+  padding: 10px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}

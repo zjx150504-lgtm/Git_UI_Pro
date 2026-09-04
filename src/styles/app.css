@@ -204,6 +204,12 @@ button {
   -webkit-app-region: no-drag;
 }
 
+.app-chrome-settings-tooltip {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+}
+
 .app-chrome-settings-button {
   display: inline-flex;
   align-items: center;

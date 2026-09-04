@@ -74,6 +74,7 @@ import type {
   GitLfsMigrateOptions,
   GitStashDetails
 } from "../types/domain";
+import { SelectMenu, type SelectMenuOption } from "./SelectMenu";
 import "../styles/repository-center.css";
 
 export type RepositoryCenterTab = "recovery" | "refs" | "remotes" | "tools" | "projects" | "preferences";
@@ -473,6 +474,41 @@ const HOSTING_PROVIDER_OPTIONS: ReadonlyArray<{ value: GitHostingProvider; label
   { value: "github", label: "GitHub" },
   { value: "gitlab", label: "GitLab" },
   { value: "gitee", label: "Gitee" }
+];
+
+const RESTORE_MODE_OPTIONS: ReadonlyArray<SelectMenuOption<"branch" | "reset-mixed" | "reset-hard">> = [
+  { value: "branch", label: "创建恢复分支" },
+  { value: "reset-mixed", label: "重置 HEAD，保留文件修改" },
+  { value: "reset-hard", label: "强制恢复到该记录" }
+];
+
+const REBASE_ACTION_OPTIONS: ReadonlyArray<SelectMenuOption<RepositoryRebaseAction>> = [
+  { value: "pick", label: "pick", hint: "保留" },
+  { value: "edit", label: "edit", hint: "暂停修改" },
+  { value: "squash", label: "squash", hint: "合并并保留说明" },
+  { value: "fixup", label: "fixup", hint: "合并并丢弃说明" },
+  { value: "drop", label: "drop", hint: "删除" }
+];
+
+const SIGNING_FORMAT_OPTIONS: ReadonlyArray<SelectMenuOption<RepositorySigningFormat>> = [
+  { value: "openpgp", label: "OpenPGP" },
+  { value: "ssh", label: "SSH" },
+  { value: "x509", label: "X.509" }
+];
+
+const FONT_FAMILY_OPTIONS: ReadonlyArray<SelectMenuOption<RepositoryPreferences["fontFamily"]>> = [
+  { value: "system", label: "系统界面字体" },
+  { value: "mono", label: "等宽字体" }
+];
+
+const DENSITY_OPTIONS: ReadonlyArray<SelectMenuOption<RepositoryPreferences["density"]>> = [
+  { value: "compact", label: "紧凑" },
+  { value: "comfortable", label: "舒适" }
+];
+
+const SIDEBAR_POSITION_OPTIONS: ReadonlyArray<SelectMenuOption<RepositoryPreferences["sidebarPosition"]>> = [
+  { value: "left", label: "左侧" },
+  { value: "right", label: "右侧" }
 ];
 
 const SECTION_LABELS: Record<RepositoryCenterSection, string> = {
@@ -967,7 +1003,7 @@ function RecoveryWorkspace({ data, actions, pendingAction, runAction, reload }: 
 
       <DisclosureSection icon={<History size={17} />} title="引用日志恢复" description="从 HEAD 移动记录中找回提交或工作区状态">
         <div className="repository-center-inline-settings">
-          <label className="repository-center-field"><span>恢复方式</span><select value={restoreMode} onChange={(event) => setRestoreMode(event.target.value as typeof restoreMode)}><option value="branch">创建恢复分支</option><option value="reset-mixed">重置 HEAD，保留文件修改</option><option value="reset-hard">强制恢复到该记录</option></select></label>
+          <div className="repository-center-field"><span>恢复方式</span><SelectMenu ariaLabel="恢复方式" value={restoreMode} options={RESTORE_MODE_OPTIONS} onChange={setRestoreMode} /></div>
           {restoreMode === "branch" ? <label className="repository-center-field"><span>分支名</span><input value={restoreBranch} onChange={(event) => setRestoreBranch(event.target.value)} /></label> : null}
         </div>
         <ResourceBoundary section="reflog" resource={data.reflog} reload={reload}>{(entries) => entries.length === 0 ? (
@@ -1153,7 +1189,7 @@ function RefsWorkspace({ data, actions, pendingAction, runAction, reload }: Work
           plan: interactive ? rebasePlan : undefined
         }));
       }}>
-        <label className="repository-center-field grow"><span>目标引用</span><select value={rebaseTarget} onChange={(event) => setRebaseTarget(event.target.value)}><option value="">请选择目标引用</option>{targets.map((target) => <option key={target.ref} value={target.ref} disabled={target.isCurrent}>{target.label} · {target.kind}{target.isCurrent ? "（当前）" : ""}</option>)}</select></label>
+        <div className="repository-center-field grow"><span>目标引用</span><SelectMenu ariaLabel="目标引用" value={rebaseTarget} placeholder="请选择目标引用" options={targets.map((target) => ({ value: target.ref, label: `${target.label} · ${target.kind}${target.isCurrent ? "（当前）" : ""}`, disabled: target.isCurrent }))} onChange={setRebaseTarget} /></div>
         <label className="repository-center-field"><span>onto（可选）</span><input value={rebaseOnto} onChange={(event) => setRebaseOnto(event.target.value)} placeholder="新的基底" /></label>
         <label className="repository-center-check"><input type="checkbox" checked={interactive} onChange={(event) => setInteractive(event.target.checked)} /><span>交互式变基</span></label>
         <ActionButton label="开始变基" actionKey="rebase:start" pendingAction={pendingAction} disabled={!rebaseTarget || rebasePlanLoading || (interactive && (rebasePlan.length === 0 || rebasePlan[0]?.action === "squash" || rebasePlan[0]?.action === "fixup"))} type="submit" icon={<Play size={15} />} tone="primary" requiresConfirmation confirmLabel={interactive && rebasePlan.some((item) => item.action === "drop") ? "确认变基并删除计划中的提交" : "确认开始变基"} />
@@ -1166,13 +1202,12 @@ function RefsWorkspace({ data, actions, pendingAction, runAction, reload }: Work
           {rebasePlan.length > 0 ? rebasePlan.map((item, index) => (
             <div className={`repository-rebase-plan-row action-${item.action}`} key={item.hash}>
               <span className="repository-rebase-order">{index + 1}</span>
-              <select value={item.action} onChange={(event) => setRebasePlan((current) => current.map((entry) => entry.hash === item.hash ? { ...entry, action: event.target.value as RepositoryRebaseAction } : entry))} aria-label={`${item.shortHash} 的变基动作`}>
-                <option value="pick">pick · 保留</option>
-                <option value="edit">edit · 暂停修改</option>
-                <option value="squash">squash · 合并并保留说明</option>
-                <option value="fixup">fixup · 合并并丢弃说明</option>
-                <option value="drop">drop · 删除</option>
-              </select>
+              <SelectMenu
+                ariaLabel={`${item.shortHash} 的变基动作`}
+                value={item.action}
+                options={REBASE_ACTION_OPTIONS}
+                onChange={(action) => setRebasePlan((current) => current.map((entry) => entry.hash === item.hash ? { ...entry, action } : entry))}
+              />
               <code>{item.shortHash}</code>
               <strong>{item.subject}</strong>
               <span className="repository-rebase-move">
@@ -1235,7 +1270,7 @@ function RefsWorkspace({ data, actions, pendingAction, runAction, reload }: Work
         <span className="repository-center-record-leading"><Tags size={16} /></span>
         <span className="repository-center-record-main"><strong>{tag.name}<em>{tag.annotated ? "附注" : "轻量"}</em></strong><small><code>{tag.targetHash}</code>{tag.subject ? ` · ${tag.subject}` : ""}</small></span>
         <div className="repository-center-row-actions">
-          <select className="repository-center-compact-select" value={tagRemote} onChange={(event) => setTagRemote(event.target.value)} aria-label={`选择 ${tag.name} 的推送远程`}><option value="">选择远程</option>{data.remotes.data.map((remote) => <option key={remote.id} value={remote.id}>{remote.name}</option>)}</select>
+          <SelectMenu className="repository-center-compact-select" ariaLabel={`选择 ${tag.name} 的推送远程`} value={tagRemote} placeholder="选择远程" options={data.remotes.data.map((remote) => ({ value: remote.id, label: remote.name }))} onChange={setTagRemote} />
           <ActionButton label="推送" actionKey={`tag:push:${tag.id}`} pendingAction={pendingAction} disabled={!tagRemote} onClick={() => void runAction(`tag:push:${tag.id}`, () => actions.onPushTag({ tagId: tag.id, remoteId: tagRemote }))} icon={<UploadCloud size={14} />} />
           <ActionButton label="删除远程" actionKey={`tag:delete-remote:${tag.id}`} pendingAction={pendingAction} disabled={!tagRemote} onClick={() => void runAction(`tag:delete-remote:${tag.id}`, () => actions.onDeleteRemoteTag({ tagId: tag.id, remoteId: tagRemote }))} icon={<CloudOff size={14} />} tone="danger" requiresConfirmation confirmLabel="确认删除远程标签" />
           <ActionButton label="删除" actionKey={`tag:delete:${tag.id}`} pendingAction={pendingAction} onClick={() => void runAction(`tag:delete:${tag.id}`, () => actions.onDeleteTag(tag.id))} icon={<Trash2 size={14} />} tone="danger" requiresConfirmation confirmLabel="确认删除标签" />
@@ -1256,7 +1291,7 @@ function BranchRow({ branch, branches, actions, pendingAction, runAction }: { br
     {branch.kind === "local" ? <div className="repository-center-row-editor">
       <label><span>名称</span><input value={name} onChange={(event) => setName(event.target.value)} /></label>
       <ActionButton label="重命名" actionKey={`branch:rename:${branch.id}`} pendingAction={pendingAction} disabled={!name.trim() || name.trim() === branch.name} onClick={() => void runAction(`branch:rename:${branch.id}`, () => actions.onRenameBranch({ branchId: branch.id, nextName: name.trim() }))} icon={<Pencil size={14} />} />
-      <label><span>上游</span><select value={upstream} onChange={(event) => setUpstream(event.target.value)}><option value="">不跟踪</option>{branches.filter((candidate) => candidate.kind === "remote").map((candidate) => <option key={candidate.id} value={candidate.name}>{candidate.name}</option>)}</select></label>
+      <div className="repository-center-row-field"><span>上游</span><SelectMenu ariaLabel={`${branch.name} 的上游分支`} value={upstream} options={[{ value: "", label: "不跟踪" }, ...branches.filter((candidate) => candidate.kind === "remote").map((candidate) => ({ value: candidate.name, label: candidate.name }))]} onChange={setUpstream} /></div>
       <ActionButton label="保存上游" actionKey={`branch:upstream:${branch.id}`} pendingAction={pendingAction} disabled={upstream === (branch.upstream ?? "")} onClick={() => void runAction(`branch:upstream:${branch.id}`, () => actions.onSetBranchUpstream({ branchId: branch.id, upstream: upstream || null }))} icon={<Save size={14} />} />
       <ActionButton label="删除" actionKey={`branch:delete:${branch.id}`} pendingAction={pendingAction} disabled={branch.current} onClick={() => void runAction(`branch:delete:${branch.id}`, () => actions.onDeleteBranch(branch.id, false))} icon={<Trash2 size={14} />} tone="danger" requiresConfirmation confirmLabel="确认删除分支" />
       <ActionButton label="强制删除" actionKey={`branch:force-delete:${branch.id}`} pendingAction={pendingAction} disabled={branch.current} onClick={() => void runAction(`branch:force-delete:${branch.id}`, () => actions.onDeleteBranch(branch.id, true))} icon={<CircleAlert size={14} />} tone="danger" requiresConfirmation confirmLabel="确认强制删除" />
@@ -1367,7 +1402,7 @@ function RemotesWorkspace({ data, actions, pendingAction, runAction, reload }: W
             {remotes.length === 0 ? (
               <label className="repository-center-field grow"><span>远程仓库地址</span><input value={publishUrl} onChange={(event) => setPublishUrl(event.target.value)} placeholder="粘贴 GitHub、Gitee 或 GitLab 仓库地址" autoComplete="off" /><small>支持 HTTPS 和 SSH 地址；远程名称自动使用 origin。</small></label>
             ) : (
-              <label className="repository-center-field grow"><span>发布到</span><select value={publishRemoteId} onChange={(event) => setPublishRemoteId(event.target.value)}>{remotes.map((remote) => <option value={remote.id} key={remote.id}>{remote.name} · {remote.pushUrl}</option>)}</select><small>将自动设为默认推送远程并关联 {currentBranch.name}。</small></label>
+              <div className="repository-center-field grow"><span>发布到</span><SelectMenu ariaLabel="发布到的远程" value={publishRemoteId} options={remotes.map((remote) => ({ value: remote.id, label: `${remote.name} · ${remote.pushUrl}` }))} onChange={setPublishRemoteId} /><small>将自动设为默认推送远程并关联 {currentBranch.name}。</small></div>
             )}
             <ActionButton label="发布当前分支" actionKey="remote:first-publish" pendingAction={pendingAction} disabled={remotes.length === 0 ? !publishUrl.trim() : !publishRemoteId} type="submit" icon={<UploadCloud size={15} />} tone="primary" />
           </form>
@@ -1431,8 +1466,8 @@ function RemotesWorkspace({ data, actions, pendingAction, runAction, reload }: W
               setHostingToken("");
             });
           }}>
-            <label className="repository-center-field"><span>平台</span><select value={hostingProvider} onChange={(event) => selectHostingProvider(event.target.value as GitHostingProvider)}>{HOSTING_PROVIDER_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
-            <label className="repository-center-field"><span>远程</span><select value={hostingRemoteId} onChange={(event) => selectHostingRemote(event.target.value)}><option value="">选择远程</option>{data.remotes.data.map((remote) => <option key={remote.id} value={remote.id}>{remote.name}{remote.hostingProvider ? ` · ${hostingProviderLabel(remote.hostingProvider)}` : ""}</option>)}</select></label>
+            <div className="repository-center-field"><span>平台</span><SelectMenu ariaLabel="托管平台" value={hostingProvider} options={HOSTING_PROVIDER_OPTIONS} onChange={selectHostingProvider} /></div>
+            <div className="repository-center-field"><span>远程</span><SelectMenu ariaLabel="托管远程" value={hostingRemoteId} placeholder="选择远程" options={data.remotes.data.map((remote) => ({ value: remote.id, label: `${remote.name}${remote.hostingProvider ? ` · ${hostingProviderLabel(remote.hostingProvider)}` : ""}` }))} onChange={selectHostingRemote} /></div>
             <label className="repository-center-field grow"><span>访问令牌</span><input type="password" autoComplete="off" value={hostingToken} onChange={(event) => setHostingToken(event.target.value)} placeholder="输入新的访问令牌" /></label>
             <ActionButton label="保存账号" actionKey="hosting:account:save" pendingAction={pendingAction} disabled={!hostingRemoteId || !hostingToken.trim()} type="submit" icon={<Save size={14} />} tone="primary" />
           </form>
@@ -1553,7 +1588,7 @@ function HostingChangeRow({ change, actions, pendingAction, runAction }: {
           {capabilities.reviewEvents.includes("request-changes") ? <ActionButton label="请求修改" actionKey={`hosting:change:request:${actionScope}`} pendingAction={pendingAction} disabled={!canReview || !reviewBody.trim()} onClick={() => void runAction(`hosting:change:request:${actionScope}`, () => review("request-changes"))} icon={<ThumbsDown size={14} />} tone="warning" requiresConfirmation confirmLabel="确认提交请求修改" /> : null}
         </div>
         <div className="repository-center-hosting-merge-bar">
-          <label className="repository-center-field"><span>合并方式</span><select value={mergeMethod} onChange={(event) => setMergeMethod(event.target.value as GitHostingMergeMethod)}>{capabilities.mergeMethods.map((method) => <option key={method} value={method}>{hostingMergeMethodLabel(method)}</option>)}</select></label>
+          <div className="repository-center-field"><span>合并方式</span><SelectMenu ariaLabel="合并方式" value={mergeMethod} options={capabilities.mergeMethods.map((method) => ({ value: method, label: hostingMergeMethodLabel(method) }))} onChange={setMergeMethod} /></div>
           <span><small>{hostingMergeReadinessLabel(change)}</small></span>
           <ActionButton label="合并" actionKey={`hosting:change:merge:${actionScope}`} pendingAction={pendingAction} disabled={!canMerge} onClick={() => void runAction(`hosting:change:merge:${actionScope}`, () => actions.onMergeHostingChange({ provider: change.provider, remoteId: change.remoteId, number: change.number, headSha: change.headSha, method: mergeMethod }))} icon={<GitMerge size={14} />} tone="primary" requiresConfirmation alwaysConfirm confirmLabel={`确认以${hostingMergeMethodLabel(mergeMethod)}合并`} />
         </div>
@@ -1737,7 +1772,7 @@ function ToolsWorkspace({ data, actions, pendingAction, runAction, reload }: Wor
       <ResourceBoundary section="signing" resource={data.signing} reload={reload}>{() => <div className="repository-center-form-grid">
         <label className="repository-center-switch"><input type="checkbox" checked={signing.enabled} onChange={(event) => setSigning((value) => ({ ...value, enabled: event.target.checked }))} /><span>签署 Git 提交</span></label>
         <label className="repository-center-switch"><input type="checkbox" checked={signing.signTags} onChange={(event) => setSigning((value) => ({ ...value, signTags: event.target.checked }))} /><span>同时签署标签</span></label>
-        <label className="repository-center-field"><span>签名格式</span><select value={signing.format} onChange={(event) => setSigning((value) => ({ ...value, format: event.target.value as RepositorySigningFormat }))}><option value="openpgp">OpenPGP</option><option value="ssh">SSH</option><option value="x509">X.509</option></select></label>
+        <div className="repository-center-field"><span>签名格式</span><SelectMenu ariaLabel="签名格式" value={signing.format} options={SIGNING_FORMAT_OPTIONS} onChange={(format) => setSigning((value) => ({ ...value, format }))} /></div>
         <label className="repository-center-field grow"><span>密钥 ID 或公钥路径</span><input value={signing.key} onChange={(event) => setSigning((value) => ({ ...value, key: event.target.value }))} /></label>
         <div className="repository-center-row-actions full"><ActionButton label="验证 HEAD 签名" actionKey="signing:test" pendingAction={pendingAction} onClick={() => void runAction("signing:test", () => actions.onTestSigning(signing))} icon={<ShieldCheck size={14} />} /><ActionButton label="保存设置" actionKey="signing:save" pendingAction={pendingAction} disabled={signing.enabled && !signing.key.trim()} onClick={() => void runAction("signing:save", () => actions.onSaveSigning(signing))} icon={<Save size={14} />} tone="primary" /></div>
       </div>}</ResourceBoundary>
@@ -1898,8 +1933,8 @@ function ProjectsWorkspace({ data, actions, pendingAction, runAction, reload }: 
     </section>
 
     <section className="repository-center-section">
-      <SectionHeader icon={<SlidersHorizontal size={17} />} title="多项目批量操作" description="对选中的仓库统一刷新、获取、拉取或清理远程引用" actions={<div className="repository-center-row-actions"><select className="repository-center-compact-select" value={batchAction} onChange={(event) => setBatchAction(event.target.value as RepositoryBatchAction)}><option value="refresh">刷新状态</option><option value="fetch">获取远程</option><option value="pull">拉取更新（{pullStrategyLabel(data.preferences.data.pullStrategy)}）</option><option value="prune">清理远程引用</option></select><ActionButton label={`执行（${selectedProjects.length}）`} actionKey="batch:run" pendingAction={pendingAction} disabled={selectedProjects.length === 0} onClick={() => void runAction("batch:run", () => actions.onRunBatchAction({ projectIds: selectedProjects, action: batchAction }))} icon={<Play size={14} />} tone="primary" /></div>} />
-      <ResourceBoundary section="projects" resource={data.projects} reload={reload}>{(projects) => projects.length === 0 ? <EmptyState icon={<FolderGit2 size={20} />} title="没有项目" description="添加、克隆或初始化仓库后可执行批量操作。" /> : <div className="repository-center-project-table">{projects.map((project) => <div className="repository-center-project-row" key={project.id}><input type="checkbox" aria-label={`选择 ${project.name}`} checked={selectedProjects.includes(project.id)} onChange={() => toggleProject(project.id)} /><span className="repository-center-record-main"><strong>{project.name}<em>{project.statusError ? "状态不可用" : project.branch ?? "游离 HEAD"}</em></strong><small aria-label={project.statusError ? `${project.path}，状态错误：${project.statusError}` : project.path}>{project.path}</small></span>{project.statusError ? <span className="repository-center-project-status-error" aria-label={`状态读取失败：${project.statusError}`}>状态读取失败</span> : <span className="repository-center-project-stats"><span>{project.changedFiles} 变更</span><span>↑ {project.ahead}</span><span>↓ {project.behind}</span></span>}<select value={project.groupId ?? ""} onChange={(event) => void runAction(`project:group:${project.id}`, () => actions.onAssignProjectGroup({ projectId: project.id, groupId: event.target.value || null }))} aria-label={`设置 ${project.name} 的分组`}><option value="">未分组</option>{data.groups.data.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select></div>)}</div>}</ResourceBoundary>
+      <SectionHeader icon={<SlidersHorizontal size={17} />} title="多项目批量操作" description="对选中的仓库统一刷新、获取、拉取或清理远程引用" actions={<div className="repository-center-row-actions"><SelectMenu className="repository-center-compact-select" ariaLabel="批量操作" value={batchAction} options={[{ value: "refresh", label: "刷新状态" }, { value: "fetch", label: "获取远程" }, { value: "pull", label: `拉取更新（${pullStrategyLabel(data.preferences.data.pullStrategy)}）` }, { value: "prune", label: "清理远程引用" }]} onChange={setBatchAction} /><ActionButton label={`执行（${selectedProjects.length}）`} actionKey="batch:run" pendingAction={pendingAction} disabled={selectedProjects.length === 0} onClick={() => void runAction("batch:run", () => actions.onRunBatchAction({ projectIds: selectedProjects, action: batchAction }))} icon={<Play size={14} />} tone="primary" /></div>} />
+      <ResourceBoundary section="projects" resource={data.projects} reload={reload}>{(projects) => projects.length === 0 ? <EmptyState icon={<FolderGit2 size={20} />} title="没有项目" description="添加、克隆或初始化仓库后可执行批量操作。" /> : <div className="repository-center-project-table">{projects.map((project) => <div className="repository-center-project-row" key={project.id}><input type="checkbox" aria-label={`选择 ${project.name}`} checked={selectedProjects.includes(project.id)} onChange={() => toggleProject(project.id)} /><span className="repository-center-record-main"><strong>{project.name}<em>{project.statusError ? "状态不可用" : project.branch ?? "游离 HEAD"}</em></strong><small aria-label={project.statusError ? `${project.path}，状态错误：${project.statusError}` : project.path}>{project.path}</small></span>{project.statusError ? <span className="repository-center-project-status-error" aria-label={`状态读取失败：${project.statusError}`}>状态读取失败</span> : <span className="repository-center-project-stats"><span>{project.changedFiles} 变更</span><span>↑ {project.ahead}</span><span>↓ {project.behind}</span></span>}<SelectMenu ariaLabel={`设置 ${project.name} 的分组`} value={project.groupId ?? ""} options={[{ value: "", label: "未分组" }, ...data.groups.data.map((group) => ({ value: group.id, label: group.name }))]} onChange={(groupId) => void runAction(`project:group:${project.id}`, () => actions.onAssignProjectGroup({ projectId: project.id, groupId: groupId || null }))} /></div>)}</div>}</ResourceBoundary>
     </section>
   </div>;
 }
@@ -1971,7 +2006,7 @@ function PreferencesWorkspace({ data, actions, pendingAction, runAction, reload 
           <fieldset>
             <legend>字体</legend>
             <div className="repository-center-inline-settings">
-              <label className="repository-center-field"><span>字体族</span><select value={preferences.fontFamily} onChange={(event) => setPreferences((value) => ({ ...value, fontFamily: event.target.value as RepositoryPreferences["fontFamily"] }))}><option value="system">系统界面字体</option><option value="mono">等宽字体</option></select></label>
+              <div className="repository-center-field"><span>字体族</span><SelectMenu ariaLabel="字体族" value={preferences.fontFamily} options={FONT_FAMILY_OPTIONS} onChange={(fontFamily) => setPreferences((value) => ({ ...value, fontFamily }))} /></div>
               <label className="repository-center-field"><span>字号</span><input type="number" min={11} max={20} value={preferences.fontSize} onChange={(event) => setPreferences((value) => ({ ...value, fontSize: Number(event.target.value) }))} /></label>
             </div>
           </fieldset>
@@ -2001,8 +2036,8 @@ function PreferencesWorkspace({ data, actions, pendingAction, runAction, reload 
           <fieldset>
             <legend>工作区布局</legend>
             <div className="repository-center-inline-settings">
-              <label className="repository-center-field"><span>密度</span><select value={preferences.density} onChange={(event) => setPreferences((value) => ({ ...value, density: event.target.value as RepositoryPreferences["density"] }))}><option value="compact">紧凑</option><option value="comfortable">舒适</option></select></label>
-              <label className="repository-center-field"><span>项目栏位置</span><select value={preferences.sidebarPosition} onChange={(event) => setPreferences((value) => ({ ...value, sidebarPosition: event.target.value as RepositoryPreferences["sidebarPosition"] }))}><option value="left">左侧</option><option value="right">右侧</option></select></label>
+              <div className="repository-center-field"><span>密度</span><SelectMenu ariaLabel="界面密度" value={preferences.density} options={DENSITY_OPTIONS} onChange={(density) => setPreferences((value) => ({ ...value, density }))} /></div>
+              <div className="repository-center-field"><span>项目栏位置</span><SelectMenu ariaLabel="项目栏位置" value={preferences.sidebarPosition} options={SIDEBAR_POSITION_OPTIONS} onChange={(sidebarPosition) => setPreferences((value) => ({ ...value, sidebarPosition }))} /></div>
             </div>
             <label className="repository-center-switch"><input type="checkbox" checked={preferences.bottomConsoleVisible} onChange={(event) => setPreferences((value) => ({ ...value, bottomConsoleVisible: event.target.checked }))} /><span>显示底部控制台</span></label>
           </fieldset>
